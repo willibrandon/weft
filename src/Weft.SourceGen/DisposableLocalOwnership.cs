@@ -29,11 +29,12 @@ internal static class DisposableLocalOwnership
         SyntaxNode scope,
         SyntaxNodeAnalysisContext context)
     {
+        var owners = new OwningLocals(local);
         bool laterRisk = declaration.Declaration.Variables
             .SkipWhile(candidate => candidate != variable)
             .Skip(1)
-            .Any(candidate => MayThrow(candidate, local, context));
-        return MayLeak(local, variable.Initializer?.Value, declaration, laterRisk, scope, context);
+            .Any(candidate => MayThrow(candidate, owners, context));
+        return Scan(owners, variable.Initializer?.Value, declaration, laterRisk, scope, context);
     }
 
     /// <summary>
@@ -48,6 +49,16 @@ internal static class DisposableLocalOwnership
     /// <returns>Whether the local can leak on some path through the block.</returns>
     internal static bool MayLeak(
         ILocalSymbol local,
+        ExpressionSyntax? value,
+        StatementSyntax? origin,
+        bool priorRisk,
+        SyntaxNode scope,
+        SyntaxNodeAnalysisContext context) =>
+        Scan(new OwningLocals(local), value, origin, priorRisk, scope, context);
+
+    // The scan itself; the owners grow as the resource is copied into other locals and shrink as they are overwritten.
+    private static bool Scan(
+        OwningLocals local,
         ExpressionSyntax? value,
         StatementSyntax? origin,
         bool priorRisk,
@@ -80,15 +91,20 @@ internal static class DisposableLocalOwnership
 
                 if (AliasOf(statement, local, context) is { } alias)
                 {
-                    // Copying the resource into another local moves the ownership there; the scan follows it.
-                    local = alias;
+                    // Copying the resource into another local adds an owner; cleanup through any of them counts.
+                    local.Add(alias);
                     continue;
                 }
 
-                if (Reassigns(statement, local, context))
+                if (Reassigns(statement, local, context) is { } overwritten)
                 {
-                    // Overwriting the local while it still owns the resource drops that resource.
-                    return true;
+                    // Overwriting a local drops its reference; when it was the last one, the resource is gone.
+                    if (!local.Remove(overwritten))
+                    {
+                        return true;
+                    }
+
+                    continue;
                 }
 
                 if (statement is TryStatementSyntax protection &&
@@ -183,7 +199,8 @@ internal static class DisposableLocalOwnership
     /// <returns>Whether the local can leak on some path through the loop.</returns>
     internal static bool MayLeakInLoop(ILocalSymbol local, VariableDeclaratorSyntax variable, ForStatementSyntax loop, SyntaxNodeAnalysisContext context)
     {
-        if (loop.Declaration is null || !Tracks(local, variable.Initializer?.Value, context))
+        var owners = new OwningLocals(local);
+        if (loop.Declaration is null || !Tracks(owners, variable.Initializer?.Value, context))
         {
             return false;
         }
@@ -191,7 +208,7 @@ internal static class DisposableLocalOwnership
         // The condition runs right after the initializer; when it can be false or can fail, the body may
         // never run and the loop is left with the local still owned.
         if (loop.Condition is { } condition &&
-            (!condition.IsKind(SyntaxKind.TrueLiteralExpression) || MayThrow(condition, local, context)))
+            (!condition.IsKind(SyntaxKind.TrueLiteralExpression) || MayThrow(condition, owners, context)))
         {
             return true;
         }
@@ -199,20 +216,20 @@ internal static class DisposableLocalOwnership
         bool laterRisk = loop.Declaration.Variables
             .SkipWhile(candidate => candidate != variable)
             .Skip(1)
-            .Any(candidate => MayThrow(candidate, local, context));
-        return MayLeak(local, variable.Initializer?.Value, null, laterRisk, loop.Statement, context);
+            .Any(candidate => MayThrow(candidate, owners, context));
+        return Scan(owners, variable.Initializer?.Value, null, laterRisk, loop.Statement, context);
     }
 
     // Only a local that owns its resource is tracked: one handed something by a construction or a
     // factory. A lookup returns something owned elsewhere, and a task is disposable in name only.
-    private static bool Tracks(ILocalSymbol local, ExpressionSyntax? value, SyntaxNodeAnalysisContext context) =>
+    private static bool Tracks(OwningLocals local, ExpressionSyntax? value, SyntaxNodeAnalysisContext context) =>
         (IsDisposableContract(local.Type) || local.Type.AllInterfaces.Any(IsDisposableContract)) &&
         !IsTask(local.Type) &&
         CreatesOwnedResource(value, context);
 
     // A statement that copies the local into another local, by declaration or plain assignment, names the
     // alias that owns the resource from then on; a field or property target is a real handoff instead.
-    private static ILocalSymbol? AliasOf(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static ILocalSymbol? AliasOf(StatementSyntax statement, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         switch (statement)
         {
@@ -229,7 +246,7 @@ internal static class DisposableLocalOwnership
         }
     }
 
-    private static bool IsLocalReference(ExpressionSyntax? expression, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool IsLocalReference(ExpressionSyntax? expression, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         while (expression is ParenthesizedExpressionSyntax parentheses)
         {
@@ -239,10 +256,13 @@ internal static class DisposableLocalOwnership
         return expression is IdentifierNameSyntax identifier && IsLocal(identifier, local, context);
     }
 
-    private static bool Reassigns(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static ILocalSymbol? Reassigns(StatementSyntax statement, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment } &&
         assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
-        IsLocal(target, local, context);
+        context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol is ILocalSymbol symbol &&
+        local.Contains(symbol)
+            ? symbol
+            : null;
 
     // A scope is a block, a switch section, or a single embedded statement such as a braceless loop body.
     private static SyntaxList<StatementSyntax> StatementsOf(SyntaxNode scope) =>
@@ -273,8 +293,8 @@ internal static class DisposableLocalOwnership
         return null;
     }
 
-    private static bool DeclaredOutside(SyntaxNode construct, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(context.CancellationToken) is { } declared &&
+    private static bool DeclaredOutside(SyntaxNode construct, OwningLocals local, SyntaxNodeAnalysisContext context) =>
+        local.Origin.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(context.CancellationToken) is { } declared &&
         !construct.Span.Contains(declared.Span);
 
     private static StatementSyntax? EnclosingStatement(SyntaxNode scope)
@@ -315,13 +335,13 @@ internal static class DisposableLocalOwnership
     private static ITypeSymbol Unwrap(ITypeSymbol type) =>
         type is INamedTypeSymbol { Name: "Task" or "ValueTask", TypeArguments.Length: 1 } wrapped ? wrapped.TypeArguments[0] : type;
 
-    private static bool EndsOwnership(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool EndsOwnership(StatementSyntax statement, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         EndsOwnership(statement, breakLeaves: true, throwLeaves: true, local, context);
 
     // Ownership ends on every path through the statement when the local is disposed or handed off on each
     // of them; a branch that neither disposes nor hands off, or that may not run at all, keeps it owned.
     // The flags say whether a break or a throw leaves the sequence under analysis while still owning it.
-    private static bool EndsOwnership(StatementSyntax statement, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool EndsOwnership(StatementSyntax statement, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         statement switch
         {
             BlockSyntax block => EndsOwnership(block.Statements, breakLeaves, throwLeaves, local, context),
@@ -341,16 +361,16 @@ internal static class DisposableLocalOwnership
             _ => false
         };
 
-    private static bool EndsOwnershipOnBothBranches(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool EndsOwnershipOnBothBranches(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         EndsOwnership(conditional.Statement, breakLeaves, throwLeaves, local, context) &&
         conditional.Else is { } other && EndsOwnership(other.Statement, breakLeaves, throwLeaves, local, context);
 
-    private static bool EndsOwnershipInEverySection(SwitchStatementSyntax selection, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool EndsOwnershipInEverySection(SwitchStatementSyntax selection, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         selection.Sections.Any(static section => section.Labels.Any(static label => label is DefaultSwitchLabelSyntax)) &&
         selection.Sections.All(section => EndsOwnership(section.Statements, breakLeaves: false, throwLeaves, local, context));
 
     // A sequence ends ownership when a statement does so before any path leaves the sequence early.
-    private static bool EndsOwnership(IEnumerable<StatementSyntax> statements, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool EndsOwnership(IEnumerable<StatementSyntax> statements, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         foreach (StatementSyntax statement in statements)
         {
@@ -371,7 +391,7 @@ internal static class DisposableLocalOwnership
     // A path that leaves the statement early, by a return, a throw, or a jump out of the enclosing
     // sequence, leaks the local unless ownership ended before it. A break inside a switch only leaves
     // the switch, and a throw inside a try whose handlers dispose the local is covered.
-    private static bool LeaksOnExit(StatementSyntax statement, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool LeaksOnExit(StatementSyntax statement, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         statement switch
         {
             BreakStatementSyntax => breakLeaves,
@@ -393,11 +413,11 @@ internal static class DisposableLocalOwnership
             _ => false
         };
 
-    private static bool LeaksOnEitherBranch(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool LeaksOnEitherBranch(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         LeaksOnExit(conditional.Statement, breakLeaves, throwLeaves, local, context) ||
         conditional.Else is { } other && LeaksOnExit(other.Statement, breakLeaves, throwLeaves, local, context);
 
-    private static bool LeaksOnExit(IEnumerable<StatementSyntax> statements, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool LeaksOnExit(IEnumerable<StatementSyntax> statements, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         foreach (StatementSyntax statement in statements)
         {
@@ -416,7 +436,7 @@ internal static class DisposableLocalOwnership
     }
 
     // Only a return, a throw, or a goto leaves a loop for the enclosing sequence; break and continue stay in it.
-    private static bool LeavesEnclosing(StatementSyntax loop, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool LeavesEnclosing(StatementSyntax loop, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         loop.DescendantNodes(DescendIntoExecution).Any(node =>
             node is GotoStatementSyntax ||
             node is ThrowStatementSyntax && throwLeaves ||
@@ -424,7 +444,7 @@ internal static class DisposableLocalOwnership
 
     // The risk met before ownership ends, on some path through a statement that ends it on every path;
     // work that runs only after the local was disposed or handed off cannot leak it.
-    private static bool RiskUntilOwnershipEnds(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool RiskUntilOwnershipEnds(StatementSyntax statement, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         statement switch
         {
             BlockSyntax block => RiskUntilOwnershipEnds(block.Statements, local, context),
@@ -445,11 +465,11 @@ internal static class DisposableLocalOwnership
             _ => MayThrow(statement, local, context)
         };
 
-    private static bool RiskOnEitherBranch(IfStatementSyntax conditional, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool RiskOnEitherBranch(IfStatementSyntax conditional, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         RiskUntilOwnershipEnds(conditional.Statement, local, context) ||
         conditional.Else is { } other && RiskUntilOwnershipEnds(other.Statement, local, context);
 
-    private static bool RiskUntilOwnershipEnds(IEnumerable<StatementSyntax> statements, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool RiskUntilOwnershipEnds(IEnumerable<StatementSyntax> statements, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         foreach (StatementSyntax statement in statements)
         {
@@ -468,7 +488,7 @@ internal static class DisposableLocalOwnership
     }
 
     // Passing the local on, storing it, returning it, or capturing it may hand its ownership elsewhere.
-    private static bool HandsOff(SyntaxNode? scope, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool HandsOff(SyntaxNode? scope, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         scope is not null && scope.DescendantNodesAndSelf()
             .OfType<IdentifierNameSyntax>()
             .Where(identifier => IsLocal(identifier, local, context))
@@ -494,7 +514,7 @@ internal static class DisposableLocalOwnership
         };
     }
 
-    private static bool IsDisposalStatement(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool IsDisposalStatement(StatementSyntax statement, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         statement switch
         {
             ExpressionStatementSyntax { Expression: InvocationExpressionSyntax invocation } => IsDisposeCall(invocation, local, context),
@@ -507,7 +527,7 @@ internal static class DisposableLocalOwnership
             _ => false
         };
 
-    private static bool IsGuardedDisposeCall(ConditionalAccessExpressionSyntax guarded, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool IsGuardedDisposeCall(ConditionalAccessExpressionSyntax guarded, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         guarded is
         {
             Expression: IdentifierNameSyntax receiver,
@@ -518,7 +538,7 @@ internal static class DisposableLocalOwnership
             }
         } && IsLocal(receiver, local, context);
 
-    private static bool DisposesInFinally(TryStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool DisposesInFinally(TryStatementSyntax statement, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         statement.Finally is { } cleanup && DisposesLocalOnEveryPath(cleanup.Block, local, context);
 
     private static bool IsDisposableContract(ITypeSymbol type) =>
@@ -540,7 +560,7 @@ internal static class DisposableLocalOwnership
 
     private static bool HasExceptionCleanup(
         TryStatementSyntax statement,
-        ILocalSymbol local,
+        OwningLocals local,
         SyntaxNodeAnalysisContext context)
     {
         if (DisposesInFinally(statement, local, context))
@@ -557,7 +577,7 @@ internal static class DisposableLocalOwnership
     }
 
     // A using over the local, or over its ConfigureAwait wrapper, disposes it when the scope ends.
-    private static bool IsLocalOrConfigured(ExpressionSyntax expression, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool IsLocalOrConfigured(ExpressionSyntax expression, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         expression switch
         {
             IdentifierNameSyntax identifier => IsLocal(identifier, local, context),
@@ -570,7 +590,7 @@ internal static class DisposableLocalOwnership
 
     // Cleanup counts only when the block ends ownership before anything in it can fail or leave early;
     // a disposal after a call that may throw, or after an exit, is not reached on every path.
-    private static bool DisposesLocalOnEveryPath(BlockSyntax block, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool DisposesLocalOnEveryPath(BlockSyntax block, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         foreach (StatementSyntax statement in block.Statements)
         {
@@ -588,7 +608,7 @@ internal static class DisposableLocalOwnership
         return false;
     }
 
-    private static bool IsDisposeCall(InvocationExpressionSyntax invocation, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool IsDisposeCall(InvocationExpressionSyntax invocation, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         invocation.Expression switch
         {
             // The ConfigureAwait wrapper around an async disposal is still that disposal.
@@ -600,13 +620,13 @@ internal static class DisposableLocalOwnership
         };
 
     // A call that takes the local, directly or inside a wrapper or a lambda, is the handoff itself.
-    private static bool ReceivesLocal(ArgumentListSyntax? arguments, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool ReceivesLocal(ArgumentListSyntax? arguments, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         arguments is not null && arguments.Arguments.Any(argument =>
             argument.Expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(identifier => IsLocal(identifier, local, context)));
 
     // Neither the callee of the call that receives the local nor the target it is stored into runs after
     // the handoff has started, so nothing in them counts as risk.
-    private static IEnumerable<TextSpan> HandoffSpans(SyntaxNode node, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static IEnumerable<TextSpan> HandoffSpans(SyntaxNode node, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         node switch
         {
             AssignmentExpressionSyntax { Right: IdentifierNameSyntax stored } assignment when IsLocal(stored, local, context) => [assignment.Left.Span],
@@ -616,7 +636,7 @@ internal static class DisposableLocalOwnership
 
     // Disposing the local itself cannot leak it, and a call handed the local owns it from then on, so
     // neither counts as risk.
-    private static bool MayThrow(SyntaxNode scope, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool MayThrow(SyntaxNode scope, OwningLocals local, SyntaxNodeAnalysisContext context)
     {
         List<SyntaxNode> nodes = [.. scope.DescendantNodesAndSelf(DescendIntoExecution)];
         List<TextSpan> handoffs = [.. nodes.SelectMany(node => HandoffSpans(node, local, context))];
@@ -636,10 +656,9 @@ internal static class DisposableLocalOwnership
 
     private static bool IsLocal(
         IdentifierNameSyntax identifier,
-        ILocalSymbol local,
+        OwningLocals local,
         SyntaxNodeAnalysisContext context) =>
-        SymbolEqualityComparer.Default.Equals(local,
-            context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol);
+        local.Contains(context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol);
 
     private static bool DescendIntoExecution(SyntaxNode node) =>
         node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax);

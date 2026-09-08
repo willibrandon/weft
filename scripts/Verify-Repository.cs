@@ -180,8 +180,26 @@ static bool IsInterfaceMember(string[] lines, int index)
         depth += line.Count(character => character == '}') - line.Count(character => character == '{');
         if (depth < 0)
         {
-            return Patterns.InterfaceDeclaration().IsMatch(line);
+            return IsInterfaceDeclarationAbove(lines, above);
         }
+    }
+
+    return false;
+}
+
+static bool IsInterfaceDeclarationAbove(string[] lines, int brace)
+{
+    // In Allman style the opening brace sits on its own line, so the declaration is the nearest line above it
+    // that is not a brace, blank, attribute, or comment; in the other style the brace line is the declaration.
+    for (int declaration = brace; declaration >= 0; declaration--)
+    {
+        string candidate = lines[declaration].Trim();
+        if (candidate.Length == 0 || candidate == "{" || candidate.StartsWith('[') || candidate.StartsWith("//", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        return Patterns.InterfaceDeclaration().IsMatch(lines[declaration]);
     }
 
     return false;
