@@ -481,7 +481,9 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 - Output to client paint: bounded by Hex1b's frame limiter (16 ms) plus socket latency.
 - Attach with 20 blocks: under 300 ms to first full paint on a local socket.
 - Idle server with 50 blocks: no periodic wakeups; every loop awaits I/O.
-- Native AOT binary under 25 MB with no runtime dependency.
+- Native AOT binary under 20 MB with no runtime dependency. The linux-x64 build measures about
+  18 MB; System.Text.Json, the MCP SDK, and its AI abstractions account for roughly 6 MB of that,
+  and the CI size check holds the line at 20 MB.
 
 Benchmarks in `benchmarks/Weft.Benchmarks` cover layout computation, protocol encoding, and
 capture serialization.

@@ -130,7 +130,7 @@ jobs:
         with:
           target: artifacts/obj/Weft.App/release_linux-x64/native/weft.mstat
           baseline-key: weft-linux-x64
-          budgets: max=12mb
+          budgets: max=20mb
           top: '20'
           report-directory: ${{ runner.temp }}/dotsider-size-weft-linux-x64
           artifact-name: dotsider-size-weft-linux-x64
