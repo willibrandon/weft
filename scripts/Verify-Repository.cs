@@ -168,7 +168,7 @@ static bool IsInterfaceMember(string[] lines, int index)
     string trimmed = lines[index].Trim();
     if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('[') ||
         trimmed.StartsWith('{') || trimmed.StartsWith('}') || trimmed.StartsWith('#') ||
-        !(trimmed.EndsWith(';') || trimmed.EndsWith('{') || trimmed.Contains('(', StringComparison.Ordinal) || trimmed.Contains("=>", StringComparison.Ordinal)))
+        !(trimmed.EndsWith(';') || trimmed.EndsWith('{') || trimmed.EndsWith('}') || trimmed.Contains('(', StringComparison.Ordinal) || trimmed.Contains("=>", StringComparison.Ordinal)))
     {
         return false;
     }
