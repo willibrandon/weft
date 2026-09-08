@@ -198,6 +198,35 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a reset of the same field on another instance does not excuse accumulation on this one.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsAccumulationDespiteResetOnOtherInstance()
+    {
+        const string Source = """
+            internal sealed class Note
+            {
+                private string _text = string.Empty;
+
+                internal void Append(Note other, string[] items)
+                {
+                    foreach (string item in items)
+                    {
+                        other._text = string.Empty;
+                        _text += item;
+                    }
+                }
+
+                internal string Text => _text;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.ContainsSingle(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
 }

@@ -135,7 +135,7 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
             }
 
             if (statement is IExpressionStatementOperation { Operation: ISimpleAssignmentOperation reset } &&
-                SymbolEqualityComparer.Default.Equals(GetVariable(reset.Target), variable))
+                SameStorage(reset.Target, assignment is IAssignmentOperation appended ? appended.Target : assignment))
             {
                 return true;
             }

@@ -84,12 +84,12 @@ internal static class DisposableLocalOwnership
             return true;
         }
 
-        return statement.Catches.Any(clause =>
-            clause.Filter is null &&
-            (clause.Declaration is null || context.SemanticModel.GetTypeInfo(
-                clause.Declaration.Type, context.CancellationToken).Type?.ToDisplayString() ==
-                "System.Exception") &&
-            DisposesLocalOnEveryPath(clause.Block, local, context));
+        // Every handler can intercept the exception, so each must clean up, and one must catch everything.
+        return statement.Catches.Count > 0 &&
+            statement.Catches.All(clause => DisposesLocalOnEveryPath(clause.Block, local, context)) &&
+            statement.Catches.Any(clause => clause.Filter is null &&
+                (clause.Declaration is null || context.SemanticModel.GetTypeInfo(
+                    clause.Declaration.Type, context.CancellationToken).Type?.ToDisplayString() == "System.Exception"));
     }
 
     private static bool ReturnsLocal(
@@ -98,25 +98,11 @@ internal static class DisposableLocalOwnership
         SyntaxNodeAnalysisContext context) =>
         statement.DescendantNodesAndSelf(DescendIntoExecution)
             .OfType<ReturnStatementSyntax>()
-            .Any(returned => IsSafeHandle(local.Type) &&
-                returned.Expression is IdentifierNameSyntax result &&
+            .Any(returned => returned.Expression is IdentifierNameSyntax result &&
                 IsLocal(result, local, context) ||
                 returned.Expression is TupleExpressionSyntax tuple &&
                 tuple.Arguments.Any(argument => argument.Expression is IdentifierNameSyntax identifier &&
                     IsLocal(identifier, local, context)));
-
-    private static bool IsSafeHandle(ITypeSymbol type)
-    {
-        for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
-        {
-            if (current.ToDisplayString() == "System.Runtime.InteropServices.SafeHandle")
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private static bool DisposesLocal(
         SyntaxNode scope,
