@@ -78,6 +78,19 @@ internal static class DisposableLocalOwnership
                     break;
                 }
 
+                if (AliasOf(statement, local, context) is { } alias)
+                {
+                    // Copying the resource into another local moves the ownership there; the scan follows it.
+                    local = alias;
+                    continue;
+                }
+
+                if (Reassigns(statement, local, context))
+                {
+                    // Overwriting the local while it still owns the resource drops that resource.
+                    return true;
+                }
+
                 if (statement is TryStatementSyntax protection &&
                     HasExceptionCleanup(protection, local, context))
                 {
@@ -196,6 +209,40 @@ internal static class DisposableLocalOwnership
         (IsDisposableContract(local.Type) || local.Type.AllInterfaces.Any(IsDisposableContract)) &&
         !IsTask(local.Type) &&
         CreatesOwnedResource(value, context);
+
+    // A statement that copies the local into another local, by declaration or plain assignment, names the
+    // alias that owns the resource from then on; a field or property target is a real handoff instead.
+    private static ILocalSymbol? AliasOf(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        switch (statement)
+        {
+            case LocalDeclarationStatementSyntax { UsingKeyword.RawKind: 0 } declaration when declaration.Declaration.Variables.Count == 1:
+                VariableDeclaratorSyntax declarator = declaration.Declaration.Variables[0];
+                return IsLocalReference(declarator.Initializer?.Value, local, context)
+                    ? context.SemanticModel.GetDeclaredSymbol(declarator, context.CancellationToken) as ILocalSymbol
+                    : null;
+            case ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment }
+                when assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) && IsLocalReference(assignment.Right, local, context):
+                return context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol as ILocalSymbol;
+            default:
+                return null;
+        }
+    }
+
+    private static bool IsLocalReference(ExpressionSyntax? expression, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        while (expression is ParenthesizedExpressionSyntax parentheses)
+        {
+            expression = parentheses.Expression;
+        }
+
+        return expression is IdentifierNameSyntax identifier && IsLocal(identifier, local, context);
+    }
+
+    private static bool Reassigns(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment } &&
+        assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+        IsLocal(target, local, context);
 
     // A scope is a block, a switch section, or a single embedded statement such as a braceless loop body.
     private static SyntaxList<StatementSyntax> StatementsOf(SyntaxNode scope) =>

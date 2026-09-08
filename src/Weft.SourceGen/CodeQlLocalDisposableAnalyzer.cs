@@ -69,20 +69,16 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            if (variable.Initializer?.Value is { } initializer && CreatesResource(initializer))
-            {
-                if (DisposableLocalOwnership.MayLeak(local, variable, declaration, block, context) ||
+            if (variable.Initializer?.Value is { } initializer && CreatesResource(initializer) &&
+                (DisposableLocalOwnership.MayLeak(local, variable, declaration, block, context) ||
                     initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
-                    HasConfiguredLibraryDisposal(local, block, context))
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), local.Name));
-                }
-
-                continue;
+                    HasConfiguredLibraryDisposal(local, block, context)))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), local.Name));
             }
 
-            // A local whose initializer owns nothing, such as null, is tracked from every later statement
-            // that assigns it a resource, wherever that sits in the block; each starts its own ownership.
+            // Every later statement that assigns the local a resource starts its own ownership period,
+            // whatever the initializer was and wherever the assignment sits in the block.
             foreach (ExpressionStatementSyntax handoff in FindResourceAssignments(local, declaration, block, context)
                 .Where(handoff => LeaksFromAssignment(local, handoff, context)))
             {

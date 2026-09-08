@@ -1971,6 +1971,106 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a second resource assigned after the initializer's resource was disposed is tracked on its own.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsSecondResourceAfterInitializerDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static int Read()
+                {
+                    var stream = new MemoryStream();
+                    stream.Dispose();
+                    stream = new MemoryStream();
+                    return stream.ReadByte();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource copied into another local that never disposes it is reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsResourceLeftInLocalAlias()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static int Read()
+                {
+                    var stream = new MemoryStream();
+                    Stream alias = stream;
+                    return alias.ReadByte();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource disposed through a local alias is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsResourceDisposedThroughLocalAlias()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    var stream = new MemoryStream();
+                    Stream alias = stream;
+                    alias.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies overwriting a local that still owns its resource is reported as dropping that resource.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsReassignmentWhileOwned()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    var stream = new MemoryStream();
+                    stream = new MemoryStream();
+                    stream.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }
