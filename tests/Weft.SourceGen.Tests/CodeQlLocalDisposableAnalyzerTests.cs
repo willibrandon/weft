@@ -726,7 +726,6 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
                     try
                     {
                         current.Dispose();
-                        current = child;
                     }
                     catch
                     {
@@ -738,6 +737,7 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
                         throw;
                     }
 
+                    current = child;
                     current.Dispose();
                 }
             }
