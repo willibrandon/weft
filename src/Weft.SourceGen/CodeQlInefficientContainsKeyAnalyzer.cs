@@ -103,7 +103,16 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
 
         if (operand.Parent is BinaryExpressionSyntax logical && logical.Left == operand && logical.IsKind(chain))
         {
-            return [logical.Right];
+            // Every later operand of the same chain runs only when the guard held.
+            List<SyntaxNode> guarded = [logical.Right];
+            SyntaxNode link = logical;
+            while (link.Parent is BinaryExpressionSyntax outer && outer.Left == link && outer.IsKind(chain))
+            {
+                guarded.Add(outer.Right);
+                link = outer;
+            }
+
+            return guarded;
         }
 
         return condition.Parent switch

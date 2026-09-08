@@ -238,6 +238,7 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
     [DataRow("values.ContainsKey(key) && values[key] > 0")]
     [DataRow("!values.ContainsKey(key) || values[key] > 0")]
     [DataRow("key.Length > 0 && values.ContainsKey(key) && values[key] > 0")]
+    [DataRow("values.ContainsKey(key) && key.Length > 0 && values[key] > 0")]
     public async Task ReportsLookupInShortCircuitOperand(string condition)
     {
         string source = $$"""

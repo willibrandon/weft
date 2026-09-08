@@ -63,54 +63,92 @@ internal static class DisposableLocalOwnership
         }
 
         bool mayThrow = priorRisk;
-        foreach (StatementSyntax statement in block.Statements
-            .SkipWhile(candidate => candidate != origin)
-            .Skip(1))
+        StatementSyntax cursor = origin;
+        BlockSyntax scope = block;
+        while (true)
         {
-            if (statement is TryStatementSyntax protection &&
-                HasExceptionCleanup(protection, local, context))
+            foreach (StatementSyntax statement in scope.Statements.SkipWhile(candidate => candidate != cursor).Skip(1))
             {
-                // A disposing finally ends ownership. Catch-only cleanup covers the try's own failures, so
-                // the scan continues on the normal path unless the try itself disposes or hands off the
-                // local, or leaves early while still owning it.
-                if (DisposesInFinally(protection, local, context) ||
-                    EndsOwnership(protection.Block, breakLeaves: true, throwLeaves: false, local, context))
+                if (statement is TryStatementSyntax protection &&
+                    HasExceptionCleanup(protection, local, context))
                 {
-                    return mayThrow;
+                    // A disposing finally ends ownership. Catch-only cleanup covers the try's own failures, so
+                    // the scan continues on the normal path unless the try itself disposes or hands off the
+                    // local, or leaves early while still owning it.
+                    if (DisposesInFinally(protection, local, context) ||
+                        EndsOwnership(protection.Block, breakLeaves: true, throwLeaves: false, local, context))
+                    {
+                        return mayThrow;
+                    }
+
+                    if (LeaksOnExit(protection.Block, breakLeaves: true, throwLeaves: false, local, context))
+                    {
+                        return true;
+                    }
+
+                    continue;
                 }
 
-                if (LeaksOnExit(protection.Block, breakLeaves: true, throwLeaves: false, local, context))
+                bool earlierRisk = mayThrow;
+                mayThrow |= MayThrow(statement, local, context);
+                if (EndsOwnership(statement, local, context))
                 {
+                    // A plain disposal is exception safe itself, so only an earlier failure could skip it; any
+                    // other statement may still fail before the point where the local changes hands.
+                    return IsDisposalStatement(statement, local, context) ? earlierRisk : mayThrow;
+                }
+
+                if (mayThrow && HandsOff(statement, local, context))
+                {
+                    // Some path through the statement hands the local off after work that can throw.
                     return true;
                 }
 
-                continue;
+                if (LeaksOnExit(statement, breakLeaves: true, throwLeaves: true, local, context))
+                {
+                    // Some path leaves the block early while the local is still owned.
+                    return true;
+                }
             }
 
-            bool earlierRisk = mayThrow;
-            mayThrow |= MayThrow(statement, local, context);
-            if (EndsOwnership(statement, local, context))
+            // The end of a nested block hands the scan to the enclosing block, after the statement that
+            // owns the nested one; a loop body is the exception, since its next iteration starts over.
+            // Reaching the end of the outermost block still owning the resource leaks it on every path.
+            if (EnclosingStatement(scope) is not { } enclosing || enclosing.Parent is not BlockSyntax outer)
             {
-                // A plain disposal is exception safe itself, so only an earlier failure could skip it; any
-                // other statement may still fail before the point where the local changes hands.
-                return IsDisposalStatement(statement, local, context) ? earlierRisk : mayThrow;
-            }
-
-            if (mayThrow && HandsOff(statement, local, context))
-            {
-                // Some path through the statement hands the local off after work that can throw.
                 return true;
             }
 
-            if (LeaksOnExit(statement, breakLeaves: true, throwLeaves: true, local, context))
+            if (enclosing is TryStatementSyntax attempt && scope.Parent is TryStatementSyntax or CatchClauseSyntax &&
+                HasExceptionCleanup(attempt, local, context))
             {
-                // Some path leaves the block early while the local is still owned.
-                return true;
+                // Leaving a try that cleans up on failure: a disposing finally ends ownership for good, and
+                // handler cleanup covers every failure inside, so the normal path continues without that risk.
+                if (DisposesInFinally(attempt, local, context))
+                {
+                    return false;
+                }
+
+                mayThrow = false;
             }
+
+            cursor = enclosing;
+            scope = outer;
+        }
+    }
+
+    private static StatementSyntax? EnclosingStatement(BlockSyntax scope)
+    {
+        SyntaxNode? parent = scope.Parent;
+        while (parent is ElseClauseSyntax or CatchClauseSyntax or FinallyClauseSyntax or SwitchSectionSyntax)
+        {
+            parent = parent.Parent;
         }
 
-        // Reaching the end still owning the resource leaks it on every path.
-        return true;
+        return parent is StatementSyntax statement &&
+            statement is not (WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax)
+            ? statement
+            : null;
     }
 
     // A construction, a File factory, or a static factory of the resource's own type hands the local a
@@ -333,10 +371,25 @@ internal static class DisposableLocalOwnership
             _ => false
         };
 
-    // Only a disposal that is a statement of the block itself runs on every path through it; one nested
-    // under a condition or loop can be skipped.
-    private static bool DisposesLocalOnEveryPath(BlockSyntax block, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        block.Statements.Any(statement => IsDisposalStatement(statement, local, context));
+    // Cleanup counts only when the block ends ownership before anything in it can fail or leave early;
+    // a disposal after a call that may throw, or after an exit, is not reached on every path.
+    private static bool DisposesLocalOnEveryPath(BlockSyntax block, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        foreach (StatementSyntax statement in block.Statements)
+        {
+            if (EndsOwnership(statement, local, context))
+            {
+                return true;
+            }
+
+            if (MayThrow(statement, local, context) || LeaksOnExit(statement, breakLeaves: true, throwLeaves: true, local, context))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
 
     private static bool IsDisposeCall(InvocationExpressionSyntax invocation, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         invocation.Expression switch

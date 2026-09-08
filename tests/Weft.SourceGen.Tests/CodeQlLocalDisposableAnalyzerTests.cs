@@ -1493,6 +1493,125 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies cleanup that runs fallible work before the disposal does not protect the local.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleWorkBeforeCleanupDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    try
+                    {
+                        stream.ReadByte();
+                    }
+                    finally
+                    {
+                        Prepare();
+                        stream.Dispose();
+                    }
+                }
+
+                private static void Prepare()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource assigned inside a branch is tracked from that assignment.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsResourceAssignedInsideBranch()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool condition)
+                {
+                    MemoryStream? stream = null;
+                    if (condition)
+                    {
+                        stream = new MemoryStream();
+                        stream.ReadByte();
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource assigned inside a branch and disposed after the branch is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsResourceAssignedInsideBranchAndDisposedAfter()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool condition)
+                {
+                    MemoryStream? stream = null;
+                    if (condition)
+                    {
+                        stream = new MemoryStream();
+                    }
+
+                    stream?.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a second resource assigned after the first was disposed starts its own tracking.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsSecondResourceAfterDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static int Read()
+                {
+                    MemoryStream? stream = null;
+                    stream = new MemoryStream();
+                    stream.Dispose();
+                    stream = new MemoryStream();
+                    return stream.ReadByte();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }

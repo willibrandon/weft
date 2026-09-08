@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -76,29 +77,32 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            // A local whose initializer owns nothing, such as null, is tracked from the first later
-            // statement in the block that assigns it a resource.
-            if (FindResourceAssignment(local, declaration, block, context) is { } handoff &&
-                DisposableLocalOwnership.MayLeak(local, handoff.Assignment.Right, handoff.Statement, priorRisk: false, block, context))
+            // A local whose initializer owns nothing, such as null, is tracked from every later statement
+            // that assigns it a resource, wherever that sits in the block; each starts its own ownership.
+            foreach (ExpressionStatementSyntax handoff in FindResourceAssignments(local, declaration, block, context)
+                .Where(handoff => LeaksFromAssignment(local, handoff, context)))
             {
-                context.ReportDiagnostic(Diagnostic.Create(s_rule, handoff.Assignment.Left.GetLocation(), local.Name));
+                context.ReportDiagnostic(Diagnostic.Create(s_rule, ((AssignmentExpressionSyntax)handoff.Expression).Left.GetLocation(), local.Name));
             }
         }
     }
 
-    private static (ExpressionStatementSyntax Statement, AssignmentExpressionSyntax Assignment)? FindResourceAssignment(
+    private static IEnumerable<ExpressionStatementSyntax> FindResourceAssignments(
         ILocalSymbol local,
         LocalDeclarationStatementSyntax declaration,
         BlockSyntax block,
-        SyntaxNodeAnalysisContext context)
-    {
-        ExpressionStatementSyntax? handoff = block.Statements
+        SyntaxNodeAnalysisContext context) =>
+        block.Statements
             .SkipWhile(candidate => candidate != declaration)
             .Skip(1)
+            .SelectMany(static statement => statement.DescendantNodesAndSelf(
+                static node => node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)))
             .OfType<ExpressionStatementSyntax>()
-            .FirstOrDefault(statement => IsResourceAssignment(statement, local, context));
-        return handoff is null ? null : (handoff, (AssignmentExpressionSyntax)handoff.Expression);
-    }
+            .Where(statement => IsResourceAssignment(statement, local, context));
+
+    private static bool LeaksFromAssignment(ILocalSymbol local, ExpressionStatementSyntax handoff, SyntaxNodeAnalysisContext context) =>
+        handoff.Parent is BlockSyntax scope &&
+        DisposableLocalOwnership.MayLeak(local, ((AssignmentExpressionSyntax)handoff.Expression).Right, handoff, priorRisk: false, scope, context);
 
     private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         statement.Expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment &&
