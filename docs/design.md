@@ -268,6 +268,12 @@ replaced with `v` and `-`.
 | `leader ?` | help and command palette |
 | `leader Ctrl+B` | send a literal Ctrl+B |
 
+The leader is one stroke that arms the next stroke for two seconds; the info bar shows the
+armed leader (`Ctrl+B…`) until a bound key follows, Escape cancels, or the timer runs out.
+Arming is client state rather than a router chord, so a redraw or a focus change between the
+two strokes cannot lose it. Chords that do not start with the leader use the toolkit's chord
+matching directly.
+
 ### 5.3 Command palette
 
 `SelectionPrompt` in a popup listing every action with its binding and description. Typing
@@ -317,10 +323,10 @@ required members keep init, since they must be present anyway.
 | `server.info` / `server.shutdown` | Identity, uptime, counts; graceful shutdown. |
 | `session.list` / `session.create` / `session.get` / `session.rename` / `session.close` | Session lifecycle. |
 | `session.attach` / `session.detach` | Register a client viewport and receive geometry; release it. |
-| `session.setSize` | Report a client's viewport; the policy decides the authoritative size. |
-| `tab.list` / `tab.create` / `tab.select` / `tab.rename` / `tab.close` / `tab.move` | Tabs. |
+| `session.setSize` / `session.activate` | Report a client's viewport, or mark a client as the latest; the policy decides the authoritative size. |
+| `tab.list` / `tab.create` / `tab.select` / `tab.rename` / `tab.close` / `tab.sync` | Tabs, including synchronized input for every block in a tab. |
 | `block.list` / `block.get` / `block.create` / `block.close` / `block.kill` / `block.rename` | Blocks. |
-| `block.split` / `block.float` / `block.tile` / `block.zoom` / `block.focus` / `block.swap` | Layout. |
+| `block.split` / `block.float` / `block.tile` / `block.move` / `block.zoom` / `block.focus` / `block.swap` / `block.sync` | Layout and per-block sync exclusion. |
 | `layout.get` / `layout.apply` / `layout.preset` / `layout.resize` | Layout tree and geometry. |
 | `block.sendKeys` / `block.type` / `block.paste` / `block.signal` | Input. |
 | `block.capture` / `block.history` | Screen and scrollback capture with revision. |
@@ -333,7 +339,7 @@ required members keep init, since they must be present anyway.
 ### 6.2 Events
 
 `session.created`, `session.renamed`, `session.closed`, `tab.created`, `tab.selected`,
-`tab.renamed`, `tab.closed`, `block.created`, `block.titled`, `block.exited`, `block.closed`,
+`tab.renamed`, `tab.changed`, `tab.closed`, `block.created`, `block.titled`, `block.exited`, `block.closed`,
 `block.focused`, `block.output` (throttled, carries revision), `layout.changed` (full geometry
 for the tab), `client.attached`, `client.detached`, `size.changed`, `server.stopping`.
 

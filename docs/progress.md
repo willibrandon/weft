@@ -5,7 +5,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Phase 2 UX landing: configuration, hooks, floating blocks, palette, prompts, pickers, lock, paste. Next: sync input, mouse resize, CI hardening, MCP.
+- Phase 2 UX landed through pull requests; CI, CodeQL, and the size check are being made green. Next: MCP server, release pipeline, mouse resize.
 
 ## Phase 0: Research and scaffolding
 
@@ -34,12 +34,17 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 - [x] Layout tree: splits, resize, zoom, presets, even/main layouts
 - [x] Floating blocks (server methods, persistence, client rendering; keyboard move pending)
-- [x] Status bar and block titles (activity indicators pending)
-- [x] Leader-key keybinding model with configurable chords and a lock mode (repeat pending)
+- [x] Status bar, block titles, and tab activity markers
+- [x] Leader-key keybinding model with configurable chords, an armed-leader indicator, and a lock mode (repeat pending)
 - [x] Command palette, rename prompts, session and tab pickers
 - [x] Native scrollback, selection, and copy through the terminal widget; paste from the server buffer (search pending)
-- [ ] Mouse: focus, resize, select, scroll
+- [ ] Mouse: focus, select, and scroll work through the toolkit; drag to resize pending
 - [x] Themes and configuration file
+
+## Phase 2b: Multi-block input
+
+- [x] Synchronized input per tab with per-block exclusion
+- [x] BenchmarkDotNet project for layout, protocol, and chords
 
 ## Phase 3: Composable control surface
 
@@ -64,3 +69,4 @@ Living tracker for the weft build. Check items off as they land; keep the
 | 2026-09-08 | `dotnet test --solution` | 37 passed once `--nologo` was dropped; the flag is forwarded to the host and rejected |
 | 2026-09-08 | hex1b tool drives `weft attach`: type, assert, split, zoom, help, detach | all steps observed on screen; session survived detach with 3 shells |
 | 2026-09-08 | `dotnet publish -r linux-x64` Native AOT | clean, 9.8 MB |
+| 2026-09-08 | Full suite in parallel, several runs | attach UI chords were flaky until the leader became client-side state; stable since |
