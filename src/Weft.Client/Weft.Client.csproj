@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Hex1b" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" VersionOverride="10.0.12" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Weft.Core/Weft.Core.csproj" />
