@@ -29,6 +29,8 @@ namespace Weft.Protocol;
 [JsonSerializable(typeof(SessionListResult))]
 [JsonSerializable(typeof(TabCreateParams))]
 [JsonSerializable(typeof(TabRenameParams))]
+[JsonSerializable(typeof(TabSyncParams))]
+[JsonSerializable(typeof(BlockSyncParams))]
 [JsonSerializable(typeof(TabListResult))]
 [JsonSerializable(typeof(BlockSplitParams))]
 [JsonSerializable(typeof(BlockCloseParams))]

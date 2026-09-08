@@ -81,13 +81,12 @@ public sealed class ControlClient : IAsyncDisposable
                 }
             }
 
-            var client = new ControlClient(socket, hello);
-            socket = null;
-            return client;
+            return new ControlClient(socket, hello);
         }
-        finally
+        catch
         {
-            socket?.Dispose();
+            socket.Dispose();
+            throw;
         }
     }
 
@@ -188,18 +187,23 @@ public sealed class ControlClient : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored OperationCanceledException.");
         }
         catch (IOException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored IOException.");
         }
         catch (SocketException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored SocketException.");
         }
         catch (ObjectDisposedException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored ObjectDisposedException.");
         }
         catch (ProtocolException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored ProtocolException.");
         }
         finally
         {

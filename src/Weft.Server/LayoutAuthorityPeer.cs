@@ -3,8 +3,7 @@ using Hex1b;
 namespace Weft.Server;
 
 /// <summary>
-/// An in-process HMP1 peer that holds the primary role on a block so the server, not any
-/// attached client, decides the block's size.
+/// An in-process HMP1 peer that holds the primary role on a block so the server, not any attached client, decides the block's size.
 /// </summary>
 internal sealed class LayoutAuthorityPeer : IAsyncDisposable
 {
@@ -100,6 +99,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
             }
             catch (OperationCanceledException)
             {
+                ServerLog.Debug("DisposeAsync ignored OperationCanceledException.");
             }
         }
 
@@ -121,6 +121,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("DrainAsync ignored OperationCanceledException.");
         }
         catch (IOException exception)
         {
@@ -128,6 +129,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
         }
         catch (ObjectDisposedException)
         {
+            ServerLog.Debug("DrainAsync ignored ObjectDisposedException.");
         }
     }
 
@@ -145,6 +147,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("OnRoleChangedAsync ignored OperationCanceledException.");
         }
         catch (IOException exception)
         {

@@ -8,6 +8,8 @@ namespace Weft.Server;
 /// </summary>
 internal sealed partial class SessionRegistry
 {
+    private const int ActivityIntervalMs = 250;
+
     /// <summary>
     /// Splits a block to create a new one running a command.
     /// </summary>
@@ -40,6 +42,11 @@ internal sealed partial class SessionRegistry
             if (!tab.Blocks.Remove(block))
             {
                 return;
+            }
+
+            if (block.Host is { } closedHost)
+            {
+                tab.SyncInput.Remove(closedHost);
             }
 
             tab.Layout.Remove(block.Id);
@@ -217,7 +224,7 @@ internal sealed partial class SessionRegistry
     /// <param name="literal">Whether every item is literal text.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal static async Task SendKeysAsync(Block block, IReadOnlyList<string> keys, bool literal, CancellationToken cancellationToken)
+    internal async Task SendKeysAsync(Block block, IReadOnlyList<string> keys, bool literal, CancellationToken cancellationToken)
     {
         BlockHost host = RunningHost(block);
         bool applicationCursorKeys = host.Capture(0, CaptureFormat.Text).ApplicationCursorKeys;
@@ -225,7 +232,120 @@ internal sealed partial class SessionRegistry
         {
             byte[] bytes = literal ? KeyEncoder.EncodeText(key) : KeyEncoder.Encode(key, applicationCursorKeys);
             await host.WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
+            await FanOutAsync(block, bytes, pasteText: null, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Turns synchronized input on or off for a tab.
+    /// </summary>
+    /// <param name="tab">The tab.</param>
+    /// <param name="enabled">The new state, or null to toggle.</param>
+    internal void SetTabSync(Tab tab, bool? enabled)
+    {
+        lock (_gate)
+        {
+            tab.Synchronized = enabled ?? !tab.Synchronized;
+        }
+
+        _events.Publish(ProtocolEvents.TabChanged, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+    }
+
+    /// <summary>
+    /// Includes or excludes a block from its tab's synchronized input.
+    /// </summary>
+    /// <param name="block">The block.</param>
+    /// <param name="excluded">Whether the block is excluded.</param>
+    internal void SetBlockSync(Block block, bool excluded)
+    {
+        lock (_gate)
+        {
+            block.ExcludedFromSync = excluded;
+        }
+
+        _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+    }
+
+    private Task FanOutAsync(Block source, ReadOnlyMemory<byte> bytes, string? pasteText, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            // An excluded block neither receives synchronized input nor sends it.
+            if (!source.Tab.Synchronized || source.ExcludedFromSync)
+            {
+                return Task.CompletedTask;
+            }
+
+            List<BlockHost> targets =
+            [
+                .. source.Tab.Blocks
+                    .Where(sibling => sibling != source && !sibling.ExcludedFromSync && sibling.Host is not null && sibling.State == BlockState.Running)
+                    .Select(sibling => sibling.Host!)
+            ];
+
+            // Queue while holding the gate so the queue order matches the order input arrived in.
+            return targets.Count == 0 ? Task.CompletedTask : source.Tab.SyncInput.EnqueueAsync(targets, bytes, pasteText, cancellationToken);
+        }
+    }
+
+    private void OnBlockInput(Block block, ReadOnlyMemory<byte> bytes)
+    {
+        bool synchronized;
+        lock (_gate)
+        {
+            synchronized = block.Tab.Synchronized;
+        }
+
+        if (synchronized)
+        {
+            _ = FanOutAsync(block, bytes.ToArray(), pasteText: null, CancellationToken.None);
+        }
+    }
+
+    private void OnBlockOutput(Block block)
+    {
+        long now = Environment.TickCount64;
+        lock (_gate)
+        {
+            if (block.State == BlockState.Closed)
+            {
+                return;
+            }
+
+            if (now - block.LastActivityPublished < ActivityIntervalMs)
+            {
+                // Output inside the quiet window is coalesced into one trailing event rather than dropped,
+                // so a short burst after a client looked away still raises the activity marker.
+                if (!block.ActivityTrailing)
+                {
+                    block.ActivityTrailing = true;
+                    _ = PublishTrailingActivityAsync(block);
+                }
+
+                return;
+            }
+
+            block.LastActivityPublished = now;
+        }
+
+        _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+    }
+
+    private async Task PublishTrailingActivityAsync(Block block)
+    {
+        await Task.Delay(ActivityIntervalMs).ConfigureAwait(false);
+        lock (_gate)
+        {
+            block.ActivityTrailing = false;
+            if (block.State == BlockState.Closed)
+            {
+                return;
+            }
+
+            block.LastActivityPublished = Environment.TickCount64;
+        }
+
+        _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     /// <summary>
@@ -235,8 +355,12 @@ internal sealed partial class SessionRegistry
     /// <param name="text">The text.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal static ValueTask TypeAsync(Block block, string text, CancellationToken cancellationToken) =>
-        RunningHost(block).WriteInputAsync(KeyEncoder.EncodeText(text), cancellationToken);
+    internal async Task TypeAsync(Block block, string text, CancellationToken cancellationToken)
+    {
+        byte[] bytes = KeyEncoder.EncodeText(text);
+        await RunningHost(block).WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
+        await FanOutAsync(block, bytes, pasteText: null, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Pastes text into a block, bracketed when the terminal asked for it.
@@ -245,11 +369,12 @@ internal sealed partial class SessionRegistry
     /// <param name="text">The text.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal static ValueTask PasteAsync(Block block, string text, CancellationToken cancellationToken)
+    internal async Task PasteAsync(Block block, string text, CancellationToken cancellationToken)
     {
         BlockHost host = RunningHost(block);
         bool bracketed = host.Capture(0, CaptureFormat.Text).BracketedPaste;
-        return host.WriteInputAsync(bracketed ? KeyEncoder.EncodeBracketedPaste(text) : KeyEncoder.EncodeText(text), cancellationToken);
+        await host.WriteInputAsync(bracketed ? KeyEncoder.EncodeBracketedPaste(text) : KeyEncoder.EncodeText(text), cancellationToken).ConfigureAwait(false);
+        await FanOutAsync(block, ReadOnlyMemory<byte>.Empty, text, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -340,6 +465,8 @@ internal sealed partial class SessionRegistry
         block.Host = host;
         host.Exited += code => OnBlockExited(block, code);
         host.TitleChanged += title => OnBlockTitled(block, title);
+        host.InputReceived += bytes => OnBlockInput(block, bytes);
+        host.Output += () => OnBlockOutput(block);
         try
         {
             await host.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -351,6 +478,7 @@ internal sealed partial class SessionRegistry
             {
                 block.State = BlockState.Closed;
                 tab.Blocks.Remove(block);
+                tab.SyncInput.Remove(host);
                 tab.Layout.Remove(block.Id);
                 if (tab.Active == block)
                 {

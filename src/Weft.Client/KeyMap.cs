@@ -73,6 +73,40 @@ internal static class KeyMap
     }
 
     /// <summary>
+    /// Gets every stroke the terminal input path can identify, with no modifier, Shift, and Control.
+    /// </summary>
+    /// <returns>The strokes.</returns>
+    internal static IEnumerable<KeyStroke> AllStrokes()
+    {
+        string[] names =
+        [
+            "space", "enter", "tab", "escape", "backspace", "delete", "insert", "home", "end", "pageup", "pagedown",
+            "up", "down", "left", "right", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+            "-", ",", ".", "/", "="
+        ];
+        KeyModifiers[] modifiers =
+        [
+            KeyModifiers.None, KeyModifiers.Shift, KeyModifiers.Control, KeyModifiers.Alt,
+            KeyModifiers.Control | KeyModifiers.Shift, KeyModifiers.Alt | KeyModifiers.Shift, KeyModifiers.Control | KeyModifiers.Alt
+        ];
+        foreach (char letter in "abcdefghijklmnopqrstuvwxyz0123456789")
+        {
+            foreach (KeyModifiers modifier in modifiers)
+            {
+                yield return new KeyStroke(modifier, letter.ToString());
+            }
+        }
+
+        foreach (string name in names)
+        {
+            foreach (KeyModifiers modifier in modifiers)
+            {
+                yield return new KeyStroke(modifier, name);
+            }
+        }
+    }
+
+    /// <summary>
     /// Converts a stroke to a Hex1b key event for sending to a block.
     /// </summary>
     /// <param name="stroke">The stroke.</param>

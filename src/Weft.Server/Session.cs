@@ -100,16 +100,5 @@ internal sealed class Session
     /// </summary>
     /// <param name="id">The block id.</param>
     /// <returns>The block, or null.</returns>
-    internal Block? FindBlock(BlockId id)
-    {
-        foreach (Tab tab in Tabs)
-        {
-            if (tab.Find(id) is { } block)
-            {
-                return block;
-            }
-        }
-
-        return null;
-    }
+    internal Block? FindBlock(BlockId id) => Tabs.Select(tab => tab.Find(id)).FirstOrDefault(block => block is not null);
 }

@@ -14,7 +14,7 @@ public sealed class WeftConfigTests
     [TestMethod]
     public void LoadsCommentedFile()
     {
-        string path = Path.Combine(Path.GetTempPath(), "weft-config-" + Guid.NewGuid().ToString("N")[..8] + ".json");
+        string path = Path.Join(Path.GetTempPath(), "weft-config-" + Guid.NewGuid().ToString("N")[..8] + ".json");
         File.WriteAllText(path, """
             {
               // leader key
@@ -52,7 +52,7 @@ public sealed class WeftConfigTests
     [TestMethod]
     public void MissingAndMalformedFiles()
     {
-        string missing = Path.Combine(Path.GetTempPath(), "weft-missing-" + Guid.NewGuid().ToString("N")[..8] + ".json");
+        string missing = Path.Join(Path.GetTempPath(), "weft-missing-" + Guid.NewGuid().ToString("N")[..8] + ".json");
         Assert.IsTrue(WeftConfigLoader.TryLoad(missing, out WeftConfig defaults, out string? none));
         Assert.IsNull(none);
         Assert.AreEqual("ctrl+b", defaults.Leader);

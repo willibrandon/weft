@@ -10,6 +10,7 @@ internal sealed class SessionMirror
     private readonly Lock _gate = new();
     private readonly Dictionary<string, BlockInfo> _blocks = new(StringComparer.Ordinal);
     private readonly List<TabInfo> _tabs = [];
+    private readonly HashSet<string> _activity = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Initializes the mirror from an attach snapshot.
@@ -46,6 +47,11 @@ internal sealed class SessionMirror
     /// Gets whether the session or server has gone away.
     /// </summary>
     internal bool Closed { get; private set; }
+
+    /// <summary>
+    /// Gets whether the last applied output event changed a tab's activity marker.
+    /// </summary>
+    internal bool ActivityChanged { get; private set; }
 
     /// <summary>
     /// Gets the tabs in index order.
@@ -85,6 +91,19 @@ internal sealed class SessionMirror
         lock (_gate)
         {
             return _blocks.GetValueOrDefault(id);
+        }
+    }
+
+    /// <summary>
+    /// Gets whether a tab has produced output since it was last viewed.
+    /// </summary>
+    /// <param name="tabId">The tab id.</param>
+    /// <returns>Whether the tab has unseen activity.</returns>
+    internal bool HasActivity(string tabId)
+    {
+        lock (_gate)
+        {
+            return _activity.Contains(tabId);
         }
     }
 
@@ -135,6 +154,7 @@ internal sealed class SessionMirror
                     return null;
                 case ProtocolEvents.TabCreated:
                 case ProtocolEvents.TabRenamed:
+                case ProtocolEvents.TabChanged:
                 case ProtocolEvents.TabSelected:
                     TabInfo tab = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.TabEventData).Tab;
                     if (!string.Equals(tab.Session, Session.Id, StringComparison.Ordinal))
@@ -156,6 +176,7 @@ internal sealed class SessionMirror
                     if (string.Equals(name, ProtocolEvents.TabSelected, StringComparison.Ordinal))
                     {
                         Session = Session with { ActiveTab = tab.Id };
+                        _activity.Remove(tab.Id);
                     }
 
                     return null;
@@ -163,8 +184,15 @@ internal sealed class SessionMirror
                     TabInfo closed = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.TabEventData).Tab;
                     _tabs.RemoveAll(existing => string.Equals(existing.Id, closed.Id, StringComparison.Ordinal));
                     return null;
+                case ProtocolEvents.BlockOutput:
+                    BlockInfo producer = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block;
+                    ActivityChanged = string.Equals(producer.Session, Session.Id, StringComparison.Ordinal)
+                        && !string.Equals(producer.Tab, Session.ActiveTab, StringComparison.Ordinal)
+                        && _activity.Add(producer.Tab);
+                    return null;
                 case ProtocolEvents.BlockCreated:
                 case ProtocolEvents.BlockTitled:
+                case ProtocolEvents.BlockChanged:
                 case ProtocolEvents.BlockExited:
                 case ProtocolEvents.BlockFocused:
                     BlockInfo block = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block;

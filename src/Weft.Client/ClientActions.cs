@@ -5,91 +5,154 @@ namespace Weft.Client;
 /// </summary>
 internal static class ClientActions
 {
-    /// <summary>Detach from the session.</summary>
+    /// <summary>
+    /// Detach from the session.
+    /// </summary>
     internal const string Detach = "detach";
 
-    /// <summary>Create a tab.</summary>
+    /// <summary>
+    /// Create a tab.
+    /// </summary>
     internal const string TabNew = "tab.new";
 
-    /// <summary>Select the next tab.</summary>
+    /// <summary>
+    /// Select the next tab.
+    /// </summary>
     internal const string TabNext = "tab.next";
 
-    /// <summary>Select the previous tab.</summary>
+    /// <summary>
+    /// Select the previous tab.
+    /// </summary>
     internal const string TabPrevious = "tab.previous";
 
-    /// <summary>Close the current tab.</summary>
+    /// <summary>
+    /// Close the current tab.
+    /// </summary>
     internal const string TabClose = "tab.close";
 
-    /// <summary>Rename the current tab.</summary>
+    /// <summary>
+    /// Rename the current tab.
+    /// </summary>
     internal const string TabRename = "tab.rename";
 
-    /// <summary>Split the focused block to the right.</summary>
+    /// <summary>
+    /// Split the focused block to the right.
+    /// </summary>
     internal const string SplitRight = "split.right";
 
-    /// <summary>Split the focused block below.</summary>
+    /// <summary>
+    /// Split the focused block below.
+    /// </summary>
     internal const string SplitDown = "split.down";
 
-    /// <summary>Close the focused block.</summary>
+    /// <summary>
+    /// Close the focused block.
+    /// </summary>
     internal const string BlockClose = "block.close";
 
-    /// <summary>Toggle zoom on the focused block.</summary>
+    /// <summary>
+    /// Toggle zoom on the focused block.
+    /// </summary>
     internal const string BlockZoom = "block.zoom";
 
-    /// <summary>Float or re-tile the focused block.</summary>
+    /// <summary>
+    /// Float or re-tile the focused block.
+    /// </summary>
     internal const string BlockFloat = "block.float";
 
-    /// <summary>Rename the focused block.</summary>
+    /// <summary>
+    /// Rename the focused block.
+    /// </summary>
     internal const string BlockRename = "block.rename";
 
-    /// <summary>Enter copy mode on the focused block.</summary>
+    /// <summary>
+    /// Enter copy mode on the focused block.
+    /// </summary>
     internal const string CopyMode = "copy-mode";
 
-    /// <summary>Paste the server paste buffer into the focused block.</summary>
+    /// <summary>
+    /// Paste the server paste buffer into the focused block.
+    /// </summary>
     internal const string Paste = "paste";
 
-    /// <summary>Focus the block to the left.</summary>
+    /// <summary>
+    /// Focus the block to the left.
+    /// </summary>
     internal const string FocusLeft = "focus.left";
 
-    /// <summary>Focus the block to the right.</summary>
+    /// <summary>
+    /// Focus the block to the right.
+    /// </summary>
     internal const string FocusRight = "focus.right";
 
-    /// <summary>Focus the block above.</summary>
+    /// <summary>
+    /// Focus the block above.
+    /// </summary>
     internal const string FocusUp = "focus.up";
 
-    /// <summary>Focus the block below.</summary>
+    /// <summary>
+    /// Focus the block below.
+    /// </summary>
     internal const string FocusDown = "focus.down";
 
-    /// <summary>Grow the focused block leftward.</summary>
+    /// <summary>
+    /// Grow the focused block leftward.
+    /// </summary>
     internal const string ResizeLeft = "resize.left";
 
-    /// <summary>Grow the focused block rightward.</summary>
+    /// <summary>
+    /// Grow the focused block rightward.
+    /// </summary>
     internal const string ResizeRight = "resize.right";
 
-    /// <summary>Grow the focused block upward.</summary>
+    /// <summary>
+    /// Grow the focused block upward.
+    /// </summary>
     internal const string ResizeUp = "resize.up";
 
-    /// <summary>Grow the focused block downward.</summary>
+    /// <summary>
+    /// Grow the focused block downward.
+    /// </summary>
     internal const string ResizeDown = "resize.down";
 
-    /// <summary>Cycle to the next layout preset.</summary>
+    /// <summary>
+    /// Cycle to the next layout preset.
+    /// </summary>
     internal const string LayoutNext = "layout.next";
 
-    /// <summary>Open the session picker.</summary>
+    /// <summary>
+    /// Open the session picker.
+    /// </summary>
     internal const string SessionPick = "session.pick";
 
-    /// <summary>Rename the session.</summary>
+    /// <summary>
+    /// Toggle synchronized input for the current tab.
+    /// </summary>
+    internal const string TabSync = "tab.sync";
+
+    /// <summary>
+    /// Rename the session.
+    /// </summary>
     internal const string SessionRename = "session.rename";
 
-    /// <summary>Open the tab and block picker.</summary>
+    /// <summary>
+    /// Open the tab and block picker.
+    /// </summary>
     internal const string TabPick = "tab.pick";
 
-    /// <summary>Toggle locked mode, which passes every key to the block.</summary>
+    /// <summary>
+    /// Toggle locked mode, which passes every key to the block.
+    /// </summary>
     internal const string Lock = "lock";
 
-    /// <summary>Open the command palette.</summary>
+    /// <summary>
+    /// Open the command palette.
+    /// </summary>
     internal const string Palette = "palette";
 
-    /// <summary>Send the leader chord's first stroke to the focused block.</summary>
+    /// <summary>
+    /// Send the leader chord to the focused block, stroke by stroke.
+    /// </summary>
     internal const string SendLeader = "send-leader";
 
     /// <summary>
@@ -106,6 +169,14 @@ internal static class ClientActions
         action.Length == TabPrefix.Length + 1 && action.StartsWith(TabPrefix, StringComparison.Ordinal) && action[^1] is >= '1' and <= '9'
             ? action[^1] - '0'
             : null;
+
+    /// <summary>
+    /// Gets whether an action changes nothing on the server, so a read-only client may keep it bound.
+    /// </summary>
+    /// <param name="action">The action id.</param>
+    /// <returns>True when the action only affects this client.</returns>
+    internal static bool IsReadOnlySafe(string action) =>
+        action is Detach or Lock or CopyMode or Palette or SessionPick;
 
     /// <summary>
     /// Gets the default chord for every action, in palette order.
@@ -137,7 +208,8 @@ internal static class ClientActions
         (ResizeRight, "leader shift+l", "Resize right"),
         (LayoutNext, "leader space", "Next layout preset"),
         (SessionPick, "leader s", "Switch session"),
-        (SessionRename, "leader shift+s", "Rename session"),
+        (TabSync, "leader shift+s", "Synchronize input across the tab"),
+        (SessionRename, "leader shift+r", "Rename session"),
         (TabPick, "leader w", "Pick tab or block"),
         (Lock, "leader g", "Lock: pass every key through"),
         (SendLeader, "leader leader", "Send the leader key"),

@@ -136,6 +136,40 @@ internal static class SessionCommands
     }
 
     /// <summary>
+    /// Creates the sync command.
+    /// </summary>
+    /// <returns>The command.</returns>
+    internal static Command CreateSync()
+    {
+        var command = new Command("sync", "Toggle synchronized input for a tab, or exclude a block from it.");
+        Argument<string?> target = CommonOptions.OptionalTarget("Tab, or block with --exclude or --include.");
+        var on = new Option<bool>("--on") { Description = "Turn synchronized input on." };
+        var off = new Option<bool>("--off") { Description = "Turn synchronized input off." };
+        var exclude = new Option<bool>("--exclude") { Description = "Exclude the target block from its tab's synchronized input." };
+        var include = new Option<bool>("--include") { Description = "Include the target block again." };
+        command.Arguments.Add(target);
+        command.Options.Add(on);
+        command.Options.Add(off);
+        command.Options.Add(exclude);
+        command.Options.Add(include);
+        command.SetAction((parseResult, cancellationToken) => InvokeAsync(parseResult, async (context, client) =>
+        {
+            string? effective = CommonOptions.EffectiveTarget(parseResult.GetValue(target));
+            if (parseResult.GetValue(exclude) || parseResult.GetValue(include))
+            {
+                BlockInfo block = await client.SyncBlockAsync(new BlockSyncParams { Target = effective, Excluded = parseResult.GetValue(exclude) }, cancellationToken).ConfigureAwait(false);
+                context.Write(block, ProtocolJsonContext.Default.BlockInfo, value => [value.Id + (value.ExcludedFromSync ? "  excluded" : "  included")]);
+                return;
+            }
+
+            bool? enabled = parseResult.GetValue(on) ? true : parseResult.GetValue(off) ? false : null;
+            TabInfo tab = await client.SyncTabAsync(new TabSyncParams { Target = effective, Enabled = enabled }, cancellationToken).ConfigureAwait(false);
+            context.Write(tab, ProtocolJsonContext.Default.TabInfo, value => [value.Id + (value.Synchronized ? "  synchronized" : "  independent")]);
+        }, cancellationToken));
+        return command;
+    }
+
+    /// <summary>
     /// Formats a session as one line.
     /// </summary>
     /// <param name="session">The session.</param>

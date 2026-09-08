@@ -105,6 +105,7 @@ internal sealed partial class SessionRegistry
                 return;
             }
 
+            tab.SyncInput.Dispose();
             blocks = [.. tab.Blocks];
             if (session.ActiveTab == tab)
             {

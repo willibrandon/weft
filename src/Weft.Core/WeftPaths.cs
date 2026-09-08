@@ -34,17 +34,17 @@ public static class WeftPaths
 
         if (OperatingSystem.IsWindows())
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft", "run");
+            return Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft", "run");
         }
 
         string? xdgRuntime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
         if (!string.IsNullOrEmpty(xdgRuntime))
         {
-            return Path.Combine(xdgRuntime, "weft");
+            return Path.Join(xdgRuntime, "weft");
         }
 
         string tmp = Environment.GetEnvironmentVariable("TMPDIR") is { Length: > 0 } tmpdir ? tmpdir : "/tmp";
-        return Path.Combine(tmp, "weft-" + Environment.UserName);
+        return Path.Join(tmp, "weft-" + Environment.UserName);
     }
 
     /// <summary>
@@ -61,14 +61,14 @@ public static class WeftPaths
 
         if (OperatingSystem.IsWindows())
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft", "state");
+            return Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft", "state");
         }
 
         string? xdgState = Environment.GetEnvironmentVariable("XDG_STATE_HOME");
         string stateHome = !string.IsNullOrEmpty(xdgState)
             ? xdgState
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state");
-        return Path.Combine(stateHome, "weft");
+            : Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state");
+        return Path.Join(stateHome, "weft");
     }
 
     /// <summary>
@@ -85,14 +85,14 @@ public static class WeftPaths
 
         if (OperatingSystem.IsWindows())
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "weft", "config.json");
+            return Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "weft", "config.json");
         }
 
         string? xdgConfig = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
         string configHome = !string.IsNullOrEmpty(xdgConfig)
             ? xdgConfig
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-        return Path.Combine(configHome, "weft", "config.json");
+            : Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+        return Path.Join(configHome, "weft", "config.json");
     }
 
     /// <summary>
@@ -100,21 +100,21 @@ public static class WeftPaths
     /// </summary>
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <returns>The socket path.</returns>
-    public static string ControlSocketPath(string runtimeDirectory) => Path.Combine(runtimeDirectory, "weft.sock");
+    public static string ControlSocketPath(string runtimeDirectory) => Path.Join(runtimeDirectory, "weft.sock");
 
     /// <summary>
     /// Gets the server lock file path inside a runtime directory.
     /// </summary>
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <returns>The lock file path.</returns>
-    public static string LockFilePath(string runtimeDirectory) => Path.Combine(runtimeDirectory, "server.lock");
+    public static string LockFilePath(string runtimeDirectory) => Path.Join(runtimeDirectory, "server.lock");
 
     /// <summary>
     /// Gets the directory that holds block sockets inside a runtime directory.
     /// </summary>
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <returns>The directory path.</returns>
-    public static string BlockSocketDirectory(string runtimeDirectory) => Path.Combine(runtimeDirectory, "blocks");
+    public static string BlockSocketDirectory(string runtimeDirectory) => Path.Join(runtimeDirectory, "blocks");
 
     /// <summary>
     /// Gets a block's HMP1 socket path inside a runtime directory.
@@ -123,5 +123,5 @@ public static class WeftPaths
     /// <param name="block">The block.</param>
     /// <returns>The socket path.</returns>
     public static string BlockSocketPath(string runtimeDirectory, BlockId block) =>
-        Path.Combine(BlockSocketDirectory(runtimeDirectory), block.ToString() + ".sock");
+        Path.Join(BlockSocketDirectory(runtimeDirectory), $"{block}.sock");
 }

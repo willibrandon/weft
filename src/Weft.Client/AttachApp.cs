@@ -27,7 +27,14 @@ public sealed class AttachApp
     private Hex1bApp? _app;
     private CancellationTokenSource? _stopping;
     private string? _status;
+    private const int LeaderSafetyTimeoutMs = 10_000;
+    private const int ActivationIntervalMs = 1000;
+    private long _lastActivation;
+    private long _bindingBuilds;
+    private bool _lastRenderPending;
     private bool _locked;
+    private bool _focusedOnce;
+    private long _leaderPendingUntil;
     private int _reportedWidth;
     private int _reportedHeight;
 
@@ -65,6 +72,11 @@ public sealed class AttachApp
     /// Gets the outer terminal once running, for automation in tests.
     /// </summary>
     internal Hex1bTerminal? Terminal { get; private set; }
+
+    /// <summary>
+    /// Gets the Hex1b application once running, for diagnostics in tests.
+    /// </summary>
+    internal Hex1bApp? App => _app;
 
     /// <summary>
     /// Attaches, runs until detached, and cleans up.
@@ -123,9 +135,11 @@ public sealed class AttachApp
                         }
                         catch (ProtocolException)
                         {
+                            ClientLog.Debug("EnsureView ignored ProtocolException.");
                         }
                         catch (OperationCanceledException)
                         {
+                            ClientLog.Debug("EnsureView ignored OperationCanceledException.");
                         }
                     }
                 }
@@ -146,6 +160,7 @@ public sealed class AttachApp
         Hex1bTheme theme = ThemeFor(_options.Config.Theme);
         Hex1bTerminalBuilder builder = Hex1bTerminal.CreateBuilder()
             .WithMouse()
+            .AddWorkloadFilter(new InputActivityFilter(OnUserInput))
             .WithHex1bApp(options => options.Theme = theme, app =>
             {
                 _app = app;
@@ -166,6 +181,7 @@ public sealed class AttachApp
             }
             catch (OperationCanceledException)
             {
+                ClientLog.Debug("RunTerminalAsync ignored OperationCanceledException.");
             }
             finally
             {
@@ -209,11 +225,16 @@ public sealed class AttachApp
                     _app?.RequestStop();
                 }
 
-                _app?.Invalidate();
+                // Output flows through each block's own stream; only a new activity marker needs a redraw.
+                if (!string.Equals(message.Event, ProtocolEvents.BlockOutput, StringComparison.Ordinal) || mirror.ActivityChanged)
+                {
+                    _app?.Invalidate();
+                }
             }
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("FocusView ignored OperationCanceledException.");
         }
 
         if (!cancellationToken.IsCancellationRequested)
@@ -233,7 +254,11 @@ public sealed class AttachApp
             }
 
             var view = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => _app?.Invalidate());
-            view.Handle.TextCopied += text => Fire(client => client.SetPasteAsync(text, CancellationToken.None));
+            if (!_options.ReadOnly)
+            {
+                view.Handle.TextCopied += text => Fire(client => client.SetPasteAsync(text, CancellationToken.None));
+            }
+
             _views[block.Id] = view;
         }
     }
@@ -289,13 +314,57 @@ public sealed class AttachApp
         }
     }
 
+    private void OnUserInput()
+    {
+        // Any input marks this client as the most recently active one, which the latest size policy follows.
+        // Leader actions activate through Execute as well; this covers ordinary typing that goes straight to a block.
+        // A read-only viewer never becomes the size authority, whatever it presses.
+        if (_options.ReadOnly)
+        {
+            return;
+        }
+
+        long now = Environment.TickCount64;
+        if (now - Volatile.Read(ref _lastActivation) < ActivationIntervalMs)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _lastActivation, now);
+        if (_mirror is { } mirror)
+        {
+            Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
+        }
+    }
+
     private void FocusView(string id)
     {
+        if (_options.ReadOnly)
+        {
+            return;
+        }
+
         BlockView? view = ViewFor(id);
         if (view is not null)
         {
             _app?.RequestFocus(node => node is TerminalNode terminal && terminal.Handle == view.Handle);
         }
+    }
+
+    /// <summary>
+    /// Describes focus, views, and mirror state for test diagnostics.
+    /// </summary>
+    /// <returns>A single line of state.</returns>
+    internal string DebugState()
+    {
+        string views;
+        lock (_gate)
+        {
+            views = string.Join(",", _views.Keys);
+        }
+
+        long remaining = Volatile.Read(ref _leaderPendingUntil) - Environment.TickCount64;
+        return "focusedBlock=" + (FocusedBlockId() ?? "none") + " views=[" + views + "] activeBlock=" + (_mirror?.ActiveTab?.ActiveBlock ?? "none") + " control=" + (_control is null ? "none" : "ok") + " leaderRemainingMs=" + remaining + " bindingBuilds=" + _bindingBuilds + " lastRenderPending=" + _lastRenderPending;
     }
 
     private string? FocusedBlockId()
@@ -304,12 +373,10 @@ public sealed class AttachApp
         {
             lock (_gate)
             {
-                foreach (BlockView view in _views.Values)
+                BlockView? match = _views.Values.FirstOrDefault(view => view.Handle == terminal.Handle);
+                if (match is not null)
                 {
-                    if (view.Handle == terminal.Handle)
-                    {
-                        return view.Id;
-                    }
+                    return match.Id;
                 }
             }
         }
@@ -321,6 +388,12 @@ public sealed class AttachApp
     {
         SessionMirror mirror = _mirror!;
         _root = ctx;
+        if (!_focusedOnce && mirror.ActiveTab?.ActiveBlock is { } initial && ViewFor(initial) is not null)
+        {
+            _focusedOnce = true;
+            FocusView(initial);
+        }
+
         (int width, int height) = HostSize.Read(_options.Headless);
         int availableWidth = Math.Max(1, width);
         int availableHeight = Math.Max(1, height - 1);
@@ -337,19 +410,22 @@ public sealed class AttachApp
             // centered in a larger viewport they move with it. A zoomed block already fills the session.
             int offsetX = fits ? (availableWidth - layout.Width) / 2 : 0;
             int offsetY = fits ? (availableHeight - layout.Height) / 2 : 0;
-            foreach (BlockPlacement placement in layout.Floating)
+            foreach ((BlockPlacement placement, BlockInfo block) in layout.Floating
+                .Where(placement => !string.Equals(placement.Id, layout.Zoomed, StringComparison.Ordinal))
+                .Select(placement => (placement, mirror.FindBlock(placement.Id)))
+                .Where(pair => pair.Item2 is not null)
+                .Select(pair => (pair.placement, pair.Item2!)))
             {
-                if (!string.Equals(placement.Id, layout.Zoomed, StringComparison.Ordinal) && mirror.FindBlock(placement.Id) is { } block)
-                {
-                    layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X + offsetX, placement.Y + offsetY));
-                }
+                layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X + offsetX, placement.Y + offsetY));
             }
 
             return [.. layers];
         });
 
-        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, _bindings)]));
-        return body.InputBindings(bindings => RegisterBindings(bindings, mirror));
+        bool pending = LeaderPending;
+        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, pending, _bindings)]));
+        Hex1bWidget bound = body.InputBindings(bindings => RegisterBindings(bindings, mirror));
+        return pending ? bound.RedrawAfter(TimeSpan.FromMilliseconds(LeaderSafetyTimeoutMs)) : bound;
     }
 
     private Hex1bWidget RenderLayout<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
@@ -447,14 +523,22 @@ public sealed class AttachApp
         return ctx.Border(inner).Title(title).FixedWidth(width).FixedHeight(height);
     }
 
-    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, BindingTable bindings)
+    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, bool leaderPending, BindingTable bindings)
         where TParent : Hex1bWidget
     {
         IReadOnlyList<TabInfo> tabs = mirror.Tabs;
         string tabText = string.Join("  ", tabs.Select(tab =>
-            (tab.Active ? "[" : string.Empty) + tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + tab.Name + (tab.Active ? "]" : string.Empty)));
+            (tab.Active ? "[" : string.Empty) + tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + tab.Name + (mirror.HasActivity(tab.Id) ? "*" : string.Empty) + (tab.Active ? "]" : string.Empty)));
         string size = layout.Width.ToString(System.Globalization.CultureInfo.InvariantCulture) + "×" + layout.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
         string hint = locked ? bindings.ChordFor(ClientActions.Lock) + " unlock" : bindings.ChordFor(ClientActions.Palette) + " help";
+        if (leaderPending)
+        {
+            hint = bindings.Describe(bindings.Leader) + "\u2026";
+        }
+        if (mirror.ActiveTab is { Synchronized: true })
+        {
+            size = "SYNC " + size;
+        }
         return ctx.InfoBar(s =>
         [
             s.Section(" " + mirror.Session.Name + " "),
@@ -466,8 +550,34 @@ public sealed class AttachApp
         ]).Divider(" ");
     }
 
+    private bool LeaderPending => Environment.TickCount64 < Volatile.Read(ref _leaderPendingUntil);
+
     private void RegisterBindings(InputBindingsBuilder bindings, SessionMirror mirror)
     {
+        // The leader is a single stroke that arms the next stroke rather than a router-level chord:
+        // arming state lives here, so a re-render or capture change between strokes cannot lose it.
+        // While armed, every identifiable key is intercepted: bound keys run their action and any
+        // other key disarms the leader and is forwarded to the block, the way a tmux prefix behaves.
+        bool pending = LeaderPending;
+        _bindingBuilds++;
+        if (pending != _lastRenderPending)
+        {
+            ClientLog.Debug("render pending=" + pending);
+        }
+
+        _lastRenderPending = pending;
+        bool singleStrokeLeader = _bindings.Leader.Steps.Count == 1;
+        if (singleStrokeLeader && !pending)
+        {
+            BuildSteps(bindings, _bindings.Leader)?.OverridesCapture().Action(_ => ArmLeader(), "Leader");
+        }
+
+        HashSet<KeyStroke> claimed = [];
+        if (singleStrokeLeader)
+        {
+            claimed.Add(_bindings.Leader.Steps[0]);
+        }
+
         foreach ((KeyChord chord, string action) in _bindings.Bindings)
         {
             if (_locked && !string.Equals(action, ClientActions.Lock, StringComparison.Ordinal))
@@ -475,14 +585,71 @@ public sealed class AttachApp
                 continue;
             }
 
-            KeyStepBuilder? step = BuildSteps(bindings, chord);
-            if (step is null)
+            if (_options.ReadOnly && !ClientActions.IsReadOnlySafe(action))
             {
                 continue;
             }
 
             string captured = action;
-            step.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
+            if (singleStrokeLeader && _bindings.TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest))
+            {
+                if (!pending || rest.Count != 1)
+                {
+                    continue;
+                }
+
+                claimed.Add(rest[0]);
+                BuildSteps(bindings, new KeyChord(rest))?.OverridesCapture().Action(context =>
+                {
+                    DisarmLeader();
+                    Execute(captured, context, mirror);
+                }, captured);
+                continue;
+            }
+
+            if (!pending)
+            {
+                BuildSteps(bindings, chord)?.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
+            }
+        }
+
+        if (!pending)
+        {
+            if (_options.ReadOnly)
+            {
+                SwallowUnclaimed(bindings, claimed);
+            }
+
+            return;
+        }
+
+        bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
+        claimed.Add(new KeyStroke(KeyModifiers.None, "escape"));
+        foreach ((KeyStroke stroke, Hex1bKeyEvent keyEvent) in KeyMap.AllStrokes()
+            .Where(stroke => !claimed.Contains(stroke))
+            .Select(stroke => (stroke, KeyMap.ToKeyEvent(stroke)))
+            .Where(pair => pair.Item2 is not null)
+            .Select(pair => (pair.stroke, pair.Item2!)))
+        {
+
+            BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(context =>
+            {
+                DisarmLeader();
+                if (!_options.ReadOnly && ViewFor(FocusedBlockId()) is { } view)
+                {
+                    _ = view.Handle.SendEventAsync(keyEvent);
+                }
+            }, "Forward " + stroke);
+        }
+    }
+
+    private static void SwallowUnclaimed(InputBindingsBuilder bindings, HashSet<KeyStroke> claimed)
+    {
+        // A read-only client never forwards keys, even if a click focused a block: every stroke it can name is
+        // bound to nothing, and the leader is the only key that still opens a menu of harmless actions.
+        foreach (KeyStroke stroke in KeyMap.AllStrokes().Where(stroke => !claimed.Contains(stroke)))
+        {
+            BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
         }
     }
 
@@ -518,8 +685,30 @@ public sealed class AttachApp
         return builder;
     }
 
+    private void ArmLeader()
+    {
+        Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderSafetyTimeoutMs);
+        ClientLog.Debug("leader armed");
+        _app?.Invalidate();
+    }
+
+    private void DisarmLeader()
+    {
+        Volatile.Write(ref _leaderPendingUntil, 0);
+        _app?.Invalidate();
+    }
+
     private void Execute(string action, InputBindingActionContext context, SessionMirror mirror)
     {
+        // The palette and pickers route here too, so the read-only allowlist is enforced once, in one place.
+        if (_options.ReadOnly && !ClientActions.IsReadOnlySafe(action))
+        {
+            _status = "read-only";
+            _app?.Invalidate();
+            return;
+        }
+
+        Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
         switch (action)
         {
             case ClientActions.Detach:
@@ -614,6 +803,13 @@ public sealed class AttachApp
             case ClientActions.SessionPick:
                 PickSession(context, mirror);
                 break;
+            case ClientActions.TabSync:
+                if (mirror.ActiveTab is { } syncing)
+                {
+                    Fire(client => client.SyncTabAsync(new TabSyncParams { Target = syncing.Id }, CancellationToken.None));
+                }
+
+                break;
             case ClientActions.SessionRename:
                 Prompt(context, "Session name", mirror.Session.Name, name => Fire(client => client.RenameSessionAsync(new SessionRenameParams { Target = mirror.Session.Id, Name = name }, CancellationToken.None)));
                 break;
@@ -664,7 +860,12 @@ public sealed class AttachApp
     {
         PopupStack popups = context.Popups;
         RootContext ctx = _root!;
-        List<PaletteEntry> entries = [.. ClientActions.Defaults.Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))];
+        List<PaletteEntry> entries =
+        [
+            .. ClientActions.Defaults
+                .Where(item => !_options.ReadOnly || ClientActions.IsReadOnlySafe(item.Action))
+                .Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))
+        ];
         popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
         [
             b.SelectionPrompt(entries)
@@ -756,7 +957,11 @@ public sealed class AttachApp
     }
 
     private void Split(SplitOrientation orientation) =>
-        WithFocused(id => Fire(client => client.SplitAsync(new BlockSplitParams { Target = id, Orientation = orientation }, CancellationToken.None)));
+        WithFocused(id =>
+        {
+            ClientLog.Debug("split " + id + " " + orientation);
+            Fire(client => client.SplitAsync(new BlockSplitParams { Target = id, Orientation = orientation }, CancellationToken.None));
+        });
 
     private void Resize(LayoutDirection direction) =>
         WithFocused(id => Fire(client => client.ResizeAsync(new LayoutResizeParams { Target = id, Direction = direction, Amount = 5 }, CancellationToken.None)));
@@ -783,12 +988,9 @@ public sealed class AttachApp
 
     private static async Task SendStrokesAsync(BlockView view, IReadOnlyList<KeyStroke> strokes)
     {
-        foreach (KeyStroke stroke in strokes)
+        foreach (Hex1bKeyEvent keyEvent in strokes.Select(KeyMap.ToKeyEvent).Where(keyEvent => keyEvent is not null).Select(keyEvent => keyEvent!))
         {
-            if (KeyMap.ToKeyEvent(stroke) is { } keyEvent)
-            {
-                await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
-            }
+            await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
         }
     }
 
@@ -807,6 +1009,10 @@ public sealed class AttachApp
         {
             action(id);
         }
+        else
+        {
+            ClientLog.Debug("No focused block; the action was skipped.");
+        }
     }
 
     private void Fire<T>(Func<ControlClient, Task<T>> call)
@@ -823,13 +1029,16 @@ public sealed class AttachApp
         {
             await call(control).ConfigureAwait(false);
             _status = null;
+            ClientLog.Debug("action completed.");
         }
         catch (ProtocolException exception)
         {
             _status = exception.Message;
+            ClientLog.Debug("action failed: " + exception.Message);
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("action ignored OperationCanceledException.");
         }
 
         _app?.Invalidate();

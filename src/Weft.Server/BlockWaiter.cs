@@ -42,6 +42,10 @@ internal static class BlockWaiter
         while (true)
         {
             BlockHost? host = block.Host;
+
+            // Subscribe before looking, so output applied between the capture and the wait still wakes the loop.
+            Task? outputChanged = host?.OutputChanged.WaitAsync(timeout.Token);
+            Task stateChanged = block.StateChanged.WaitAsync(timeout.Token);
             long revision = block.Revision;
             if (block.State is BlockState.Exited or BlockState.Closed && parameters.Exit)
             {
@@ -71,13 +75,7 @@ internal static class BlockWaiter
                 return new BlockWaitResult { Outcome = WaitOutcome.Exit, Revision = revision, ExitCode = block.ExitCode };
             }
 
-            try
-            {
-                await Task.WhenAny(host.OutputChanged.WaitAsync(timeout.Token), block.StateChanged.WaitAsync(timeout.Token)).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
+            await Task.WhenAny(outputChanged!, stateChanged).ConfigureAwait(false);
 
             if (timeout.IsCancellationRequested)
             {

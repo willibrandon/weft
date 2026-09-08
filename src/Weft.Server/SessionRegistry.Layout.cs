@@ -154,6 +154,7 @@ internal sealed partial class SessionRegistry
             }
             catch (ObjectDisposedException)
             {
+                ServerLog.Debug("ApplyResizesAsync ignored ObjectDisposedException.");
             }
         }
     }

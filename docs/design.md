@@ -170,6 +170,13 @@ count matches.
 
 ### 4.3 Block hosting
 
+Each running block pins about two thread pool workers: the pseudo-terminal reader waits in a
+blocking select loop on a pool thread, and the exit wait blocks in short slices. A pool that
+starts at the core count starves once a handful of blocks run, and the runtime injects
+replacements only about once a second, stalling every continuation in the process meanwhile.
+The server raises the pool minimum as blocks start so the pool grows immediately instead.
+
+
 Each block builds a Hex1b terminal:
 
 ```text
@@ -268,6 +275,15 @@ replaced with `v` and `-`.
 | `leader ?` | help and command palette |
 | `leader Ctrl+B` | send a literal Ctrl+B |
 
+The leader is one stroke that arms the next stroke, the way a tmux prefix does; the info bar
+shows the armed leader (`Ctrl+B…`) until the next key arrives. A bound key runs its action,
+Escape cancels, and any other key disarms the leader and goes to the block as typed, so a
+stray prefix never leaves a stale arm behind. A ten second safety timer covers keys the client
+cannot name.
+Arming is client state rather than a router chord, so a redraw or a focus change between the
+two strokes cannot lose it. Chords that do not start with the leader use the toolkit's chord
+matching directly.
+
 ### 5.3 Command palette
 
 `SelectionPrompt` in a popup listing every action with its binding and description. Typing
@@ -317,10 +333,10 @@ required members keep init, since they must be present anyway.
 | `server.info` / `server.shutdown` | Identity, uptime, counts; graceful shutdown. |
 | `session.list` / `session.create` / `session.get` / `session.rename` / `session.close` | Session lifecycle. |
 | `session.attach` / `session.detach` | Register a client viewport and receive geometry; release it. |
-| `session.setSize` | Report a client's viewport; the policy decides the authoritative size. |
-| `tab.list` / `tab.create` / `tab.select` / `tab.rename` / `tab.close` / `tab.move` | Tabs. |
+| `session.setSize` / `session.activate` | Report a client's viewport, or mark a client as the latest; the policy decides the authoritative size. |
+| `tab.list` / `tab.create` / `tab.select` / `tab.rename` / `tab.close` / `tab.sync` | Tabs, including synchronized input for every block in a tab. |
 | `block.list` / `block.get` / `block.create` / `block.close` / `block.kill` / `block.rename` | Blocks. |
-| `block.split` / `block.float` / `block.tile` / `block.zoom` / `block.focus` / `block.swap` | Layout. |
+| `block.split` / `block.float` / `block.tile` / `block.move` / `block.zoom` / `block.focus` / `block.swap` / `block.sync` | Layout and per-block sync exclusion. |
 | `layout.get` / `layout.apply` / `layout.preset` / `layout.resize` | Layout tree and geometry. |
 | `block.sendKeys` / `block.type` / `block.paste` / `block.signal` | Input. |
 | `block.capture` / `block.history` | Screen and scrollback capture with revision. |
@@ -333,7 +349,7 @@ required members keep init, since they must be present anyway.
 ### 6.2 Events
 
 `session.created`, `session.renamed`, `session.closed`, `tab.created`, `tab.selected`,
-`tab.renamed`, `tab.closed`, `block.created`, `block.titled`, `block.exited`, `block.closed`,
+`tab.renamed`, `tab.changed`, `tab.closed`, `block.created`, `block.titled`, `block.changed`, `block.exited`, `block.closed`,
 `block.focused`, `block.output` (throttled, carries revision), `layout.changed` (full geometry
 for the tab), `client.attached`, `client.detached`, `size.changed`, `server.stopping`.
 
@@ -440,7 +456,11 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 - Sockets live in a `0700` directory owned by the user; there is no network listener.
 - The server runs commands as the user; there is no privilege boundary between clients of the
   same user, which matches tmux and screen.
-- Read-only clients are enforced at the server, not the client.
+- Read-only attachments are enforced in the client: it never focuses a block, forwards no keys,
+  and keeps only actions that change nothing on the server. The block sockets accept input from
+  any peer, because the muxer protocol does not attribute input to a peer, so read-only guards
+  against accidents by the same user rather than against a hostile process; the private runtime
+  directory is the actual boundary.
 - No telemetry, no outbound connections.
 
 ## 12. Performance budgets

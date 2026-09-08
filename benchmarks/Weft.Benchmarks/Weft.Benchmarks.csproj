@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Weft.Benchmarks</AssemblyName>
+    <RootNamespace>Weft.Benchmarks</RootNamespace>
+    <Description>BenchmarkDotNet microbenchmarks for weft's layout engine, protocol codec, and chord grammar.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Weft.Core/Weft.Core.csproj" />
+    <ProjectReference Include="../../src/Weft.Protocol/Weft.Protocol.csproj" />
+  </ItemGroup>
+</Project>

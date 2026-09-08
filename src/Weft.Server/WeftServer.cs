@@ -21,7 +21,7 @@ public sealed class WeftServer : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
         Options = options;
         Events = new EventLog();
-        Registry = new SessionRegistry(options, Events, new SessionStore(Path.Combine(options.StateDirectory, "sessions")));
+        Registry = new SessionRegistry(options, Events, new SessionStore(Path.Join(options.StateDirectory, "sessions")));
         Waits = new WaitChannels();
         ServerHandlers.Register(_dispatcher);
         SessionHandlers.Register(_dispatcher);
@@ -79,7 +79,7 @@ public sealed class WeftServer : IAsyncDisposable
             throw new InvalidOperationException("Another weft server is running on " + Options.RuntimeDirectory + ".");
         }
 
-        ServerLog.UseFile(Path.Combine(Options.StateDirectory, "server.log"));
+        ServerLog.UseFile(Path.Join(Options.StateDirectory, "server.log"));
         StartedAt = DateTimeOffset.Now;
         using CancellationTokenRegistration registration = cancellationToken.Register(RequestShutdown);
         var listener = new ControlListener(SocketPath, this, _dispatcher);
@@ -150,7 +150,7 @@ public sealed class WeftServer : IAsyncDisposable
         CreatePrivateDirectory(Options.RuntimeDirectory);
         CreatePrivateDirectory(WeftPaths.BlockSocketDirectory(Options.RuntimeDirectory));
         CreatePrivateDirectory(Options.StateDirectory);
-        CreatePrivateDirectory(Path.Combine(Options.StateDirectory, "sessions"));
+        CreatePrivateDirectory(Path.Join(Options.StateDirectory, "sessions"));
     }
 
     private static void CreatePrivateDirectory(string path)

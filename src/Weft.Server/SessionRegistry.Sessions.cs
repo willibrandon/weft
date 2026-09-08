@@ -234,6 +234,25 @@ internal sealed partial class SessionRegistry
     }
 
     /// <summary>
+    /// Marks a client as the most recently active and applies the size policy.
+    /// </summary>
+    /// <param name="client">The client.</param>
+    /// <param name="cancellationToken">Cancels resizes.</param>
+    /// <returns>A task that completes when the session has re-laid out.</returns>
+    internal async Task ActivateAsync(AttachedClient client, CancellationToken cancellationToken)
+    {
+        List<PendingResize> resizes;
+        lock (_gate)
+        {
+            client.LastActive = DateTimeOffset.Now;
+            client.Session.LastActive = client.LastActive;
+            resizes = ApplySizePolicyUnsafe(client.Session);
+        }
+
+        await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Records a client's viewport size and applies the size policy.
     /// </summary>
     /// <param name="client">The client.</param>

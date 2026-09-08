@@ -24,6 +24,9 @@
     <Project Path="src/Weft.Protocol/Weft.Protocol.csproj" />
     <Project Path="src/Weft.Server/Weft.Server.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Weft.Benchmarks/Weft.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Weft.Tests/Weft.Tests.csproj" />
   </Folder>

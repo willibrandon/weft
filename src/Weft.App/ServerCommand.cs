@@ -12,7 +12,9 @@ namespace Weft.App;
 /// </summary>
 internal static class ServerCommand
 {
-    /// <summary>Creates the server command.</summary>
+    /// <summary>
+    /// Creates the server command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command Create()
     {
@@ -77,7 +79,9 @@ internal static class ServerCommand
         return command;
     }
 
-    /// <summary>Creates the shutdown command.</summary>
+    /// <summary>
+    /// Creates the shutdown command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateShutdown()
     {

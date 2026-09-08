@@ -149,6 +149,7 @@ internal sealed class BlockView : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("RunAsync ignored OperationCanceledException.");
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException or System.Net.Sockets.SocketException)
         {

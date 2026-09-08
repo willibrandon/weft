@@ -40,16 +40,7 @@ public sealed class LayoutTree(LayoutOptions options)
     {
         get
         {
-            List<BlockId> blocks = [];
-            foreach (LayoutCell leaf in Leaves())
-            {
-                if (leaf.Block is { } block)
-                {
-                    blocks.Add(block);
-                }
-            }
-
-            return blocks;
+            return Leaves().Select(leaf => leaf.Block).OfType<BlockId>().ToList();
         }
     }
 
@@ -72,22 +63,10 @@ public sealed class LayoutTree(LayoutOptions options)
     /// </summary>
     /// <param name="block">The block.</param>
     /// <returns>The leaf, or null when the block is not tiled.</returns>
-    public LayoutCell? Find(BlockId block)
-    {
-        foreach (LayoutCell leaf in Leaves())
-        {
-            if (leaf.Block == block)
-            {
-                return leaf;
-            }
-        }
-
-        return null;
-    }
+    public LayoutCell? Find(BlockId block) => Leaves().Find(leaf => leaf.Block == block);
 
     /// <summary>
-    /// Resizes the whole layout to a new size, spreading the change across cells and never
-    /// shrinking a block below its minimum.
+    /// Resizes the whole layout to a new size, spreading the change across cells and never shrinking a block below its minimum.
     /// </summary>
     /// <param name="width">The target width.</param>
     /// <param name="height">The target height.</param>
@@ -348,13 +327,9 @@ public sealed class LayoutTree(LayoutOptions options)
         BlockId? best = null;
         int bestOverlap = 0;
         int bestStart = int.MaxValue;
-        foreach (LayoutCell leaf in Leaves())
+        foreach (LayoutCell leaf in Leaves().Where(leaf => leaf != origin && leaf.Block is not null))
         {
-            if (leaf == origin || leaf.Block is not { } candidate)
-            {
-                continue;
-            }
-
+            BlockId candidate = leaf.Block!.Value;
             LayoutRect b = leaf.Bounds;
             bool adjacent = direction switch
             {
@@ -391,16 +366,7 @@ public sealed class LayoutTree(LayoutOptions options)
     /// <returns>The placements in layout order.</returns>
     public IReadOnlyList<BlockGeometry> ToGeometry()
     {
-        List<BlockGeometry> geometry = [];
-        foreach (LayoutCell leaf in Leaves())
-        {
-            if (leaf.Block is { } block)
-            {
-                geometry.Add(new BlockGeometry(block, leaf.Bounds));
-            }
-        }
-
-        return geometry;
+        return Leaves().Where(leaf => leaf.Block is not null).Select(leaf => new BlockGeometry(leaf.Block!.Value, leaf.Bounds)).ToList();
     }
 
     /// <summary>
@@ -410,8 +376,7 @@ public sealed class LayoutTree(LayoutOptions options)
     public string Serialize() => _root is null ? string.Empty : LayoutSerializer.Serialize(_root);
 
     /// <summary>
-    /// Replaces the tree with a parsed layout, assigning blocks to leaves in order when the
-    /// leaf ids do not name exactly the given blocks.
+    /// Replaces the tree with a parsed layout, assigning blocks to leaves in order when the leaf ids do not name exactly the given blocks.
     /// </summary>
     /// <param name="root">The parsed root.</param>
     /// <param name="blocks">The blocks to place.</param>
@@ -677,12 +642,9 @@ public sealed class LayoutTree(LayoutOptions options)
         }
 
         Spread(root);
-        foreach (LayoutCell child in root.Children)
+        foreach (LayoutCell child in root.Children.Where(child => !child.IsLeaf))
         {
-            if (!child.IsLeaf)
-            {
-                Spread(child);
-            }
+            Spread(child);
         }
 
         return root;

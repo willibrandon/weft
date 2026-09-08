@@ -68,6 +68,21 @@ internal static class SessionHandlers
                 return EmptyResult.Instance;
             });
 
+        dispatcher.Register(ProtocolMethods.SessionActivate, ProtocolJsonContext.Default.ClientParams, ProtocolJsonContext.Default.EmptyResult,
+            async (context, parameters, cancellationToken) =>
+            {
+                await context.Registry.ActivateAsync(context.Registry.ResolveClient(parameters.Client), cancellationToken).ConfigureAwait(false);
+                return EmptyResult.Instance;
+            });
+
+        dispatcher.Register(ProtocolMethods.TabSync, ProtocolJsonContext.Default.TabSyncParams, ProtocolJsonContext.Default.TabInfo,
+            async (context, parameters, cancellationToken) =>
+            {
+                Tab tab = await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
+                context.Registry.SetTabSync(tab, parameters.Enabled);
+                return context.Registry.ToInfo(tab);
+            });
+
         dispatcher.Register(ProtocolMethods.TabList, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.TabListResult,
             async (context, parameters, cancellationToken) =>
             {
@@ -134,7 +149,8 @@ internal static class SessionHandlers
             {
                 foreach (string stored in registry.StoredSessionNames())
                 {
-                    if (await registry.ResurrectAsync(stored, cancellationToken).ConfigureAwait(false) is { } resurrected)
+                    Session? resurrected = await registry.ResurrectAsync(stored, cancellationToken).ConfigureAwait(false);
+                    if (resurrected is not null)
                     {
                         return resurrected;
                     }

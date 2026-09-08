@@ -98,6 +98,6 @@ internal sealed class SessionStore(string directory)
     private string PathFor(string name)
     {
         string safe = string.Concat(name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
-        return Path.Combine(directory, safe + ".json");
+        return Path.Join(directory, safe + ".json");
     }
 }

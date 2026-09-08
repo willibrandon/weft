@@ -52,6 +52,7 @@ internal static class BlockRunner
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            ServerLog.Debug("ProtocolException ignored OperationCanceledException.");
         }
 
         string text = string.Empty;
