@@ -5,7 +5,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Phase 2 UX landed through pull requests; CI, CodeQL, and the size check are being made green. Next: MCP server, release pipeline, mouse resize.
+- Phase 2 UX landed through pull requests; CI, CodeQL, and the size check are being made green. The MCP server is on its branch. Next: release pipeline, mouse resize.
 
 ## Phase 0: Research and scaffolding
 
@@ -70,3 +70,6 @@ Living tracker for the weft build. Check items off as they land; keep the
 | 2026-09-08 | hex1b tool drives `weft attach`: type, assert, split, zoom, help, detach | all steps observed on screen; session survived detach with 3 shells |
 | 2026-09-08 | `dotnet publish -r linux-x64` Native AOT | clean, 9.8 MB |
 | 2026-09-08 | Full suite in parallel, several runs | attach UI chords were flaky until the leader became client-side state; stable since |
+| 2026-09-08 | Full suite on a 12 core macOS machine, cold runs | attach UI and sync tests timed out while the screen showed the expected state at timeout; failure counters showed the thread pool grown from 12 to 34 workers, so continuations had stalled for 16 to 36 seconds while the runtime injected threads. Cause: each running block pins two pool workers in the pseudo-terminal read and exit waits. Fix: the server raises the pool minimum as blocks start. Cold run passed first time afterwards |
+| 2026-09-08 | Synchronized input test on macOS and linux after the pool fix | the sibling had printed the expected line, yet the pattern wait timed out. Two causes: the revision signal came from a workload filter that runs before the terminal applies output, so a wait could capture a stale screen and never be woken again; and the waiter subscribed after capturing. The revision now comes from a presentation filter, which sees applied tokens, and the waiter subscribes first. Tests also wait for a prompt before typing into a fresh shell |
+| 2026-09-08 | Full suite with the pool minimum pinned to 3 workers on linux | 50 passed before and after the fix; on a fast machine the readers unblock often enough that starvation never set in, which is why the failure only showed on macOS and CI |

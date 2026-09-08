@@ -72,7 +72,7 @@ internal sealed class BlockHost : IAsyncDisposable
             ScrollbackCapacity = scrollback,
             RunCallback = RunProcessAsync
         };
-        options.WorkloadFilters.Add(_revision);
+        options.PresentationFilters.Add(_revision);
         _terminal = new Hex1bTerminal(options);
         _terminal.WindowTitleChanged += title => TitleChanged?.Invoke(title);
         _authority = new LayoutAuthorityPeer(socketPath, width, height);
@@ -293,6 +293,7 @@ internal sealed class BlockHost : IAsyncDisposable
         }
 
         _started.TrySetResult();
+        ThreadPoolReservation.Acquire();
         int exitCode;
         try
         {
@@ -302,6 +303,10 @@ internal sealed class BlockHost : IAsyncDisposable
         {
             ServerLog.Warn("Could not wait for the block process: " + exception.Message);
             exitCode = -1;
+        }
+        finally
+        {
+            ThreadPoolReservation.Release();
         }
 
         // The pseudo-terminal may still hold output the process wrote just before exiting; keep the

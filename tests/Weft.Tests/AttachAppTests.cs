@@ -1,6 +1,8 @@
 using Hex1b;
 using Hex1b.Automation;
 using Hex1b.Input;
+using System.Diagnostics;
+using System.Globalization;
 using Weft.Client;
 using Weft.Core;
 using Weft.Protocol;
@@ -41,7 +43,7 @@ public sealed class AttachAppTests
             await automator.WaitUntilTextAsync("100×29").ConfigureAwait(false);
 
             await automator.Ctrl().KeyAsync(Hex1bKey.B, cancellationToken).ConfigureAwait(false);
-            await automator.WaitUntilTextAsync("Ctrl+B\u2026").ConfigureAwait(false);
+            await WaitForTextAsync(app, automator, "Ctrl+B\u2026").ConfigureAwait(false);
             await automator.KeyAsync(Hex1bKey.V, cancellationToken).ConfigureAwait(false);
             await WaitForFramesAsync(app, automator, 2).ConfigureAwait(false);
 
@@ -57,7 +59,7 @@ public sealed class AttachAppTests
             await automator.WaitUntilTextAsync("ui-ok-12").ConfigureAwait(false);
 
             await automator.Ctrl().KeyAsync(Hex1bKey.B, cancellationToken).ConfigureAwait(false);
-            await automator.WaitUntilTextAsync("Ctrl+B\u2026").ConfigureAwait(false);
+            await WaitForTextAsync(app, automator, "Ctrl+B\u2026").ConfigureAwait(false);
             await automator.KeyAsync(Hex1bKey.D, cancellationToken).ConfigureAwait(false);
             while (!run.IsCompleted)
             {
@@ -96,12 +98,12 @@ public sealed class AttachAppTests
             await automator.WaitUntilTextAsync(" keys ").ConfigureAwait(false);
 
             await automator.Ctrl().KeyAsync(Hex1bKey.A, cancellationToken).ConfigureAwait(false);
-            await automator.WaitUntilTextAsync("Ctrl+A\u2026").ConfigureAwait(false);
+            await WaitForTextAsync(app, automator, "Ctrl+A\u2026").ConfigureAwait(false);
             await automator.KeyAsync(Hex1bKey.B, cancellationToken).ConfigureAwait(false);
             await WaitForFramesAsync(app, automator, 2).ConfigureAwait(false);
 
             await automator.Ctrl().KeyAsync(Hex1bKey.A, cancellationToken).ConfigureAwait(false);
-            await automator.WaitUntilTextAsync("Ctrl+A\u2026").ConfigureAwait(false);
+            await WaitForTextAsync(app, automator, "Ctrl+A\u2026").ConfigureAwait(false);
             await automator.KeyAsync(Hex1bKey.D, cancellationToken).ConfigureAwait(false);
             while (!run.IsCompleted)
             {
@@ -128,9 +130,33 @@ public sealed class AttachAppTests
         {
             string focused = app.App?.FocusedNode?.GetType().Name ?? "none";
             string route = InputRouter.LastRouteDebug ?? "none";
-            string log = string.Join(" | ", ClientLog.Snapshot().TakeLast(8));
-            throw new InvalidOperationException("Split did not render. focused=" + focused + " route=" + route + " status=" + app.Status + " log=" + log, exception);
+            string log = string.Join(" | ", ClientLog.Snapshot().TakeLast(40));
+            throw new InvalidOperationException("Split did not render. focused=" + focused + " route=" + route + " status=" + app.Status + " " + app.DebugState() + " " + await ThreadPoolStateAsync().ConfigureAwait(false) + " log=" + log, exception);
         }
+    }
+
+    private static async Task WaitForTextAsync(AttachApp app, Hex1bTerminalAutomator automator, string text)
+    {
+        ClientLog.Debug("test waits for " + text);
+        try
+        {
+            await automator.WaitUntilTextAsync(text).ConfigureAwait(false);
+        }
+        catch (Hex1bAutomationException exception)
+        {
+            string log = string.Join(" | ", ClientLog.Snapshot().TakeLast(40));
+            throw new InvalidOperationException("Text did not render: " + text + ". " + app.DebugState() + " " + await ThreadPoolStateAsync().ConfigureAwait(false) + " log=" + log, exception);
+        }
+    }
+
+    private static async Task<string> ThreadPoolStateAsync()
+    {
+        ThreadPool.GetAvailableThreads(out int workers, out int io);
+        ThreadPool.GetMinThreads(out int minWorkers, out _);
+        long started = Stopwatch.GetTimestamp();
+        await Task.Yield();
+        double scheduleMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        return "threadPool(threads=" + ThreadPool.ThreadCount + " pending=" + ThreadPool.PendingWorkItemCount + " availableWorkers=" + workers + " availableIo=" + io + " minWorkers=" + minWorkers + " yieldMs=" + scheduleMs.ToString("F1", CultureInfo.InvariantCulture) + ")";
     }
 
     private static async Task<Hex1bTerminal> WaitForTerminalAsync(AttachApp app, Task run, CancellationToken cancellationToken)

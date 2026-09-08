@@ -63,6 +63,7 @@ public sealed class ServerTests
                 BlockInfo block = await client.GetBlockAsync("work", cancellationToken).ConfigureAwait(false);
                 Assert.AreEqual(BlockState.Running, block.State);
                 Assert.IsNotNull(block.Pid);
+                await ServerFixture.WaitForPromptAsync(client, block.Id, cancellationToken).ConfigureAwait(false);
 
                 await client.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["echo weft-$((6*7))", "Enter"] }, cancellationToken).ConfigureAwait(false);
                 BlockWaitResult wait = await client.WaitAsync(new BlockWaitParams { Target = block.Id, Pattern = "^weft-42$", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);

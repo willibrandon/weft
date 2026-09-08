@@ -33,13 +33,21 @@ public sealed class SyncInputTests
             {
                 await client.CreateSessionAsync(new SessionCreateParams { Name = "sync" }, cancellationToken).ConfigureAwait(false);
                 BlockInfo first = await client.GetBlockAsync("sync", cancellationToken).ConfigureAwait(false);
+
+                // Wait for the first prompt before splitting: narrowing a block truncates long prompt lines
+                // until the shell redraws, so a prompt check after the split would not be meaningful.
+                await ServerFixture.WaitForPromptAsync(client, first.Id, cancellationToken).ConfigureAwait(false);
                 BlockInfo second = await client.SplitAsync(new BlockSplitParams { Target = first.Id, Orientation = SplitOrientation.LeftRight }, cancellationToken).ConfigureAwait(false);
                 TabInfo tab = await client.SyncTabAsync(new TabSyncParams { Target = "sync", Enabled = true }, cancellationToken).ConfigureAwait(false);
                 Assert.IsTrue(tab.Synchronized);
+                await ServerFixture.WaitForPromptAsync(client, second.Id, cancellationToken).ConfigureAwait(false);
 
                 await client.SendKeysAsync(new BlockSendKeysParams { Target = first.Id, Keys = ["echo fan-$((2*21))", "Enter"] }, cancellationToken).ConfigureAwait(false);
                 BlockWaitResult sibling = await client.WaitAsync(new BlockWaitParams { Target = second.Id, Pattern = "^fan-42$", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
-                Assert.AreEqual(WaitOutcome.Pattern, sibling.Outcome);
+                if (sibling.Outcome != WaitOutcome.Pattern)
+                {
+                    Assert.Fail("Synchronized input did not reach the sibling. " + await ScreensAsync(client, first.Id, second.Id, cancellationToken).ConfigureAwait(false));
+                }
 
                 await client.SyncBlockAsync(new BlockSyncParams { Target = second.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
                 await client.SendKeysAsync(new BlockSendKeysParams { Target = first.Id, Keys = ["echo only-$((3*3))", "Enter"] }, cancellationToken).ConfigureAwait(false);
@@ -88,5 +96,13 @@ public sealed class SyncInputTests
                 }
             }
         }
+    }
+    private static async Task<string> ScreensAsync(ControlClient client, string first, string second, CancellationToken cancellationToken)
+    {
+        BlockInfo firstInfo = await client.GetBlockAsync(first, cancellationToken).ConfigureAwait(false);
+        BlockInfo secondInfo = await client.GetBlockAsync(second, cancellationToken).ConfigureAwait(false);
+        BlockCaptureResult firstScreen = await client.CaptureAsync(new BlockCaptureParams { Target = first }, cancellationToken).ConfigureAwait(false);
+        BlockCaptureResult secondScreen = await client.CaptureAsync(new BlockCaptureParams { Target = second }, cancellationToken).ConfigureAwait(false);
+        return "first(" + firstInfo.State + ")=[" + string.Join("⏎", firstScreen.Lines).Trim() + "] second(" + secondInfo.State + ")=[" + string.Join("⏎", secondScreen.Lines).Trim() + "]";
     }
 }

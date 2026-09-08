@@ -28,6 +28,8 @@ public sealed class AttachApp
     private CancellationTokenSource? _stopping;
     private string? _status;
     private const int LeaderSafetyTimeoutMs = 10_000;
+    private long _bindingBuilds;
+    private bool _lastRenderPending;
     private bool _locked;
     private bool _focusedOnce;
     private long _leaderPendingUntil;
@@ -314,6 +316,22 @@ public sealed class AttachApp
         }
     }
 
+    /// <summary>
+    /// Describes focus, views, and mirror state for test diagnostics.
+    /// </summary>
+    /// <returns>A single line of state.</returns>
+    internal string DebugState()
+    {
+        string views;
+        lock (_gate)
+        {
+            views = string.Join(",", _views.Keys);
+        }
+
+        long remaining = Volatile.Read(ref _leaderPendingUntil) - Environment.TickCount64;
+        return "focusedBlock=" + (FocusedBlockId() ?? "none") + " views=[" + views + "] activeBlock=" + (_mirror?.ActiveTab?.ActiveBlock ?? "none") + " control=" + (_control is null ? "none" : "ok") + " leaderRemainingMs=" + remaining + " bindingBuilds=" + _bindingBuilds + " lastRenderPending=" + _lastRenderPending;
+    }
+
     private string? FocusedBlockId()
     {
         if (_app?.FocusedNode is TerminalNode terminal)
@@ -506,6 +524,13 @@ public sealed class AttachApp
         // While armed, every identifiable key is intercepted: bound keys run their action and any
         // other key disarms the leader and is forwarded to the block, the way a tmux prefix behaves.
         bool pending = LeaderPending;
+        _bindingBuilds++;
+        if (pending != _lastRenderPending)
+        {
+            ClientLog.Debug("render pending=" + pending);
+        }
+
+        _lastRenderPending = pending;
         bool singleStrokeLeader = _bindings.Leader.Steps.Count == 1;
         if (singleStrokeLeader && !pending)
         {
@@ -603,6 +628,7 @@ public sealed class AttachApp
     private void ArmLeader()
     {
         Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderSafetyTimeoutMs);
+        ClientLog.Debug("leader armed");
         _app?.Invalidate();
     }
 
@@ -858,7 +884,11 @@ public sealed class AttachApp
     }
 
     private void Split(SplitOrientation orientation) =>
-        WithFocused(id => Fire(client => client.SplitAsync(new BlockSplitParams { Target = id, Orientation = orientation }, CancellationToken.None)));
+        WithFocused(id =>
+        {
+            ClientLog.Debug("split " + id + " " + orientation);
+            Fire(client => client.SplitAsync(new BlockSplitParams { Target = id, Orientation = orientation }, CancellationToken.None));
+        });
 
     private void Resize(LayoutDirection direction) =>
         WithFocused(id => Fire(client => client.ResizeAsync(new LayoutResizeParams { Target = id, Direction = direction, Amount = 5 }, CancellationToken.None)));
@@ -909,6 +939,10 @@ public sealed class AttachApp
         {
             action(id);
         }
+        else
+        {
+            ClientLog.Debug("No focused block; the action was skipped.");
+        }
     }
 
     private void Fire<T>(Func<ControlClient, Task<T>> call)
@@ -925,10 +959,12 @@ public sealed class AttachApp
         {
             await call(control).ConfigureAwait(false);
             _status = null;
+            ClientLog.Debug("action completed.");
         }
         catch (ProtocolException exception)
         {
             _status = exception.Message;
+            ClientLog.Debug("action failed: " + exception.Message);
         }
         catch (OperationCanceledException)
         {

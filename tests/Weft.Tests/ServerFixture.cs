@@ -1,4 +1,5 @@
 using Weft.Client;
+using Weft.Protocol;
 using Weft.Server;
 
 namespace Weft.Tests;
@@ -72,6 +73,23 @@ internal sealed class ServerFixture : IAsyncDisposable
             }
 
             await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Waits until a block's shell has printed a prompt, so keys typed next are read by a ready shell.
+    /// </summary>
+    /// <param name="client">The control client.</param>
+    /// <param name="target">The block.</param>
+    /// <param name="cancellationToken">Cancels the wait.</param>
+    /// <returns>A task that completes when a prompt is on screen.</returns>
+    internal static async Task WaitForPromptAsync(ControlClient client, string target, CancellationToken cancellationToken)
+    {
+        BlockWaitResult prompt = await client.WaitAsync(new BlockWaitParams { Target = target, Pattern = "\\$\\s*$", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
+        if (prompt.Outcome != WaitOutcome.Pattern)
+        {
+            BlockCaptureResult screen = await client.CaptureAsync(new BlockCaptureParams { Target = target }, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("No prompt appeared in " + target + " within 20 seconds. Screen: [" + string.Join("\u23ce", screen.Lines).Trim() + "]");
         }
     }
 

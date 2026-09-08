@@ -170,6 +170,13 @@ count matches.
 
 ### 4.3 Block hosting
 
+Each running block pins about two thread pool workers: the pseudo-terminal reader waits in a
+blocking select loop on a pool thread, and the exit wait blocks in short slices. A pool that
+starts at the core count starves once a handful of blocks run, and the runtime injects
+replacements only about once a second, stalling every continuation in the process meanwhile.
+The server raises the pool minimum as blocks start so the pool grows immediately instead.
+
+
 Each block builds a Hex1b terminal:
 
 ```text
