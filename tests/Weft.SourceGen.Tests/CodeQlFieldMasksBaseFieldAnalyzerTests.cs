@@ -76,6 +76,39 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzerTests(TestContext testConte
             StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
     }
 
+    /// <summary>
+    /// Verifies a base-field access in one derived type does not excuse a masking field in another.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsMaskInUnrelatedDerivedType()
+    {
+        const string Source = """
+            internal class Node
+            {
+                protected int _value;
+            }
+
+            internal sealed class Careful : Node
+            {
+                protected new int _value;
+
+                internal int Both() => base._value + _value;
+            }
+
+            internal sealed class Careless : Node
+            {
+                protected new int _value;
+
+                internal int Own() => _value;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.IsGreaterThan(Source.IndexOf("class Careless", StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlFieldMasksBaseFieldAnalyzer(), testContext.CancellationToken);
 }

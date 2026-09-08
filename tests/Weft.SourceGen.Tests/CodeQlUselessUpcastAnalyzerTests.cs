@@ -136,6 +136,31 @@ public sealed class CodeQlUselessUpcastAnalyzerTests
             diagnostic.GetMessage(CultureInfo.InvariantCulture));
     }
 
+    /// <summary>
+    /// Verifies an upcast that selects a member the derived type hides is kept.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsUpcastSelectingHiddenMember()
+    {
+        const string Source = """
+            internal class Reader
+            {
+                internal virtual int Read() => 1;
+            }
+
+            internal sealed class LoudReader : Reader
+            {
+                internal new int Read() => 2;
+
+                internal int ReadQuietly() => ((Reader)this).Read();
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessUpcastAnalyzer(), TestContext.CancellationToken);
 }

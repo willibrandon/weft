@@ -43,6 +43,19 @@ public sealed class CodeQlUselessCastToSelfAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeCast, SyntaxKind.CastExpression);
     }
 
+    private static bool IsReceiver(CastExpressionSyntax cast)
+    {
+        SyntaxNode expression = cast;
+        while (expression.Parent is ParenthesizedExpressionSyntax parentheses)
+        {
+            expression = parentheses;
+        }
+
+        return expression.Parent is MemberAccessExpressionSyntax member && member.Expression == expression ||
+            expression.Parent is ElementAccessExpressionSyntax element && element.Expression == expression ||
+            expression.Parent is ConditionalAccessExpressionSyntax conditional && conditional.Expression == expression;
+    }
+
     private static void AnalyzeCast(SyntaxNodeAnalysisContext context)
     {
         var cast = (CastExpressionSyntax)context.Node;
@@ -56,6 +69,12 @@ public sealed class CodeQlUselessCastToSelfAnalyzer : DiagnosticAnalyzer
             targetType is null ||
             !SymbolEqualityComparer.IncludeNullability.Equals(sourceType, targetType))
         {
+            return;
+        }
+
+        if (targetType.IsValueType && IsReceiver(cast))
+        {
+            // The cast yields a copy, so a mutating member call leaves the original untouched; removing it would not.
             return;
         }
 

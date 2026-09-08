@@ -48,9 +48,17 @@ public sealed class CodeQlNestedIfAnalyzer : DiagnosticAnalyzer
             statement = block.Statements[0];
         }
 
-        if (outer.Else is null && statement is IfStatementSyntax { Else: null } && !outer.ContainsDirectives)
+        if (outer.Else is null && statement is IfStatementSyntax { Else: null } inner && !outer.ContainsDirectives &&
+            IsPlainBool(context, outer.Condition) && IsPlainBool(context, inner.Condition))
         {
             context.ReportDiagnostic(Diagnostic.Create(s_rule, outer.IfKeyword.GetLocation()));
         }
+    }
+
+    private static bool IsPlainBool(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
+    {
+        // A type with its own true, false, and & operators may not mean the same thing under &&.
+        ITypeSymbol? type = context.SemanticModel.GetTypeInfo(condition, context.CancellationToken).Type;
+        return type?.SpecialType == SpecialType.System_Boolean;
     }
 }

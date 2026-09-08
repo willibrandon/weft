@@ -42,7 +42,7 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzer : DiagnosticAnalyzer
         context.RegisterCompilationStartAction(start =>
         {
             var fields = new ConcurrentBag<IFieldSymbol>();
-            var explicitBaseAccesses = new ConcurrentDictionary<ISymbol, byte>(SymbolEqualityComparer.Default);
+            var explicitBaseAccesses = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
             start.RegisterSymbolAction(symbol =>
             {
                 var field = (IFieldSymbol)symbol.Symbol;
@@ -55,9 +55,10 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzer : DiagnosticAnalyzer
             {
                 var access = (MemberAccessExpressionSyntax)syntax.Node;
                 if (access.Expression is BaseExpressionSyntax &&
-                    syntax.SemanticModel.GetSymbolInfo(access, syntax.CancellationToken).Symbol is IFieldSymbol field)
+                    syntax.SemanticModel.GetSymbolInfo(access, syntax.CancellationToken).Symbol is IFieldSymbol field &&
+                    syntax.ContainingSymbol?.ContainingType is INamedTypeSymbol accessingType)
                 {
-                    explicitBaseAccesses.TryAdd(field.OriginalDefinition, 0);
+                    explicitBaseAccesses.TryAdd(AccessKey(accessingType, field), 0);
                 }
             }, SyntaxKind.SimpleMemberAccessExpression);
             start.RegisterCompilationEndAction(end =>
@@ -71,17 +72,20 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzer : DiagnosticAnalyzer
     }
 
     private static void AnalyzeField(
-        IFieldSymbol field, ConcurrentDictionary<ISymbol, byte> explicitBaseAccesses, CompilationAnalysisContext context)
+        IFieldSymbol field, ConcurrentDictionary<string, byte> explicitBaseAccesses, CompilationAnalysisContext context)
     {
         for (INamedTypeSymbol? parent = field.ContainingType.BaseType; parent is not null; parent = parent.BaseType)
         {
             if (parent.GetMembers(field.Name).OfType<IFieldSymbol>().Any(inherited =>
                 !inherited.IsStatic && inherited.DeclaredAccessibility != Accessibility.Private &&
-                !explicitBaseAccesses.ContainsKey(inherited.OriginalDefinition)))
+                !explicitBaseAccesses.ContainsKey(AccessKey(field.ContainingType, inherited))))
             {
                 context.ReportDiagnostic(Diagnostic.Create(s_rule, field.Locations[0], field.Name));
                 return;
             }
         }
     }
+
+    private static string AccessKey(INamedTypeSymbol hidingType, IFieldSymbol inherited) =>
+        hidingType.OriginalDefinition.ToDisplayString() + "|" + inherited.OriginalDefinition.ToDisplayString();
 }

@@ -99,6 +99,35 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
                 .ToString(diagnostic.Location.SourceSpan));
     }
 
+    /// <summary>
+    /// Verifies a string that is reset before it is appended in each iteration is not reported.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsValueResetEachIteration()
+    {
+        const string Source = """
+            internal static class Lines
+            {
+                internal static string Last(string[] items)
+                {
+                    string output = string.Empty;
+                    foreach (string item in items)
+                    {
+                        output = string.Empty;
+                        output += item;
+                    }
+
+                    return output;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await CodeQlFileCompilation.AnalyzeAsync(
+            Source, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string body) => CodeQlFileCompilation.AnalyzeAsync(
         $$"""
         internal sealed class Accumulator

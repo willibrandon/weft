@@ -54,7 +54,8 @@ public sealed class CodeQlComplexConditionAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeExpression(SyntaxNodeAnalysisContext context)
     {
         var expression = (BinaryExpressionSyntax)context.Node;
-        if (HasRelevantParent(expression))
+        if (HasRelevantParent(expression) ||
+            context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type?.SpecialType != SpecialType.System_Boolean)
         {
             return;
         }

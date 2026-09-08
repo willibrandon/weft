@@ -54,6 +54,37 @@ public sealed class CodeQlUselessCastToSelfAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies an identity cast of a mutable struct used as a receiver is kept, since it works on a copy.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsIdentityCastCopyingStructReceiver()
+    {
+        const string Source = """
+            internal struct Counter
+            {
+                private int _count;
+
+                internal void Increment() => _count++;
+
+                internal int Count => _count;
+            }
+
+            internal static class Probe
+            {
+                internal static int Peek(Counter counter)
+                {
+                    ((Counter)counter).Increment();
+                    return counter.Count;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         var parseOptions = new CSharpParseOptions(

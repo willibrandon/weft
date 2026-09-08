@@ -47,6 +47,49 @@ public sealed class CodeQlNestedIfAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(await AnalyzeAsync(body).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// Verifies nested ifs over a type with its own Boolean operators are left alone.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsNestedIfsOverCustomBooleanType()
+    {
+        const string Source = """
+            internal readonly struct Tri
+            {
+                private readonly int _state;
+
+                internal Tri(int state) => _state = state;
+
+                public static bool operator true(Tri value) => value._state > 0;
+
+                public static bool operator false(Tri value) => value._state <= 0;
+
+                public static Tri operator &(Tri left, Tri right) => new(left._state * right._state);
+            }
+
+            internal static class Gate
+            {
+                internal static int Open(Tri first, Tri second)
+                {
+                    if (first)
+                    {
+                        if (second)
+                        {
+                            return 1;
+                        }
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await CodeQlFileCompilation.AnalyzeAsync(
+            Source, new CodeQlNestedIfAnalyzer(), testContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string body) => CodeQlFileCompilation.AnalyzeAsync(
         $$"""
         internal static class Conditions

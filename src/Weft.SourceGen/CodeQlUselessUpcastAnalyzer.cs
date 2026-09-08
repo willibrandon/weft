@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Weft.SourceGen;
 
@@ -85,10 +86,43 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
             return;
         }
 
+        if (classReceiver && expression.Parent is MemberAccessExpressionSyntax access &&
+            SelectsHiddenMember(context, access, sourceType, targetType))
+        {
+            return;
+        }
+
         context.ReportDiagnostic(Diagnostic.Create(
             s_rule,
             cast.GetLocation(),
             targetType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
+    }
+
+    private static bool SelectsHiddenMember(
+        SyntaxNodeAnalysisContext context,
+        MemberAccessExpressionSyntax access,
+        ITypeSymbol sourceType,
+        ITypeSymbol targetType)
+    {
+        // A derived type may hide the member with 'new'; the cast then chooses the base member on purpose.
+        if (context.SemanticModel.GetSymbolInfo(access, context.CancellationToken).Symbol is not ISymbol bound)
+        {
+            return true;
+        }
+
+        string name = access.Name.Identifier.ValueText;
+        for (ITypeSymbol? type = sourceType;
+            type is not null && !SymbolEqualityComparer.Default.Equals(type, targetType);
+            type = type.BaseType)
+        {
+            if (type.GetMembers(name).Any(candidate => !candidate.IsOverride &&
+                !SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, bound.OriginalDefinition)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsRedundantNullUpcast(

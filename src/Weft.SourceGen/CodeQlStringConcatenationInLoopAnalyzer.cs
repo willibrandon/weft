@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 using System;
@@ -72,6 +73,20 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
             (ContainsVariable(addition.LeftOperand, variable) || ContainsVariable(addition.RightOperand, variable));
     }
 
+    private static bool FlowsIntoBody(IOperation assignment, ILoopOperation loop, ISymbol variable)
+    {
+        // The whole loop statement counts, so a for loop's condition and incrementors are read as well.
+        SemanticModel? model = assignment.SemanticModel ?? loop.SemanticModel;
+        if (variable is not ILocalSymbol || loop.Syntax is not StatementSyntax statement || model is null)
+        {
+            return true;
+        }
+
+        DataFlowAnalysis? flow = model.AnalyzeDataFlow(statement);
+        return flow is null || !flow.Succeeded ||
+            flow.DataFlowsIn.Any(symbol => SymbolEqualityComparer.Default.Equals(symbol, variable));
+    }
+
     private static ISymbol? GetVariable(IOperation operation) => operation switch
     {
         ILocalReferenceOperation local => local.Local,
@@ -93,7 +108,8 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
                 (variable is not ILocalSymbol || !variable.DeclaringSyntaxReferences.Any(reference =>
                     reference.SyntaxTree == loop.Syntax.SyntaxTree && loop.Syntax.Span.Contains(reference.Span))))
             {
-                return true;
+                // A value reset before it is read in each iteration never grows across iterations.
+                return FlowsIntoBody(assignment, loop, variable);
             }
         }
 
