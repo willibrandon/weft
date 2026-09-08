@@ -132,4 +132,52 @@ public sealed class WeftBridgeTests
             }
         }
     }
+
+    /// <summary>
+    /// Verifies concurrent leases on an empty pool open their connections one at a time, so a stopped server is started once.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task ConcurrentLeasesOpenConnectionsOneAtATime()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            int inFlight = 0;
+            int peak = 0;
+            var bridge = new WeftBridge(async token =>
+            {
+                int now = Interlocked.Increment(ref inFlight);
+                int seen;
+                do
+                {
+                    seen = peak;
+                }
+                while (now > seen && Interlocked.CompareExchange(ref peak, now, seen) != seen);
+
+                try
+                {
+                    await Task.Delay(50, token).ConfigureAwait(false);
+                    return await ControlClient.ConnectAsync(fixture.SocketPath, token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref inFlight);
+                }
+            });
+            await using (bridge.ConfigureAwait(false))
+            {
+                ControlLease[] leases = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => bridge.LeaseAsync(cancellationToken))).ConfigureAwait(false);
+                foreach (ControlLease lease in leases)
+                {
+                    lease.Dispose();
+                }
+            }
+
+            Assert.AreEqual(1, peak);
+        }
+    }
 }
