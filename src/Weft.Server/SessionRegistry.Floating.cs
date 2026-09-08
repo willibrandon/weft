@@ -34,7 +34,7 @@ internal sealed partial class SessionRegistry
     /// </summary>
     /// <param name="block">The block.</param>
     /// <param name="bounds">The bounds, clamped to the session, or null for the default.</param>
-    /// <param name="announce">Whether to publish the focus and rename events; a restore publishes a block change and the finished tab instead.</param>
+    /// <param name="announce">Whether to publish the focus and rename events; a restore announces the finished tab and its blocks instead.</param>
     /// <param name="cancellationToken">Cancels the resize.</param>
     /// <returns>A task that completes when the block floats.</returns>
     internal async Task FloatBlockAsync(Block block, LayoutRect? bounds, bool announce, CancellationToken cancellationToken)
@@ -71,8 +71,7 @@ internal sealed partial class SessionRegistry
         Persist(block.Tab.Session);
         if (!announce)
         {
-            // The block was announced tiled when it started, so its floating state still has to reach subscribers.
-            _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+            // A restore announces the final state of every block once the tab is complete.
             return;
         }
 
