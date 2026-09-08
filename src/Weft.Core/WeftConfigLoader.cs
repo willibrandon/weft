@@ -51,7 +51,7 @@ public static class WeftConfigLoader
             config = new WeftConfig();
             return false;
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             error = "Could not read " + path + ": " + exception.Message;
             config = new WeftConfig();
@@ -70,8 +70,36 @@ public static class WeftConfigLoader
         return config;
     }
 
-    private static string? NullMember(WeftConfig config) =>
-        config.Leader is null ? "leader"
-        : config.Theme is null ? "theme"
-        : null;
+    private static string? NullMember(WeftConfig config)
+    {
+        if (config.Leader is null)
+        {
+            return "leader";
+        }
+
+        if (config.Theme is null)
+        {
+            return "theme";
+        }
+
+        // A null or blank value inside either map would surface much later, as a failed hook start or a binding
+        // that does nothing, so it is rejected here with the key that carries it.
+        foreach ((string key, string value) in config.Bindings)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "bindings." + key;
+            }
+        }
+
+        foreach ((string key, string value) in config.Hooks)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "hooks." + key;
+            }
+        }
+
+        return null;
+    }
 }

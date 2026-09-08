@@ -249,6 +249,7 @@ internal sealed partial class SessionRegistry
         }
 
         _events.Publish(ProtocolEvents.TabChanged, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        Persist(tab.Session);
     }
 
     /// <summary>
@@ -264,6 +265,7 @@ internal sealed partial class SessionRegistry
         }
 
         _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        Persist(block.Tab.Session);
     }
 
     private Task FanOutAsync(Block source, ReadOnlyMemory<byte> bytes, string? pasteText, CancellationToken cancellationToken)

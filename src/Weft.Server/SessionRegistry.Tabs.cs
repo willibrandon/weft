@@ -155,7 +155,7 @@ internal sealed partial class SessionRegistry
         lock (_gate)
         {
             _nextTab++;
-            tab = new Tab(new TabId(_nextTab), session, stored.Name, LayoutOptionsFor()) { NamePinned = stored.NamePinned };
+            tab = new Tab(new TabId(_nextTab), session, stored.Name, LayoutOptionsFor()) { NamePinned = stored.NamePinned, Synchronized = stored.Synchronized };
             session.Tabs.Add(tab);
             session.ActiveTab ??= tab;
         }
@@ -167,7 +167,7 @@ internal sealed partial class SessionRegistry
             try
             {
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null, keepOnExit: false, cancellationToken).ConfigureAwait(false);
-                block.PinnedTitle = storedBlock.Title;
+                ApplyStoredState(block, storedBlock);
                 restored[storedBlock.Id] = block;
                 first ??= block;
             }
@@ -184,8 +184,8 @@ internal sealed partial class SessionRegistry
             try
             {
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null && restored.Count == 0, keepOnExit: false, cancellationToken).ConfigureAwait(false);
-                block.PinnedTitle = storedBlock.Title;
-                await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), cancellationToken).ConfigureAwait(false);
+                ApplyStoredState(block, storedBlock);
+                await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), announce: false, cancellationToken).ConfigureAwait(false);
                 restored[storedBlock.Id] = block;
             }
             catch (ProtocolException exception)
@@ -226,11 +226,32 @@ internal sealed partial class SessionRegistry
                 tab.Active = active;
             }
 
+            // Floating the stored blocks renamed an unpinned tab after each one; the restored active block wins.
+            if (!tab.NamePinned && tab.Active is { } restoredActive)
+            {
+                tab.Name = restoredActive.DisplayTitle;
+            }
+
             resizes.AddRange(RelayoutUnsafe(tab));
         }
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
+
+        // Every restored block was announced as created before its stored title, sync exclusion, floating
+        // state, and the tab's active block were applied, so a change event carries the final state of each.
+        foreach (Block block in restored.Values)
+        {
+            _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        }
+
         _events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+    }
+
+    // The final state of every restored block is announced once the tab is complete.
+    private static void ApplyStoredState(Block block, StoredBlock stored)
+    {
+        block.PinnedTitle = stored.Title;
+        block.ExcludedFromSync = stored.ExcludedFromSync;
     }
 
     private static void CollectStoredLeaves(LayoutCell cell, Dictionary<int, Block> restored, List<BlockId> order)

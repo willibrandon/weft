@@ -4,6 +4,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.Text.Json;
+using Weft.Client;
 
 namespace Weft.Mcp;
 
@@ -15,32 +16,32 @@ public static class WeftMcpServer
     /// <summary>
     /// Runs the server over standard input and output until the client disconnects.
     /// </summary>
-    /// <param name="socketPath">The weft control socket path.</param>
+    /// <param name="connect">Opens a control connection, starting the server first when it is not running.</param>
     /// <param name="version">The server version to advertise.</param>
     /// <param name="verbose">Whether to log the SDK's request tracing as well as warnings and errors.</param>
     /// <param name="cancellationToken">Stops the server.</param>
     /// <returns>A task that completes when the client disconnects.</returns>
-    public static Task RunStdioAsync(string socketPath, string version, bool verbose, CancellationToken cancellationToken) =>
-        RunAsync(socketPath, version, builder => builder.WithStdioServerTransport(), verbose, cancellationToken);
+    public static Task RunStdioAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, bool verbose, CancellationToken cancellationToken) =>
+        RunAsync(connect, version, builder => builder.WithStdioServerTransport(), verbose, cancellationToken);
 
     /// <summary>
     /// Runs the server over a pair of streams, for tests and embedding.
     /// </summary>
-    /// <param name="socketPath">The weft control socket path.</param>
+    /// <param name="connect">Opens a control connection, starting the server first when it is not running.</param>
     /// <param name="version">The server version to advertise.</param>
     /// <param name="input">The stream the client writes to.</param>
     /// <param name="output">The stream the client reads from.</param>
     /// <param name="verbose">Whether to log the SDK's request tracing as well as warnings and errors.</param>
     /// <param name="cancellationToken">Stops the server.</param>
     /// <returns>A task that completes when the client disconnects.</returns>
-    public static Task RunStreamsAsync(string socketPath, string version, Stream input, Stream output, bool verbose, CancellationToken cancellationToken) =>
-        RunAsync(socketPath, version, builder => builder.WithStreamServerTransport(input, output), verbose, cancellationToken);
+    public static Task RunStreamsAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, Stream input, Stream output, bool verbose, CancellationToken cancellationToken) =>
+        RunAsync(connect, version, builder => builder.WithStreamServerTransport(input, output), verbose, cancellationToken);
 
-    private static async Task RunAsync(string socketPath, string version, Action<IMcpServerBuilder> transport, bool verbose, CancellationToken cancellationToken)
+    private static async Task RunAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, Action<IMcpServerBuilder> transport, bool verbose, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrEmpty(socketPath);
+        ArgumentNullException.ThrowIfNull(connect);
         var services = new ServiceCollection();
-        services.AddSingleton(_ => new WeftBridge(socketPath));
+        services.AddSingleton(_ => new WeftBridge(connect));
 
         // Standard error is the channel the protocol reserves for a stdio server's logs; hosts capture it.
         services.AddSingleton<ILoggerFactory>(_ => new StderrLoggerFactory(verbose ? LogLevel.Debug : LogLevel.Warning));

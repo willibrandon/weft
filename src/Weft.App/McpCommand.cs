@@ -32,7 +32,7 @@ internal static class McpCommand
                 }
 
                 Console.SetOut(TextWriter.Null);
-                await WeftMcpServer.RunStdioAsync(context.SocketPath, ServerCommand.Version, parseResult.GetValue(verbose), cancellationToken).ConfigureAwait(false);
+                await WeftMcpServer.RunStdioAsync(token => ServerLauncher.ConnectOrStartAsync(context.RuntimeDirectory, token), ServerCommand.Version, parseResult.GetValue(verbose), cancellationToken).ConfigureAwait(false);
                 return 0;
             }
         });

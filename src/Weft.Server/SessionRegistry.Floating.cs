@@ -26,7 +26,7 @@ internal sealed partial class SessionRegistry
             defaults = DefaultFloatBounds(block.Tab.Session);
         }
 
-        return FloatBlockAsync(block, new LayoutRect(x ?? defaults.X, y ?? defaults.Y, width ?? defaults.Width, height ?? defaults.Height), cancellationToken);
+        return FloatBlockAsync(block, new LayoutRect(x ?? defaults.X, y ?? defaults.Y, width ?? defaults.Width, height ?? defaults.Height), announce: true, cancellationToken);
     }
 
     /// <summary>
@@ -34,10 +34,12 @@ internal sealed partial class SessionRegistry
     /// </summary>
     /// <param name="block">The block.</param>
     /// <param name="bounds">The bounds, clamped to the session, or null for the default.</param>
+    /// <param name="announce">Whether to publish the focus and rename events; a restore announces the finished tab and its blocks instead.</param>
     /// <param name="cancellationToken">Cancels the resize.</param>
     /// <returns>A task that completes when the block floats.</returns>
-    internal async Task FloatBlockAsync(Block block, LayoutRect? bounds, CancellationToken cancellationToken)
+    internal async Task FloatBlockAsync(Block block, LayoutRect? bounds, bool announce, CancellationToken cancellationToken)
     {
+        bool renamed = false;
         List<PendingResize> resizes;
         lock (_gate)
         {
@@ -56,12 +58,28 @@ internal sealed partial class SessionRegistry
             }
 
             tab.Active = block;
+            if (!tab.NamePinned && !string.Equals(tab.Name, block.DisplayTitle, StringComparison.Ordinal))
+            {
+                tab.Name = block.DisplayTitle;
+                renamed = true;
+            }
+
             resizes = RelayoutUnsafe(tab);
         }
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         Persist(block.Tab.Session);
+        if (!announce)
+        {
+            // A restore announces the final state of every block once the tab is complete.
+            return;
+        }
+
         _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        if (renamed)
+        {
+            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+        }
     }
 
     /// <summary>
@@ -72,6 +90,7 @@ internal sealed partial class SessionRegistry
     /// <returns>A task that completes when blocks have been resized.</returns>
     internal async Task TileBlockAsync(Block block, CancellationToken cancellationToken)
     {
+        bool renamed = false;
         List<PendingResize> resizes;
         lock (_gate)
         {
@@ -101,12 +120,22 @@ internal sealed partial class SessionRegistry
             }
 
             tab.Active = block;
+            if (!tab.NamePinned && !string.Equals(tab.Name, block.DisplayTitle, StringComparison.Ordinal))
+            {
+                tab.Name = block.DisplayTitle;
+                renamed = true;
+            }
+
             resizes = RelayoutUnsafe(tab);
         }
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         Persist(block.Tab.Session);
         _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        if (renamed)
+        {
+            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+        }
     }
 
     /// <summary>

@@ -26,7 +26,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             SessionListResult result = await client.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
             if (result.Sessions.Count == 0)
             {
@@ -55,7 +56,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             BlockListResult result = await client.ListBlocksAsync(target, cancellationToken).ConfigureAwait(false);
             if (result.Blocks.Count == 0)
             {
@@ -90,7 +92,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             BlockInfo block = await client.SplitAsync(new BlockSplitParams
             {
                 Target = target,
@@ -126,7 +129,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             var parameters = new BlockRunParams
             {
                 Target = target,
@@ -186,7 +190,8 @@ public sealed class WeftTools(WeftBridge bridge)
         try
         {
             ArgumentNullException.ThrowIfNull(keys);
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             await client.SendKeysAsync(new BlockSendKeysParams { Target = target, Keys = keys }, cancellationToken).ConfigureAwait(false);
             return string.Create(CultureInfo.InvariantCulture, $"sent {keys.Length} keys to {target}");
         }
@@ -211,7 +216,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             BlockCaptureResult capture = await client.CaptureAsync(new BlockCaptureParams { Target = target, History = history ?? 0 }, cancellationToken).ConfigureAwait(false);
             return string.Create(CultureInfo.InvariantCulture, $"revision {capture.Revision}, cursor {capture.CursorX},{capture.CursorY}, {capture.Width}x{capture.Height}\n") + string.Join('\n', capture.Lines);
         }
@@ -242,7 +248,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             BlockWaitResult result = await client.WaitAsync(new BlockWaitParams { Target = target, Pattern = pattern, Exit = exit, Revision = revision, TimeoutMs = timeoutMs ?? 30_000 }, cancellationToken).ConfigureAwait(false);
             string outcome = result.Outcome.ToString().ToLowerInvariant();
             return string.Create(CultureInfo.InvariantCulture, $"{outcome} at revision {result.Revision}{(result.ExitCode is { } code ? ", exit code " + code : string.Empty)}{(result.Line is { } line ? "\n" + line : string.Empty)}");
@@ -266,7 +273,8 @@ public sealed class WeftTools(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             await client.CloseBlockAsync(target, cancellationToken).ConfigureAwait(false);
             return "closed " + target;
         }

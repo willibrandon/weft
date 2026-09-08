@@ -29,4 +29,9 @@ public sealed class StoredTab
     /// Gets the active block's id value, if any.
     /// </summary>
     public int? ActiveBlock { get; init; }
+
+    /// <summary>
+    /// Whether input typed into one block of the tab is fanned out to the others.
+    /// </summary>
+    public bool Synchronized { get; init; }
 }

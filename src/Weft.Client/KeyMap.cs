@@ -87,7 +87,8 @@ internal static class KeyMap
         KeyModifiers[] modifiers =
         [
             KeyModifiers.None, KeyModifiers.Shift, KeyModifiers.Control, KeyModifiers.Alt,
-            KeyModifiers.Control | KeyModifiers.Shift, KeyModifiers.Alt | KeyModifiers.Shift, KeyModifiers.Control | KeyModifiers.Alt
+            KeyModifiers.Control | KeyModifiers.Shift, KeyModifiers.Alt | KeyModifiers.Shift, KeyModifiers.Control | KeyModifiers.Alt,
+            KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift
         ];
         foreach (char letter in "abcdefghijklmnopqrstuvwxyz0123456789")
         {
