@@ -41,7 +41,7 @@ internal static class DisposableLocalOwnership
     /// </summary>
     /// <param name="local">The local that receives the resource.</param>
     /// <param name="value">The expression that produces the resource.</param>
-    /// <param name="origin">The statement that hands the resource to the local.</param>
+    /// <param name="origin">The statement that hands the resource to the local, or null to start at the scope's first statement.</param>
     /// <param name="priorRisk">Whether the origin statement can still fail after the local holds the resource.</param>
     /// <param name="scope">The block or switch section that holds the statement.</param>
     /// <param name="context">The analyzer's semantic context.</param>
@@ -49,7 +49,7 @@ internal static class DisposableLocalOwnership
     internal static bool MayLeak(
         ILocalSymbol local,
         ExpressionSyntax? value,
-        StatementSyntax origin,
+        StatementSyntax? origin,
         bool priorRisk,
         SyntaxNode scope,
         SyntaxNodeAnalysisContext context)
@@ -63,10 +63,12 @@ internal static class DisposableLocalOwnership
         }
 
         bool mayThrow = priorRisk;
-        StatementSyntax cursor = origin;
+        StatementSyntax? cursor = origin;
         while (true)
         {
-            foreach (StatementSyntax statement in StatementsOf(scope).SkipWhile(candidate => candidate != cursor).Skip(1))
+            foreach (StatementSyntax statement in StatementsOf(scope)
+                .SkipWhile(candidate => cursor is not null && candidate != cursor)
+                .Skip(cursor is null ? 0 : 1))
             {
                 if (statement is TryStatementSyntax protection &&
                     HasExceptionCleanup(protection, local, context))

@@ -1714,6 +1714,131 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
+    /// <summary>
+    /// Verifies a resource created by an awaited factory is tracked from its declaration.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsAwaitedResourceLeftUndisposed()
+    {
+        const string Source = """
+            using System;
+            using System.Threading.Tasks;
+            internal sealed class Resource : IDisposable
+            {
+                public static Task<Resource> CreateAsync() => Task.FromResult(new Resource());
+
+                public int Read() => 0;
+
+                public void Dispose()
+                {
+                }
+            }
+
+            internal static class Reader
+            {
+                internal static async Task<int> ReadAsync()
+                {
+                    Resource resource = await Resource.CreateAsync().ConfigureAwait(false);
+                    return resource.Read();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource created by an awaited factory is tracked from a later assignment.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsAwaitedResourceAssignedLater()
+    {
+        const string Source = """
+            using System;
+            using System.Threading.Tasks;
+            internal sealed class Resource : IDisposable
+            {
+                public static Task<Resource> CreateAsync() => Task.FromResult(new Resource());
+
+                public int Read() => 0;
+
+                public void Dispose()
+                {
+                }
+            }
+
+            internal static class Reader
+            {
+                internal static async Task<int> ReadAsync()
+                {
+                    Resource? resource = null;
+                    resource = await Resource.CreateAsync().ConfigureAwait(false);
+                    return resource.Read();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource declared by a for initializer is reported when the loop can be left without disposing it.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLoopDeclaredResourceLeftUndisposed()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    for (var stream = new MemoryStream(); stream.Length < 8; )
+                    {
+                        stream.WriteByte(1);
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource declared by a for initializer and disposed before the loop is left is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsLoopDeclaredResourceDisposedInBody()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    for (var stream = new MemoryStream(); ; )
+                    {
+                        stream.Dispose();
+                        break;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }

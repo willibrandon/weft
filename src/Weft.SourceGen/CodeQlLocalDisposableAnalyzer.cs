@@ -47,6 +47,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeDeclaration, SyntaxKind.LocalDeclarationStatement);
+        context.RegisterSyntaxNodeAction(AnalyzeLoopDeclaration, SyntaxKind.ForStatement);
     }
 
     private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context)
@@ -90,6 +91,28 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    // A local declared by a for initializer lives for the loop, so its body is the scope that must
+    // dispose it or hand it off before the loop is left.
+    private static void AnalyzeLoopDeclaration(SyntaxNodeAnalysisContext context)
+    {
+        var loop = (ForStatementSyntax)context.Node;
+        if (loop.Declaration is not { } declaration || loop.Statement is not BlockSyntax body)
+        {
+            return;
+        }
+
+        foreach (VariableDeclaratorSyntax variable in declaration.Variables.Where(variable => LeaksFromLoopDeclaration(variable, body, context)))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), variable.Identifier.ValueText));
+        }
+    }
+
+    private static bool LeaksFromLoopDeclaration(VariableDeclaratorSyntax variable, BlockSyntax body, SyntaxNodeAnalysisContext context) =>
+        variable.Initializer is { } initializer &&
+        CreatesResource(initializer.Value) &&
+        context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is ILocalSymbol local &&
+        DisposableLocalOwnership.MayLeak(local, initializer.Value, origin: null, priorRisk: false, body, context);
+
     private static IEnumerable<ExpressionStatementSyntax> FindResourceAssignments(
         ILocalSymbol local,
         LocalDeclarationStatementSyntax declaration,
@@ -117,6 +140,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
     private static bool CreatesResource(ExpressionSyntax expression) => expression switch
     {
         ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or InvocationExpressionSyntax => true,
+        AwaitExpressionSyntax awaited => CreatesResource(awaited.Expression),
         ConditionalExpressionSyntax conditional => CreatesResource(conditional.WhenTrue) || CreatesResource(conditional.WhenFalse),
         ParenthesizedExpressionSyntax parenthesized => CreatesResource(parenthesized.Expression),
         _ => false
