@@ -331,4 +331,61 @@ public sealed class ServerTests
             }
         }
     }
+
+    /// <summary>
+    /// Verifies a restored block's sync exclusion reaches event subscribers, since its creation is announced before the stored state is applied.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(90_000, CooperativeCancellation = true)]
+    public async Task RestoreAnnouncesStoredSyncExclusion()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var first = ServerFixture.Start();
+        string root;
+        await using (first.ConfigureAwait(false))
+        {
+            root = first.Root;
+            await first.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (client.ConfigureAwait(false))
+            {
+                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                BlockInfo anchor = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
+                BlockInfo excluded = await client.SplitAsync(new BlockSplitParams { Target = anchor.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
+                await client.SyncBlockAsync(new BlockSyncParams { Target = excluded.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
+            }
+
+            await first.StopKeepingStateAsync().ConfigureAwait(false);
+        }
+
+        var second = ServerFixture.Resume(root);
+        await using (second.ConfigureAwait(false))
+        {
+            await second.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient resumed = await second.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (resumed.ConfigureAwait(false))
+            {
+                await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
+
+                var changed = new List<BlockInfo>();
+                while (true)
+                {
+                    ProtocolMessage message = await resumed.Events.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    if (string.Equals(message.Event, ProtocolEvents.TabCreated, StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+
+                    if (string.Equals(message.Event, ProtocolEvents.BlockChanged, StringComparison.Ordinal))
+                    {
+                        changed.Add(ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block);
+                    }
+                }
+
+                Assert.Contains(info => info.ExcludedFromSync, changed);
+            }
+        }
+    }
 }
