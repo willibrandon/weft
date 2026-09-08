@@ -321,13 +321,19 @@ public sealed class ServerTests
                 Assert.HasCount(1, attached.Layout.Floating);
 
                 var names = new List<string>();
+                var changed = new List<BlockInfo>();
                 while (!names.Contains(ProtocolEvents.TabCreated, StringComparer.Ordinal))
                 {
                     ProtocolMessage message = await resumed.Events.ReadAsync(cancellationToken).ConfigureAwait(false);
                     names.Add(message.Event ?? string.Empty);
+                    if (string.Equals(message.Event, ProtocolEvents.BlockChanged, StringComparison.Ordinal))
+                    {
+                        changed.Add(ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block);
+                    }
                 }
 
                 Assert.DoesNotContain(ProtocolEvents.TabRenamed, names);
+                Assert.Contains(info => info.Floating, changed);
             }
         }
     }

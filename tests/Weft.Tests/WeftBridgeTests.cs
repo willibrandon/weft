@@ -97,4 +97,39 @@ public sealed class WeftBridgeTests
             await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Verifies a connection still being opened when the bridge is disposed is closed and the lease refused.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task DisposalDuringAcquisitionClosesTheConnection()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            // The connect delegate disposes the bridge while the connection is still being opened.
+            ControlClient? produced = null;
+            WeftBridge? bridge = null;
+            bridge = new WeftBridge(async token =>
+            {
+                await bridge!.DisposeAsync().ConfigureAwait(false);
+                produced = await ControlClient.ConnectAsync(fixture.SocketPath, token).ConfigureAwait(false);
+                return produced;
+            });
+
+            await using (bridge.ConfigureAwait(false))
+            {
+                await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
+                Assert.IsNotNull(produced);
+                while (!produced.Closed.IsCompleted)
+                {
+                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+    }
 }

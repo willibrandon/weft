@@ -49,7 +49,22 @@ public sealed class WeftBridge : IAsyncDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
-        return new ControlLease(this, await AcquireAsync(cancellationToken).ConfigureAwait(false), cancellationToken);
+        ControlClient client = await AcquireAsync(cancellationToken).ConfigureAwait(false);
+        bool live;
+        lock (_gate)
+        {
+            live = !_disposed;
+        }
+
+        if (live)
+        {
+            return new ControlLease(this, client, cancellationToken);
+        }
+
+        // Disposal won the race while the connection was being opened, so the connection is closed
+        // rather than handed to a caller of a bridge that is gone.
+        await client.DisposeAsync().ConfigureAwait(false);
+        throw new ObjectDisposedException(nameof(WeftBridge));
     }
 
     /// <summary>
