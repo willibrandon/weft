@@ -27,7 +27,10 @@ public sealed class AttachApp
     private Hex1bApp? _app;
     private CancellationTokenSource? _stopping;
     private string? _status;
+    private const int LeaderTimeoutMs = 2000;
     private bool _locked;
+    private bool _focusedOnce;
+    private long _leaderPendingUntil;
     private int _reportedWidth;
     private int _reportedHeight;
 
@@ -65,6 +68,11 @@ public sealed class AttachApp
     /// Gets the outer terminal once running, for automation in tests.
     /// </summary>
     internal Hex1bTerminal? Terminal { get; private set; }
+
+    /// <summary>
+    /// Gets the Hex1b application once running, for diagnostics in tests.
+    /// </summary>
+    internal Hex1bApp? App => _app;
 
     /// <summary>
     /// Attaches, runs until detached, and cleans up.
@@ -123,9 +131,11 @@ public sealed class AttachApp
                         }
                         catch (ProtocolException)
                         {
+                            ClientLog.Debug("EnsureView ignored ProtocolException.");
                         }
                         catch (OperationCanceledException)
                         {
+                            ClientLog.Debug("EnsureView ignored OperationCanceledException.");
                         }
                     }
                 }
@@ -166,6 +176,7 @@ public sealed class AttachApp
             }
             catch (OperationCanceledException)
             {
+                ClientLog.Debug("RunTerminalAsync ignored OperationCanceledException.");
             }
             finally
             {
@@ -209,11 +220,16 @@ public sealed class AttachApp
                     _app?.RequestStop();
                 }
 
-                _app?.Invalidate();
+                // Output flows through each block's own stream; only a new activity marker needs a redraw.
+                if (!string.Equals(message.Event, ProtocolEvents.BlockOutput, StringComparison.Ordinal) || mirror.ActivityChanged)
+                {
+                    _app?.Invalidate();
+                }
             }
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("FocusView ignored OperationCanceledException.");
         }
 
         if (!cancellationToken.IsCancellationRequested)
@@ -321,6 +337,12 @@ public sealed class AttachApp
     {
         SessionMirror mirror = _mirror!;
         _root = ctx;
+        if (!_focusedOnce && mirror.ActiveTab?.ActiveBlock is { } initial && ViewFor(initial) is not null)
+        {
+            _focusedOnce = true;
+            FocusView(initial);
+        }
+
         (int width, int height) = HostSize.Read(_options.Headless);
         int availableWidth = Math.Max(1, width);
         int availableHeight = Math.Max(1, height - 1);
@@ -348,8 +370,10 @@ public sealed class AttachApp
             return [.. layers];
         });
 
-        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, _bindings)]));
-        return body.InputBindings(bindings => RegisterBindings(bindings, mirror));
+        bool pending = LeaderPending;
+        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, pending, _bindings)]));
+        Hex1bWidget bound = body.InputBindings(bindings => RegisterBindings(bindings, mirror));
+        return pending ? bound.RedrawAfter(TimeSpan.FromMilliseconds(LeaderTimeoutMs)) : bound;
     }
 
     private Hex1bWidget RenderLayout<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
@@ -447,14 +471,22 @@ public sealed class AttachApp
         return ctx.Border(inner).Title(title).FixedWidth(width).FixedHeight(height);
     }
 
-    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, BindingTable bindings)
+    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, bool leaderPending, BindingTable bindings)
         where TParent : Hex1bWidget
     {
         IReadOnlyList<TabInfo> tabs = mirror.Tabs;
         string tabText = string.Join("  ", tabs.Select(tab =>
-            (tab.Active ? "[" : string.Empty) + tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + tab.Name + (tab.Active ? "]" : string.Empty)));
+            (tab.Active ? "[" : string.Empty) + tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + tab.Name + (mirror.HasActivity(tab.Id) ? "*" : string.Empty) + (tab.Active ? "]" : string.Empty)));
         string size = layout.Width.ToString(System.Globalization.CultureInfo.InvariantCulture) + "×" + layout.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
         string hint = locked ? bindings.ChordFor(ClientActions.Lock) + " unlock" : bindings.ChordFor(ClientActions.Palette) + " help";
+        if (leaderPending)
+        {
+            hint = bindings.Describe(bindings.Leader) + "\u2026";
+        }
+        if (mirror.ActiveTab is { Synchronized: true })
+        {
+            size = "SYNC " + size;
+        }
         return ctx.InfoBar(s =>
         [
             s.Section(" " + mirror.Session.Name + " "),
@@ -466,8 +498,24 @@ public sealed class AttachApp
         ]).Divider(" ");
     }
 
+    private bool LeaderPending => Environment.TickCount64 < Volatile.Read(ref _leaderPendingUntil);
+
     private void RegisterBindings(InputBindingsBuilder bindings, SessionMirror mirror)
     {
+        // The leader is a single stroke that arms the next stroke rather than a router-level chord:
+        // arming state lives here, so a re-render or capture change between strokes cannot lose it.
+        bool pending = LeaderPending;
+        if (_bindings.Leader.Steps.Count == 1)
+        {
+            KeyStepBuilder? leader = BuildSteps(bindings, _bindings.Leader);
+            leader?.OverridesCapture().Action(_ => ArmLeader(), "Leader");
+        }
+
+        if (pending)
+        {
+            bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
+        }
+
         foreach ((KeyChord chord, string action) in _bindings.Bindings)
         {
             if (_locked && !string.Equals(action, ClientActions.Lock, StringComparison.Ordinal))
@@ -475,14 +523,25 @@ public sealed class AttachApp
                 continue;
             }
 
-            KeyStepBuilder? step = BuildSteps(bindings, chord);
-            if (step is null)
+            string captured = action;
+            if (_bindings.TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest) && _bindings.Leader.Steps.Count == 1)
             {
+                if (!pending || rest.Count != 1)
+                {
+                    continue;
+                }
+
+                KeyStepBuilder? second = BuildSteps(bindings, new KeyChord(rest));
+                second?.OverridesCapture().Action(context =>
+                {
+                    DisarmLeader();
+                    Execute(captured, context, mirror);
+                }, captured);
                 continue;
             }
 
-            string captured = action;
-            step.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
+            KeyStepBuilder? step = BuildSteps(bindings, chord);
+            step?.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
         }
     }
 
@@ -518,8 +577,21 @@ public sealed class AttachApp
         return builder;
     }
 
+    private void ArmLeader()
+    {
+        Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderTimeoutMs);
+        _app?.Invalidate();
+    }
+
+    private void DisarmLeader()
+    {
+        Volatile.Write(ref _leaderPendingUntil, 0);
+        _app?.Invalidate();
+    }
+
     private void Execute(string action, InputBindingActionContext context, SessionMirror mirror)
     {
+        Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
         switch (action)
         {
             case ClientActions.Detach:
@@ -613,6 +685,13 @@ public sealed class AttachApp
                 break;
             case ClientActions.SessionPick:
                 PickSession(context, mirror);
+                break;
+            case ClientActions.TabSync:
+                if (mirror.ActiveTab is { } syncing)
+                {
+                    Fire(client => client.SyncTabAsync(new TabSyncParams { Target = syncing.Id }, CancellationToken.None));
+                }
+
                 break;
             case ClientActions.SessionRename:
                 Prompt(context, "Session name", mirror.Session.Name, name => Fire(client => client.RenameSessionAsync(new SessionRenameParams { Target = mirror.Session.Id, Name = name }, CancellationToken.None)));
@@ -830,6 +909,7 @@ public sealed class AttachApp
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("action ignored OperationCanceledException.");
         }
 
         _app?.Invalidate();

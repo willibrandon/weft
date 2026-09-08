@@ -20,6 +20,11 @@ internal sealed class OutputRevisionFilter : IHex1bTerminalWorkloadFilter
     /// </summary>
     internal long Revision => Volatile.Read(ref _revision);
 
+    /// <summary>
+    /// Raised after every output batch.
+    /// </summary>
+    internal event Action? Output;
+
     /// <inheritdoc />
     public ValueTask OnSessionStartAsync(int width, int height, DateTimeOffset timestamp, CancellationToken ct = default) => ValueTask.CompletedTask;
 
@@ -28,6 +33,7 @@ internal sealed class OutputRevisionFilter : IHex1bTerminalWorkloadFilter
     {
         Interlocked.Increment(ref _revision);
         Changed.Notify();
+        Output?.Invoke();
         return ValueTask.CompletedTask;
     }
 

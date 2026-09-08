@@ -90,6 +90,11 @@ public sealed class BlockInfo
     public required bool Active { get; init; }
 
     /// <summary>
+    /// Gets whether the block ignores its tab's synchronized input.
+    /// </summary>
+    public bool ExcludedFromSync { get; init; }
+
+    /// <summary>
     /// Gets the output revision, which increases on every output batch.
     /// </summary>
     public required long Revision { get; init; }

@@ -98,15 +98,19 @@ internal sealed class ControlConnection
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("ServeAsync ignored OperationCanceledException.");
         }
         catch (IOException)
         {
+            ServerLog.Debug("ServeAsync ignored IOException.");
         }
         catch (SocketException)
         {
+            ServerLog.Debug("ServeAsync ignored SocketException.");
         }
         catch (ObjectDisposedException)
         {
+            ServerLog.Debug("ServeAsync ignored ObjectDisposedException.");
         }
         finally
         {
@@ -125,12 +129,15 @@ internal sealed class ControlConnection
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("PumpAsync ignored OperationCanceledException.");
         }
         catch (IOException)
         {
+            ServerLog.Debug("PumpAsync ignored IOException.");
         }
         catch (ObjectDisposedException)
         {
+            ServerLog.Debug("PumpAsync ignored ObjectDisposedException.");
         }
     }
 }

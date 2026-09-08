@@ -50,6 +50,7 @@ internal sealed class HookRunner : IDisposable
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("Run ignored OperationCanceledException.");
         }
     }
 
@@ -117,6 +118,7 @@ internal sealed class HookRunner : IDisposable
         }
         catch (ProtocolException)
         {
+            ServerLog.Debug("if ignored ProtocolException.");
         }
     }
 }

@@ -27,6 +27,7 @@ internal static class RootCommandFactory
         root.Subcommands.Add(SessionCommands.CreateInfo());
         root.Subcommands.Add(SessionCommands.CreateTabs());
         root.Subcommands.Add(SessionCommands.CreateBlocks());
+        root.Subcommands.Add(SessionCommands.CreateSync());
         root.Subcommands.Add(BlockCommands.CreateSplit());
         root.Subcommands.Add(BlockCommands.CreateSend());
         root.Subcommands.Add(BlockCommands.CreateType());

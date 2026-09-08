@@ -77,6 +77,7 @@ internal static class BlockWaiter
             }
             catch (OperationCanceledException)
             {
+                ServerLog.Debug("ProtocolException ignored OperationCanceledException.");
             }
 
             if (timeout.IsCancellationRequested)

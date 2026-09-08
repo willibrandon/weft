@@ -188,18 +188,23 @@ public sealed class ControlClient : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored OperationCanceledException.");
         }
         catch (IOException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored IOException.");
         }
         catch (SocketException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored SocketException.");
         }
         catch (ObjectDisposedException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored ObjectDisposedException.");
         }
         catch (ProtocolException)
         {
+            ClientLog.Debug("ReadLoopAsync ignored ProtocolException.");
         }
         finally
         {

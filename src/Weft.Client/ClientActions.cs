@@ -77,6 +77,9 @@ internal static class ClientActions
     /// <summary>Open the session picker.</summary>
     internal const string SessionPick = "session.pick";
 
+    /// <summary>Toggle synchronized input for the current tab.</summary>
+    internal const string TabSync = "tab.sync";
+
     /// <summary>Rename the session.</summary>
     internal const string SessionRename = "session.rename";
 
@@ -137,7 +140,8 @@ internal static class ClientActions
         (ResizeRight, "leader shift+l", "Resize right"),
         (LayoutNext, "leader space", "Next layout preset"),
         (SessionPick, "leader s", "Switch session"),
-        (SessionRename, "leader shift+s", "Rename session"),
+        (TabSync, "leader shift+s", "Synchronize input across the tab"),
+        (SessionRename, "leader shift+r", "Rename session"),
         (TabPick, "leader w", "Pick tab or block"),
         (Lock, "leader g", "Lock: pass every key through"),
         (SendLeader, "leader leader", "Send the leader key"),

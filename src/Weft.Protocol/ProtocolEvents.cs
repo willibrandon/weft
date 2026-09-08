@@ -29,6 +29,9 @@ public static class ProtocolEvents
     /// <summary>A tab was renamed.</summary>
     public const string TabRenamed = "tab.renamed";
 
+    /// <summary>A tab's settings changed, such as synchronized input.</summary>
+    public const string TabChanged = "tab.changed";
+
     /// <summary>A tab was closed.</summary>
     public const string TabClosed = "tab.closed";
 

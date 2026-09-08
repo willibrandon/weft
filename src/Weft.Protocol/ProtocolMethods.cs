@@ -35,6 +35,9 @@ public static class ProtocolMethods
     /// <summary>Reports a client's viewport size.</summary>
     public const string SessionSetSize = "session.setSize";
 
+    /// <summary>Marks a client as the most recently active one.</summary>
+    public const string SessionActivate = "session.activate";
+
     /// <summary>Lists tabs in a session.</summary>
     public const string TabList = "tab.list";
 
@@ -49,6 +52,12 @@ public static class ProtocolMethods
 
     /// <summary>Closes a tab and its blocks.</summary>
     public const string TabClose = "tab.close";
+
+    /// <summary>Turns synchronized input on or off for a tab.</summary>
+    public const string TabSync = "tab.sync";
+
+    /// <summary>Includes or excludes a block from its tab's synchronized input.</summary>
+    public const string BlockSync = "block.sync";
 
     /// <summary>Lists blocks.</summary>
     public const string BlockList = "block.list";

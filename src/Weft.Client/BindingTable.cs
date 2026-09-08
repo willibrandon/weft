@@ -86,6 +86,24 @@ internal sealed class BindingTable
     }
 
     /// <summary>
+    /// Splits a chord into the leader prefix and the strokes that follow it.
+    /// </summary>
+    /// <param name="chord">The chord.</param>
+    /// <param name="rest">The strokes after the leader, when the chord starts with it.</param>
+    /// <returns>Whether the chord starts with the leader.</returns>
+    internal bool TryStripLeader(KeyChord chord, out IReadOnlyList<KeyStroke> rest)
+    {
+        if (chord.Steps.Count > Leader.Steps.Count && chord.Steps.Take(Leader.Steps.Count).SequenceEqual(Leader.Steps))
+        {
+            rest = [.. chord.Steps.Skip(Leader.Steps.Count)];
+            return true;
+        }
+
+        rest = [];
+        return false;
+    }
+
+    /// <summary>
     /// Gets the chord text bound to an action, for display.
     /// </summary>
     /// <param name="action">The action.</param>
@@ -128,12 +146,7 @@ internal sealed class BindingTable
 
     private static string Pretty(KeyStroke stroke)
     {
-        string key = stroke.Key.Length == 1 ? stroke.Key : char.ToUpperInvariant(stroke.Key[0]) + stroke.Key[1..];
-        if (stroke.Modifiers.HasFlag(KeyModifiers.Shift) && stroke.Key.Length == 1 && char.IsAsciiLetterLower(stroke.Key[0]))
-        {
-            return Prefix(stroke.Modifiers & ~KeyModifiers.Shift) + stroke.Key.ToUpperInvariant();
-        }
-
+        string key = stroke.Key.Length == 1 ? stroke.Key.ToUpperInvariant() : char.ToUpperInvariant(stroke.Key[0]) + stroke.Key[1..];
         return Prefix(stroke.Modifiers) + key;
     }
 

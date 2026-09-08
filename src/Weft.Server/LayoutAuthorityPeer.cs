@@ -100,6 +100,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
             }
             catch (OperationCanceledException)
             {
+                ServerLog.Debug("DisposeAsync ignored OperationCanceledException.");
             }
         }
 
@@ -121,6 +122,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("DrainAsync ignored OperationCanceledException.");
         }
         catch (IOException exception)
         {
@@ -128,6 +130,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
         }
         catch (ObjectDisposedException)
         {
+            ServerLog.Debug("DrainAsync ignored ObjectDisposedException.");
         }
     }
 
@@ -145,6 +148,7 @@ internal sealed class LayoutAuthorityPeer : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("OnRoleChangedAsync ignored OperationCanceledException.");
         }
         catch (IOException exception)
         {

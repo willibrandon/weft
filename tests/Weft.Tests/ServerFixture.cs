@@ -109,7 +109,7 @@ internal sealed class ServerFixture : IAsyncDisposable
             throw new InvalidOperationException("The server failed.", _run.Exception);
         }
 
-        if (_keepState)
+        if (_keepState || Environment.GetEnvironmentVariable("WEFT_TEST_KEEP") is "1")
         {
             return;
         }

@@ -146,6 +146,7 @@ internal sealed partial class SessionRegistry
         Height = block.Height,
         Floating = block.Floating,
         Active = block.Tab.Active == block,
+        ExcludedFromSync = block.ExcludedFromSync,
         Revision = block.Revision,
         SocketPath = block.SocketPath
     };

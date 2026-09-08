@@ -13,6 +13,7 @@ internal sealed class BlockHost : IAsyncDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly OutputRevisionFilter _revision = new();
     private readonly Hex1bTerminalChildProcess _process;
+    private readonly InputObservingWorkload _workload;
     private readonly Hmp1PresentationAdapter _presentation;
     private readonly Hex1bTerminal _terminal;
     private readonly LayoutAuthorityPeer _authority;
@@ -46,6 +47,9 @@ internal sealed class BlockHost : IAsyncDisposable
     {
         SocketPath = socketPath;
         _process = new Hex1bTerminalChildProcess(command, [.. arguments], workingDirectory, environment, inheritEnvironment: true, width, height);
+        _workload = new InputObservingWorkload(_process);
+        _workload.InputWritten += bytes => InputReceived?.Invoke(bytes);
+        _revision.Output += () => Output?.Invoke();
         _presentation = new Hmp1PresentationAdapter(width, height)
         {
             OnClientConnected = (_, _) =>
@@ -63,7 +67,7 @@ internal sealed class BlockHost : IAsyncDisposable
         {
             Width = width,
             Height = height,
-            WorkloadAdapter = _process,
+            WorkloadAdapter = _workload,
             PresentationAdapter = _presentation,
             ScrollbackCapacity = scrollback,
             RunCallback = RunProcessAsync
@@ -83,6 +87,16 @@ internal sealed class BlockHost : IAsyncDisposable
     /// Raised when the terminal's window title changes.
     /// </summary>
     internal event Action<string>? TitleChanged;
+
+    /// <summary>
+    /// Raised with input that arrived through the terminal from an attached peer.
+    /// </summary>
+    internal event Action<ReadOnlyMemory<byte>>? InputReceived;
+
+    /// <summary>
+    /// Raised after every output batch.
+    /// </summary>
+    internal event Action? Output;
 
     /// <summary>
     /// Gets the HMP1 socket path.
@@ -126,6 +140,7 @@ internal sealed class BlockHost : IAsyncDisposable
     /// <returns>A task that completes when the block is serving and the process is running.</returns>
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
+        long started = Environment.TickCount64;
         _listenTask = ListenAsync(_stopping.Token);
         _runTask = _terminal.RunAsync(_stopping.Token);
         while (!_started.Task.IsCompleted)
@@ -143,7 +158,9 @@ internal sealed class BlockHost : IAsyncDisposable
             throw new InvalidOperationException("The block process could not be started: " + error.Message, error);
         }
 
+        long processStarted = Environment.TickCount64;
         await _authority.StartAsync(cancellationToken).ConfigureAwait(false);
+        ServerLog.Debug(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Block on {Path.GetFileName(SocketPath)} started: process {processStarted - started} ms, authority {Environment.TickCount64 - processStarted} ms."));
     }
 
     /// <summary>
@@ -230,6 +247,7 @@ internal sealed class BlockHost : IAsyncDisposable
             }
             catch (OperationCanceledException)
             {
+                ServerLog.Debug("DisposeAsync ignored OperationCanceledException.");
             }
             catch (InvalidOperationException exception)
             {
@@ -244,6 +262,7 @@ internal sealed class BlockHost : IAsyncDisposable
 
         await _terminal.DisposeAsync().ConfigureAwait(false);
         await _presentation.DisposeAsync().ConfigureAwait(false);
+        await _workload.DisposeAsync().ConfigureAwait(false);
         await _process.DisposeAsync().ConfigureAwait(false);
         _stopping.Dispose();
         try
@@ -252,9 +271,11 @@ internal sealed class BlockHost : IAsyncDisposable
         }
         catch (IOException)
         {
+            ServerLog.Debug("DisposeAsync ignored IOException.");
         }
         catch (UnauthorizedAccessException)
         {
+            ServerLog.Debug("DisposeAsync ignored UnauthorizedAccessException.");
         }
     }
 
@@ -324,6 +345,7 @@ internal sealed class BlockHost : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            ServerLog.Debug("ListenAsync ignored OperationCanceledException.");
         }
         catch (IOException exception)
         {

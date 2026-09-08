@@ -84,6 +84,30 @@ public static class ControlClientExtensions
     public static Task<EmptyResult> SetSizeAsync(this ControlClient client, SessionSetSizeParams parameters, CancellationToken cancellationToken) =>
         InvokeAsync(client, ProtocolMethods.SessionSetSize, parameters, ProtocolJsonContext.Default.SessionSetSizeParams, ProtocolJsonContext.Default.EmptyResult, cancellationToken);
 
+    /// <summary>Calls session.activate.</summary>
+    /// <param name="client">The client.</param>
+    /// <param name="clientId">The attached client id.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result.</returns>
+    public static Task<EmptyResult> ActivateAsync(this ControlClient client, string clientId, CancellationToken cancellationToken) =>
+        InvokeAsync(client, ProtocolMethods.SessionActivate, new ClientParams { Client = clientId }, ProtocolJsonContext.Default.ClientParams, ProtocolJsonContext.Default.EmptyResult, cancellationToken);
+
+    /// <summary>Calls tab.sync.</summary>
+    /// <param name="client">The client.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result.</returns>
+    public static Task<TabInfo> SyncTabAsync(this ControlClient client, TabSyncParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(client, ProtocolMethods.TabSync, parameters, ProtocolJsonContext.Default.TabSyncParams, ProtocolJsonContext.Default.TabInfo, cancellationToken);
+
+    /// <summary>Calls block.sync.</summary>
+    /// <param name="client">The client.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result.</returns>
+    public static Task<BlockInfo> SyncBlockAsync(this ControlClient client, BlockSyncParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(client, ProtocolMethods.BlockSync, parameters, ProtocolJsonContext.Default.BlockSyncParams, ProtocolJsonContext.Default.BlockInfo, cancellationToken);
+
     /// <summary>Calls tab.list.</summary>
     /// <param name="client">The client.</param>
     /// <param name="target">The target.</param>

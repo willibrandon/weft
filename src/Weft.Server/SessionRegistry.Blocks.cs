@@ -217,7 +217,7 @@ internal sealed partial class SessionRegistry
     /// <param name="literal">Whether every item is literal text.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal static async Task SendKeysAsync(Block block, IReadOnlyList<string> keys, bool literal, CancellationToken cancellationToken)
+    internal async Task SendKeysAsync(Block block, IReadOnlyList<string> keys, bool literal, CancellationToken cancellationToken)
     {
         BlockHost host = RunningHost(block);
         bool applicationCursorKeys = host.Capture(0, CaptureFormat.Text).ApplicationCursorKeys;
@@ -225,7 +225,104 @@ internal sealed partial class SessionRegistry
         {
             byte[] bytes = literal ? KeyEncoder.EncodeText(key) : KeyEncoder.Encode(key, applicationCursorKeys);
             await host.WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
+            await FanOutAsync(block, bytes, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Turns synchronized input on or off for a tab.
+    /// </summary>
+    /// <param name="tab">The tab.</param>
+    /// <param name="enabled">The new state, or null to toggle.</param>
+    internal void SetTabSync(Tab tab, bool? enabled)
+    {
+        lock (_gate)
+        {
+            tab.Synchronized = enabled ?? !tab.Synchronized;
+        }
+
+        _events.Publish(ProtocolEvents.TabChanged, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+    }
+
+    /// <summary>
+    /// Includes or excludes a block from its tab's synchronized input.
+    /// </summary>
+    /// <param name="block">The block.</param>
+    /// <param name="excluded">Whether the block is excluded.</param>
+    internal void SetBlockSync(Block block, bool excluded)
+    {
+        lock (_gate)
+        {
+            block.ExcludedFromSync = excluded;
+        }
+
+        _events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+    }
+
+    private async Task FanOutAsync(Block source, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
+    {
+        List<BlockHost> targets = [];
+        lock (_gate)
+        {
+            if (!source.Tab.Synchronized)
+            {
+                return;
+            }
+
+            foreach (Block sibling in source.Tab.Blocks)
+            {
+                if (sibling != source && !sibling.ExcludedFromSync && sibling.Host is { } host && sibling.State == BlockState.Running)
+                {
+                    targets.Add(host);
+                }
+            }
+        }
+
+        foreach (BlockHost host in targets)
+        {
+            try
+            {
+                await host.WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException exception)
+            {
+                ServerLog.Warn("Synchronized input failed: " + exception.Message);
+            }
+            catch (ObjectDisposedException)
+            {
+                ServerLog.Debug("FanOutAsync ignored ObjectDisposedException.");
+            }
+        }
+    }
+
+    private void OnBlockInput(Block block, ReadOnlyMemory<byte> bytes)
+    {
+        bool synchronized;
+        lock (_gate)
+        {
+            synchronized = block.Tab.Synchronized;
+        }
+
+        if (synchronized)
+        {
+            _ = FanOutAsync(block, bytes.ToArray(), CancellationToken.None);
+        }
+    }
+
+    private void OnBlockOutput(Block block)
+    {
+        long now = Environment.TickCount64;
+        lock (_gate)
+        {
+            if (block.State == BlockState.Closed || now - block.LastActivityPublished < 250)
+            {
+                return;
+            }
+
+            block.LastActivityPublished = now;
+        }
+
+        _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     /// <summary>
@@ -340,6 +437,8 @@ internal sealed partial class SessionRegistry
         block.Host = host;
         host.Exited += code => OnBlockExited(block, code);
         host.TitleChanged += title => OnBlockTitled(block, title);
+        host.InputReceived += bytes => OnBlockInput(block, bytes);
+        host.Output += () => OnBlockOutput(block);
         try
         {
             await host.StartAsync(cancellationToken).ConfigureAwait(false);

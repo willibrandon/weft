@@ -18,8 +18,21 @@ internal static class ServerLog
     {
         lock (s_gate)
         {
-            s_file?.Dispose();
+            // Earlier writers are left open on purpose: another server in the same process, as in tests, may still log.
             s_file = new StreamWriter(path, append: true) { AutoFlush = true };
+        }
+    }
+
+    /// <summary>
+    /// Writes a debug line to the log file only.
+    /// </summary>
+    /// <param name="message">The message.</param>
+    internal static void Debug(string message)
+    {
+        string line = string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:HH:mm:ss.fff} debug {message}");
+        lock (s_gate)
+        {
+            s_file?.WriteLine(line);
         }
     }
 

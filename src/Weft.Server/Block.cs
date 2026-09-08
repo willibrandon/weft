@@ -119,4 +119,14 @@ internal sealed class Block
     /// Gets the signal notified when the process state changes.
     /// </summary>
     internal ChangeSignal StateChanged { get; } = new();
+
+    /// <summary>
+    /// Gets or sets whether the block ignores synchronized input for its tab.
+    /// </summary>
+    internal bool ExcludedFromSync { get; set; }
+
+    /// <summary>
+    /// Gets or sets the tick count of the last published output event.
+    /// </summary>
+    internal long LastActivityPublished { get; set; }
 }
