@@ -51,9 +51,13 @@ public sealed class CodeQlUselessCastToSelfAnalyzer : DiagnosticAnalyzer
             expression = parentheses;
         }
 
-        return expression.Parent is MemberAccessExpressionSyntax member && member.Expression == expression ||
-            expression.Parent is ElementAccessExpressionSyntax element && element.Expression == expression ||
-            expression.Parent is ConditionalAccessExpressionSyntax conditional && conditional.Expression == expression;
+        return expression.Parent switch
+        {
+            MemberAccessExpressionSyntax member => member.Expression == expression,
+            ElementAccessExpressionSyntax element => element.Expression == expression,
+            ConditionalAccessExpressionSyntax conditional => conditional.Expression == expression,
+            _ => false
+        };
     }
 
     private static void AnalyzeCast(SyntaxNodeAnalysisContext context)
