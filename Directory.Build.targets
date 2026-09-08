@@ -85,9 +85,20 @@
   </Target>
 
   <Target Name="WeftValidateProject" BeforeTargets="CoreCompile">
-    <Error Condition="'$(TargetFramework)' != 'net10.0'"
-           Text="weft projects must target net10.0." />
+    <Error Condition="'$(TargetFramework)' != 'net10.0' and '$(WeftAllowAlternateTargetFramework)' != 'true'"
+           Text="weft projects must target net10.0 unless the project documents an alternate target." />
     <Error Condition="'$(Nullable)' != 'enable'"
            Text="Nullable reference types must remain enabled." />
   </Target>
+  <!-- Every project compiles with the repository's own analyzers, which mirror the CodeQL queries and the
+       conventions in AGENTS.md, so a finding fails the local build instead of a CI run. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Weft.SourceGen' and
+                        !$([System.String]::Copy('$(MSBuildProjectDirectory)').StartsWith('$(MSBuildThisFileDirectory)scripts')) and
+                        Exists('$(MSBuildThisFileDirectory)src/Weft.SourceGen/Weft.SourceGen.csproj')">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Weft.SourceGen/Weft.SourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="All"
+                      GlobalPropertiesToRemove="PublishAot;NativeLib;SelfContained;RuntimeIdentifier;PublishReadyToRun;PublishSingleFile" />
+  </ItemGroup>
 </Project>

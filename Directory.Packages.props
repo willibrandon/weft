@@ -1,6 +1,9 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <RoslynVersion>5.9.0</RoslynVersion>
+    <!-- The analyzer compiles against an older compiler surface so it loads in every SDK that builds weft. -->
+    <SourceGeneratorRoslynVersion>5.0.0</SourceGeneratorRoslynVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -8,6 +11,9 @@
     <PackageVersion Include="Hex1b" Version="0.165.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="$(RoslynVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" Condition="'$(MSBuildProjectName)' != 'Weft.SourceGen'" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(SourceGeneratorRoslynVersion)" Condition="'$(MSBuildProjectName)' == 'Weft.SourceGen'" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.400" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" />
