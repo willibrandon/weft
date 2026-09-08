@@ -21,6 +21,11 @@ public sealed class LayoutInfo
     public required int Height { get; init; }
 
     /// <summary>
+    /// Gets the cells each block reserves on every side for its frame; zero when blocks are frameless.
+    /// </summary>
+    public required int FrameSize { get; init; }
+
+    /// <summary>
     /// Gets the zoomed block id, if any; when set, tiled placements are replaced by one full-area placement.
     /// </summary>
     public string? Zoomed { get; init; }

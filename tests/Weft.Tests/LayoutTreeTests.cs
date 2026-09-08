@@ -189,7 +189,7 @@ public sealed class LayoutTreeTests
     [TestMethod]
     public void TryApplyRefusesMismatchedLeafCount()
     {
-        Assert.IsTrue(LayoutSerializer.TryParse("b5ef,80x24,0,0{40x24,0,0,1,39x24,41,0,2}", out LayoutCell? parsed));
+        Assert.IsTrue(LayoutSerializer.TryParse("020a,80x24,0,0{40x24,0,0,1,39x24,41,0,2}", out LayoutCell? parsed));
         var tree = new LayoutTree(LayoutOptions.Separated);
 
         Assert.IsFalse(tree.TryApply(parsed!, [s_one, s_two, s_three], 80, 24));

@@ -24,6 +24,21 @@ public sealed class LayoutCell
     public BlockId? Block { get; internal set; }
 
     /// <summary>
+    /// Assigns the block held by a leaf, for callers rebuilding a parsed layout.
+    /// </summary>
+    /// <param name="block">The block.</param>
+    /// <exception cref="InvalidOperationException">The cell is a split.</exception>
+    public void AssignBlock(BlockId block)
+    {
+        if (!IsLeaf)
+        {
+            throw new InvalidOperationException("Only a leaf holds a block.");
+        }
+
+        Block = block;
+    }
+
+    /// <summary>
     /// Gets whether this cell is a leaf.
     /// </summary>
     public bool IsLeaf => Orientation is null;

@@ -5,7 +5,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Core layout engine and control protocol contracts build clean; next is the server.
+- Server runs real shells over the control socket with passing end-to-end tests; next is the attach client UI and CLI.
 
 ## Phase 0: Research and scaffolding
 
@@ -22,13 +22,13 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Phase 1: Durable sessions
 
-- [ ] Server process: unix-socket listener, on-demand start, single instance per user
-- [ ] Session, window, and block model with stable ids
-- [ ] PTY-backed blocks via Hex1b child processes with scrollback
+- [x] Server process: unix-socket listener, lock file for single instance (on-demand start pending)
+- [x] Session, tab, and block model with stable ids
+- [x] PTY-backed blocks via Hex1b child processes with scrollback
 - [ ] Attach and detach from any number of clients
 - [ ] Client renders server-side state (smart client, no ANSI re-parsing)
-- [ ] Session persistence across server restarts (layout, cwd, commands)
-- [ ] Real tests: server process, real shells, real sockets
+- [x] Session persistence across server restarts (layout, cwd, commands)
+- [x] Real tests: server process, real shells, real sockets
 
 ## Phase 2: Multiplexer UX
 
@@ -44,8 +44,8 @@ Living tracker for the weft build. Check items off as they land; keep the
 ## Phase 3: Composable control surface
 
 - [ ] CLI: every UI action addressable from the command line
-- [ ] Structured JSON output and event streaming
-- [ ] Run-and-await, capture, wait-for-pattern, send-keys
+- [x] Event streaming with sequence numbers and replay ring
+- [x] Run-and-await, capture, wait-for-pattern, send-keys, named wait channels
 - [ ] Hooks
 - [ ] MCP server for agents
 
@@ -60,3 +60,5 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 | Date | What | Result |
 | --- | --- | --- |
+| 2026-09-08 | `dotnet test --test-modules` on Weft.Tests | 37 passed, 0 failed |
+| 2026-09-08 | `dotnet test --solution` | reports zero tests; host runs fine when invoked directly, cause under investigation |
