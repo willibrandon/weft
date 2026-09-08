@@ -27,25 +27,25 @@ internal sealed class SyncInputQueue : IDisposable
         {
             foreach (BlockHost host in targets)
             {
-                SyncInputTarget? target = _targets.GetValueOrDefault(host);
-                if (target is { Dead: true })
+                if (_targets.TryGetValue(host, out SyncInputTarget? found) && found.Dead)
                 {
-                    target.Dispose();
                     _targets.Remove(host);
-                    target = null;
+                    found.Dispose();
+                    found = null;
                 }
 
-                if (target is null)
-                {
-                    target = new SyncInputTarget(host);
-                    _targets[host] = target;
-                }
-
-                writes.Add(target.EnqueueAsync(bytes, pasteText));
+                writes.Add((found ?? Track(host)).EnqueueAsync(bytes, pasteText));
             }
         }
 
         return Task.WhenAll(writes).WaitAsync(cancellationToken);
+    }
+
+    private SyncInputTarget Track(BlockHost host)
+    {
+        var target = new SyncInputTarget(host);
+        _targets[host] = target;
+        return target;
     }
 
     /// <summary>
