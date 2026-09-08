@@ -98,3 +98,39 @@ jobs:
           CI: true
       - name: Smoke test
         run: artifacts/publish/Weft.App/release_${{ matrix.rid }}/weft --version
+
+  native-aot-size:
+    name: Native AOT size (linux-x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.x
+      - name: Publish with size report
+        run: >-
+          dotnet publish src/Weft.App/Weft.App.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained true
+          --output artifacts/size-check/weft
+          -p:IlcGenerateMstatFile=true
+        env:
+          CI: true
+      - name: Check Native AOT size
+        uses: willibrandon/dotsider@v0
+        with:
+          target: artifacts/obj/Weft.App/release_linux-x64/native/weft.mstat
+          baseline-key: weft-linux-x64
+          budgets: max=12mb
+          top: '20'
+          report-directory: ${{ runner.temp }}/dotsider-size-weft-linux-x64
+          artifact-name: dotsider-size-weft-linux-x64
