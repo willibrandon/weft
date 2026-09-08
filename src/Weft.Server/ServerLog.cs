@@ -18,7 +18,8 @@ internal static class ServerLog
     {
         lock (s_gate)
         {
-            // Earlier writers are left open on purpose: another server in the same process, as in tests, may still log.
+            // Every write takes this gate and reads the current writer, so the previous one can close safely.
+            s_file?.Dispose();
             s_file = new StreamWriter(path, append: true) { AutoFlush = true };
         }
     }

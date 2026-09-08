@@ -149,7 +149,8 @@ internal static class SessionHandlers
             {
                 foreach (string stored in registry.StoredSessionNames())
                 {
-                    if (await registry.ResurrectAsync(stored, cancellationToken).ConfigureAwait(false) is { } resurrected)
+                    Session? resurrected = await registry.ResurrectAsync(stored, cancellationToken).ConfigureAwait(false);
+                    if (resurrected is not null)
                     {
                         return resurrected;
                     }

@@ -147,15 +147,8 @@ internal sealed partial class SessionRegistry
     {
         lock (_gate)
         {
-            foreach (Session session in _sessions)
-            {
-                if (session.Clients.Find(client => string.Equals(client.Id, clientId, StringComparison.Ordinal)) is { } found)
-                {
-                    return found;
-                }
-            }
-
-            throw new ProtocolException(ErrorCodes.NotFound, "No client " + clientId + " is attached.");
+            return _sessions.Select(session => session.Clients.Find(client => string.Equals(client.Id, clientId, StringComparison.Ordinal))).FirstOrDefault(client => client is not null)
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No client " + clientId + " is attached.");
         }
     }
 
@@ -216,15 +209,8 @@ internal sealed partial class SessionRegistry
     {
         if (selector.Block is { } blockId)
         {
-            foreach (Session session in _sessions)
-            {
-                if (session.FindBlock(blockId) is { } found)
-                {
-                    return found;
-                }
-            }
-
-            throw new ProtocolException(ErrorCodes.NotFound, "No block " + blockId + ".");
+            return _sessions.Select(session => session.FindBlock(blockId)).FirstOrDefault(block => block is not null)
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No block " + blockId + ".");
         }
 
         Tab tab = ResolveTabUnsafe(selector);

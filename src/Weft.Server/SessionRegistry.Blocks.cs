@@ -225,7 +225,7 @@ internal sealed partial class SessionRegistry
         {
             byte[] bytes = literal ? KeyEncoder.EncodeText(key) : KeyEncoder.Encode(key, applicationCursorKeys);
             await host.WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
-            await FanOutAsync(block, bytes, cancellationToken).ConfigureAwait(false);
+            await FanOutAsync(block, bytes, pasteText: null, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -259,39 +259,24 @@ internal sealed partial class SessionRegistry
         _events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
-    private async Task FanOutAsync(Block source, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
+    private Task FanOutAsync(Block source, ReadOnlyMemory<byte> bytes, string? pasteText, CancellationToken cancellationToken)
     {
-        List<BlockHost> targets = [];
         lock (_gate)
         {
             if (!source.Tab.Synchronized)
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            foreach (Block sibling in source.Tab.Blocks)
-            {
-                if (sibling != source && !sibling.ExcludedFromSync && sibling.Host is { } host && sibling.State == BlockState.Running)
-                {
-                    targets.Add(host);
-                }
-            }
-        }
+            List<BlockHost> targets =
+            [
+                .. source.Tab.Blocks
+                    .Where(sibling => sibling != source && !sibling.ExcludedFromSync && sibling.Host is not null && sibling.State == BlockState.Running)
+                    .Select(sibling => sibling.Host!)
+            ];
 
-        foreach (BlockHost host in targets)
-        {
-            try
-            {
-                await host.WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
-            }
-            catch (IOException exception)
-            {
-                ServerLog.Warn("Synchronized input failed: " + exception.Message);
-            }
-            catch (ObjectDisposedException)
-            {
-                ServerLog.Debug("FanOutAsync ignored ObjectDisposedException.");
-            }
+            // Queue while holding the gate so the queue order matches the order input arrived in.
+            return targets.Count == 0 ? Task.CompletedTask : source.Tab.SyncInput.EnqueueAsync(targets, bytes, pasteText, cancellationToken);
         }
     }
 
@@ -305,7 +290,7 @@ internal sealed partial class SessionRegistry
 
         if (synchronized)
         {
-            _ = FanOutAsync(block, bytes.ToArray(), CancellationToken.None);
+            _ = FanOutAsync(block, bytes.ToArray(), pasteText: null, CancellationToken.None);
         }
     }
 
@@ -332,8 +317,12 @@ internal sealed partial class SessionRegistry
     /// <param name="text">The text.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal static ValueTask TypeAsync(Block block, string text, CancellationToken cancellationToken) =>
-        RunningHost(block).WriteInputAsync(KeyEncoder.EncodeText(text), cancellationToken);
+    internal async Task TypeAsync(Block block, string text, CancellationToken cancellationToken)
+    {
+        byte[] bytes = KeyEncoder.EncodeText(text);
+        await RunningHost(block).WriteInputAsync(bytes, cancellationToken).ConfigureAwait(false);
+        await FanOutAsync(block, bytes, pasteText: null, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Pastes text into a block, bracketed when the terminal asked for it.
@@ -342,11 +331,12 @@ internal sealed partial class SessionRegistry
     /// <param name="text">The text.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal static ValueTask PasteAsync(Block block, string text, CancellationToken cancellationToken)
+    internal async Task PasteAsync(Block block, string text, CancellationToken cancellationToken)
     {
         BlockHost host = RunningHost(block);
         bool bracketed = host.Capture(0, CaptureFormat.Text).BracketedPaste;
-        return host.WriteInputAsync(bracketed ? KeyEncoder.EncodeBracketedPaste(text) : KeyEncoder.EncodeText(text), cancellationToken);
+        await host.WriteInputAsync(bracketed ? KeyEncoder.EncodeBracketedPaste(text) : KeyEncoder.EncodeText(text), cancellationToken).ConfigureAwait(false);
+        await FanOutAsync(block, ReadOnlyMemory<byte>.Empty, text, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

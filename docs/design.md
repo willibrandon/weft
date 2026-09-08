@@ -268,8 +268,11 @@ replaced with `v` and `-`.
 | `leader ?` | help and command palette |
 | `leader Ctrl+B` | send a literal Ctrl+B |
 
-The leader is one stroke that arms the next stroke for two seconds; the info bar shows the
-armed leader (`Ctrl+B…`) until a bound key follows, Escape cancels, or the timer runs out.
+The leader is one stroke that arms the next stroke, the way a tmux prefix does; the info bar
+shows the armed leader (`Ctrl+B…`) until the next key arrives. A bound key runs its action,
+Escape cancels, and any other key disarms the leader and goes to the block as typed, so a
+stray prefix never leaves a stale arm behind. A ten second safety timer covers keys the client
+cannot name.
 Arming is client state rather than a router chord, so a redraw or a focus change between the
 two strokes cannot lose it. Chords that do not start with the leader use the toolkit's chord
 matching directly.

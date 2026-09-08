@@ -118,11 +118,13 @@ internal sealed class ServerFixture : IAsyncDisposable
         {
             Directory.Delete(Root, recursive: true);
         }
-        catch (IOException)
+        catch (IOException exception)
         {
+            ClientLog.Debug("Fixture cleanup skipped: " + exception.Message);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException exception)
         {
+            ClientLog.Debug("Fixture cleanup skipped: " + exception.Message);
         }
     }
 }

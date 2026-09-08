@@ -138,14 +138,14 @@ internal static class BlockHandlers
         dispatcher.Register(ProtocolMethods.BlockType, ProtocolJsonContext.Default.BlockTextParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                await SessionRegistry.TypeAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Text, cancellationToken).ConfigureAwait(false);
+                await context.Registry.TypeAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Text, cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
 
         dispatcher.Register(ProtocolMethods.BlockPaste, ProtocolJsonContext.Default.BlockTextParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                await SessionRegistry.PasteAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Text, cancellationToken).ConfigureAwait(false);
+                await context.Registry.PasteAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Text, cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
 

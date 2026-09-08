@@ -68,6 +68,11 @@ internal sealed class Tab
     internal bool Synchronized { get; set; }
 
     /// <summary>
+    /// Gets the queue that keeps synchronized input in source order across the tab's blocks.
+    /// </summary>
+    internal SyncInputQueue SyncInput { get; } = new();
+
+    /// <summary>
     /// Gets or sets the preset the tab was last set to, for cycling.
     /// </summary>
     internal LayoutPreset LastPreset { get; set; } = LayoutPreset.Tiled;
@@ -85,15 +90,7 @@ internal sealed class Tab
     /// <returns>The ordered blocks.</returns>
     internal List<Block> Ordered()
     {
-        List<Block> ordered = [];
-        foreach (BlockId id in Layout.Blocks)
-        {
-            if (Find(id) is { } block)
-            {
-                ordered.Add(block);
-            }
-        }
-
+        List<Block> ordered = [.. Layout.Blocks.Select(Find).OfType<Block>()];
         ordered.AddRange(Blocks.Where(block => block.Floating));
         return ordered;
     }

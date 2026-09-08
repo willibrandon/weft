@@ -27,7 +27,7 @@ public sealed class AttachApp
     private Hex1bApp? _app;
     private CancellationTokenSource? _stopping;
     private string? _status;
-    private const int LeaderTimeoutMs = 2000;
+    private const int LeaderSafetyTimeoutMs = 10_000;
     private bool _locked;
     private bool _focusedOnce;
     private long _leaderPendingUntil;
@@ -320,12 +320,10 @@ public sealed class AttachApp
         {
             lock (_gate)
             {
-                foreach (BlockView view in _views.Values)
+                BlockView? match = _views.Values.FirstOrDefault(view => view.Handle == terminal.Handle);
+                if (match is not null)
                 {
-                    if (view.Handle == terminal.Handle)
-                    {
-                        return view.Id;
-                    }
+                    return match.Id;
                 }
             }
         }
@@ -359,12 +357,13 @@ public sealed class AttachApp
             // centered in a larger viewport they move with it. A zoomed block already fills the session.
             int offsetX = fits ? (availableWidth - layout.Width) / 2 : 0;
             int offsetY = fits ? (availableHeight - layout.Height) / 2 : 0;
-            foreach (BlockPlacement placement in layout.Floating)
+            foreach ((BlockPlacement placement, BlockInfo block) in layout.Floating
+                .Where(placement => !string.Equals(placement.Id, layout.Zoomed, StringComparison.Ordinal))
+                .Select(placement => (placement, mirror.FindBlock(placement.Id)))
+                .Where(pair => pair.Item2 is not null)
+                .Select(pair => (pair.placement, pair.Item2!)))
             {
-                if (!string.Equals(placement.Id, layout.Zoomed, StringComparison.Ordinal) && mirror.FindBlock(placement.Id) is { } block)
-                {
-                    layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X + offsetX, placement.Y + offsetY));
-                }
+                layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X + offsetX, placement.Y + offsetY));
             }
 
             return [.. layers];
@@ -373,7 +372,7 @@ public sealed class AttachApp
         bool pending = LeaderPending;
         Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, pending, _bindings)]));
         Hex1bWidget bound = body.InputBindings(bindings => RegisterBindings(bindings, mirror));
-        return pending ? bound.RedrawAfter(TimeSpan.FromMilliseconds(LeaderTimeoutMs)) : bound;
+        return pending ? bound.RedrawAfter(TimeSpan.FromMilliseconds(LeaderSafetyTimeoutMs)) : bound;
     }
 
     private Hex1bWidget RenderLayout<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
@@ -504,18 +503,16 @@ public sealed class AttachApp
     {
         // The leader is a single stroke that arms the next stroke rather than a router-level chord:
         // arming state lives here, so a re-render or capture change between strokes cannot lose it.
+        // While armed, every identifiable key is intercepted: bound keys run their action and any
+        // other key disarms the leader and is forwarded to the block, the way a tmux prefix behaves.
         bool pending = LeaderPending;
-        if (_bindings.Leader.Steps.Count == 1)
+        bool singleStrokeLeader = _bindings.Leader.Steps.Count == 1;
+        if (singleStrokeLeader && !pending)
         {
-            KeyStepBuilder? leader = BuildSteps(bindings, _bindings.Leader);
-            leader?.OverridesCapture().Action(_ => ArmLeader(), "Leader");
+            BuildSteps(bindings, _bindings.Leader)?.OverridesCapture().Action(_ => ArmLeader(), "Leader");
         }
 
-        if (pending)
-        {
-            bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
-        }
-
+        HashSet<KeyStroke> claimed = [];
         foreach ((KeyChord chord, string action) in _bindings.Bindings)
         {
             if (_locked && !string.Equals(action, ClientActions.Lock, StringComparison.Ordinal))
@@ -524,15 +521,15 @@ public sealed class AttachApp
             }
 
             string captured = action;
-            if (_bindings.TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest) && _bindings.Leader.Steps.Count == 1)
+            if (singleStrokeLeader && _bindings.TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest))
             {
                 if (!pending || rest.Count != 1)
                 {
                     continue;
                 }
 
-                KeyStepBuilder? second = BuildSteps(bindings, new KeyChord(rest));
-                second?.OverridesCapture().Action(context =>
+                claimed.Add(rest[0]);
+                BuildSteps(bindings, new KeyChord(rest))?.OverridesCapture().Action(context =>
                 {
                     DisarmLeader();
                     Execute(captured, context, mirror);
@@ -540,8 +537,34 @@ public sealed class AttachApp
                 continue;
             }
 
-            KeyStepBuilder? step = BuildSteps(bindings, chord);
-            step?.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
+            if (!pending)
+            {
+                BuildSteps(bindings, chord)?.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
+            }
+        }
+
+        if (!pending)
+        {
+            return;
+        }
+
+        bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
+        claimed.Add(new KeyStroke(KeyModifiers.None, "escape"));
+        foreach (KeyStroke stroke in KeyMap.AllStrokes())
+        {
+            if (claimed.Contains(stroke) || KeyMap.ToKeyEvent(stroke) is not { } keyEvent)
+            {
+                continue;
+            }
+
+            BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(context =>
+            {
+                DisarmLeader();
+                if (ViewFor(FocusedBlockId()) is { } view)
+                {
+                    _ = view.Handle.SendEventAsync(keyEvent);
+                }
+            }, "Forward " + stroke);
         }
     }
 
@@ -579,7 +602,7 @@ public sealed class AttachApp
 
     private void ArmLeader()
     {
-        Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderTimeoutMs);
+        Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderSafetyTimeoutMs);
         _app?.Invalidate();
     }
 
