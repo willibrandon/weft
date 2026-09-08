@@ -1,6 +1,7 @@
 using Weft.Client;
 using Weft.Core;
 using Weft.Protocol;
+using Weft.Server;
 
 namespace Weft.Tests;
 
@@ -253,5 +254,28 @@ public sealed class ServerTests
                 Assert.IsTrue(LayoutSerializer.TryParse(layoutBefore, out _));
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies the runtime lock is free once a stop has completed, so a replacement server can start at once.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task StoppedServerHasReleasedItsLock()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            await fixture.StopKeepingStateAsync().ConfigureAwait(false);
+
+            using var replacement = ServerLock.TryAcquire(WeftPaths.LockFilePath(Path.Join(fixture.Root, "run")));
+
+            Assert.IsNotNull(replacement);
+        }
+
+        Directory.Delete(fixture.Root, recursive: true);
     }
 }
