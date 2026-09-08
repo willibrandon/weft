@@ -33,7 +33,7 @@ public sealed class WeftBridge : IAsyncDisposable
     /// <param name="cancellationToken">Cancels connecting.</param>
     /// <returns>The lease; dispose it to return the connection.</returns>
     public async Task<ControlLease> LeaseAsync(CancellationToken cancellationToken) =>
-        new ControlLease(this, await AcquireAsync(cancellationToken).ConfigureAwait(false));
+        new ControlLease(this, await AcquireAsync(cancellationToken).ConfigureAwait(false), cancellationToken);
 
     /// <summary>
     /// Disposes every idle connection.
@@ -48,12 +48,13 @@ public sealed class WeftBridge : IAsyncDisposable
     }
 
     /// <summary>
-    /// Takes a connection back; a closed one is dropped instead of pooled.
+    /// Takes a connection back; a closed one, or one whose call was abandoned, is dropped instead of pooled.
     /// </summary>
     /// <param name="client">The connection a lease is returning.</param>
-    internal void Return(ControlClient client)
+    /// <param name="reusable">Whether the call finished, so no request is still running on the connection.</param>
+    internal void Return(ControlClient client, bool reusable)
     {
-        if (client.Closed.IsCompleted)
+        if (!reusable || client.Closed.IsCompleted)
         {
             _ = client.DisposeAsync().AsTask();
             return;
