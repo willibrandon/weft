@@ -24,6 +24,9 @@ public sealed class WeftBridge : IAsyncDisposable
     private readonly Func<CancellationToken, Task<ControlClient>> _connect;
     private readonly Lock _gate = new();
     private readonly Stack<ControlClient> _idle = new();
+    private readonly Queue<TaskCompletionSource> _waiting = new();
+
+    private bool _opening;
 
     private bool _disposed;
 
@@ -116,7 +119,55 @@ public sealed class WeftBridge : IAsyncDisposable
             await idle.DisposeAsync().ConfigureAwait(false);
         }
 
-        return await _connect(cancellationToken).ConfigureAwait(false);
+        // Opening runs one at a time: the first caller that finds the server gone starts it, and the
+        // rest connect to the server it started instead of each starting one of their own.
+        await TakeTurnAsync().ConfigureAwait(false);
+        try
+        {
+            return await _connect(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            PassTurn();
+        }
+    }
+
+    // A caller waits for its turn without cancellation: the wait is bounded by the connect in front of
+    // it, and a cancelled call then stops in its own connect.
+    private async Task TakeTurnAsync()
+    {
+        TaskCompletionSource turn;
+        lock (_gate)
+        {
+            if (!_opening)
+            {
+                _opening = true;
+                return;
+            }
+
+            turn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiting.Enqueue(turn);
+        }
+
+        await turn.Task.ConfigureAwait(false);
+    }
+
+    private void PassTurn()
+    {
+        TaskCompletionSource? next = null;
+        lock (_gate)
+        {
+            if (_waiting.Count > 0)
+            {
+                next = _waiting.Dequeue();
+            }
+            else
+            {
+                _opening = false;
+            }
+        }
+
+        next?.SetResult();
     }
 
     // The capacity check and the add happen under one lock, so concurrent returns cannot all see room.
