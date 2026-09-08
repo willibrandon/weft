@@ -1,6 +1,7 @@
+using ModelContextProtocol;
+using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Globalization;
-using ModelContextProtocol.Server;
 using Weft.Client;
 using Weft.Protocol;
 
@@ -22,9 +23,16 @@ public sealed class WeftResources(WeftBridge bridge)
     [McpServerResource(UriTemplate = "weft://block/{id}", Name = "Block screen", MimeType = "text/plain"), Description("The text on a block's screen right now.")]
     public async Task<string> BlockScreenAsync(string id, CancellationToken cancellationToken)
     {
-        ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
-        BlockCaptureResult capture = await client.CaptureAsync(new BlockCaptureParams { Target = id }, cancellationToken).ConfigureAwait(false);
-        return string.Join('\n', capture.Lines);
+        try
+        {
+            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            BlockCaptureResult capture = await client.CaptureAsync(new BlockCaptureParams { Target = id }, cancellationToken).ConfigureAwait(false);
+            return string.Join('\n', capture.Lines);
+        }
+        catch (ProtocolException exception)
+        {
+            throw new McpException(exception.Message, exception);
+        }
     }
 
     /// <summary>
@@ -35,8 +43,15 @@ public sealed class WeftResources(WeftBridge bridge)
     [McpServerResource(UriTemplate = "weft://sessions", Name = "Sessions", MimeType = "text/plain"), Description("Every session with its tabs and blocks.")]
     public async Task<string> SessionsAsync(CancellationToken cancellationToken)
     {
-        ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
-        SessionListResult result = await client.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
-        return string.Join('\n', result.Sessions.Select(session => string.Create(CultureInfo.InvariantCulture, $"{session.Name} ({session.Id}): {session.Tabs} tabs, {session.Blocks} blocks")));
+        try
+        {
+            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            SessionListResult result = await client.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
+            return string.Join('\n', result.Sessions.Select(session => string.Create(CultureInfo.InvariantCulture, $"{session.Name} ({session.Id}): {session.Tabs} tabs, {session.Blocks} blocks")));
+        }
+        catch (ProtocolException exception)
+        {
+            throw new McpException(exception.Message, exception);
+        }
     }
 }

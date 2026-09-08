@@ -15,6 +15,8 @@ internal static class McpCommand
     internal static Command Create()
     {
         var command = new Command("mcp", "Serve weft to an agent over the Model Context Protocol on standard input and output.");
+        var verbose = new Option<bool>("--verbose") { Description = "Log the protocol traffic to standard error as well as warnings and errors." };
+        command.Options.Add(verbose);
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             var context = CommandContext.From(parseResult);
@@ -30,7 +32,7 @@ internal static class McpCommand
                 }
 
                 Console.SetOut(TextWriter.Null);
-                await WeftMcpServer.RunStdioAsync(context.SocketPath, ServerCommand.Version, cancellationToken).ConfigureAwait(false);
+                await WeftMcpServer.RunStdioAsync(context.SocketPath, ServerCommand.Version, parseResult.GetValue(verbose), cancellationToken).ConfigureAwait(false);
                 return 0;
             }
         });

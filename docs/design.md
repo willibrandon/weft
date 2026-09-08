@@ -410,13 +410,25 @@ Agents get the same server through three doors:
 - **CLI with `--json`** for anything scriptable.
 - **Control socket** for long-lived integrations that want events.
 - **`weft mcp`**, a Model Context Protocol server over stdio exposing tools:
-  `list_sessions`, `create_block`, `run` (await exit with head and tail output),
-  `send_keys`, `capture`, `wait_for`, `close_block`, and a `block://` resource per block.
+  `list_sessions`, `list_blocks`, `create_block`, `run` (await exit with head and tail
+  output), `send_keys`, `capture`, `wait_for`, `close_block`, plus resources `weft://sessions`
+  and `weft://block/{id}` for the current screen of a block.
 
 Design rules borrowed from what agent runtimes actually do: `run` returns after a yield time
 with partial output and a live block id instead of blocking forever; output is truncated head
 and tail with an omission marker and total byte counts; captures carry revisions; waits are
 pattern-based with rate limits; exited blocks keep their exit code until closed.
+
+The MCP server is built on the official C# SDK: tools and resources are attribute-marked
+static methods on `[McpServerToolType]` and `[McpServerResourceType]` classes with
+`[Description]` text that becomes the schema agents read, registered through the hosting
+builder with `WithStdioServerTransport`. It talks to the server through one shared control
+client that reconnects on demand, so an agent can start `weft mcp` before the server is up.
+Tests drive it with the SDK client over in-memory pipes against a real server. Optional tool
+parameters carry default values because the SDK treats any parameter without one as required.
+The SDK's own log goes to standard error, the channel the protocol reserves for a stdio server,
+at warning level by default; `weft mcp --verbose` adds request tracing. A failed call reaches
+the agent only as an error, so that log is where the parameter or exception behind it shows up.
 
 ## 10. Sharing and remote
 
