@@ -144,8 +144,9 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzer : DiagnosticAnalyzer
             return;
         }
 
+        // A write observable through a ref alias is not useless, so an escaped local is left alone.
         DataFlowAnalysis? flow = context.SemanticModel.AnalyzeDataFlow(statement);
-        if (flow is null || !flow.Succeeded || FlowsOut(flow, local))
+        if (flow is null || !flow.Succeeded || FlowsOut(flow, local) || HasEscapingReference(context, local))
         {
             return;
         }

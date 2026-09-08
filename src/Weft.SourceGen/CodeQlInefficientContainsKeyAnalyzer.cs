@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -51,20 +52,20 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
         if (syntax.Expression is not MemberAccessExpressionSyntax { Name.Identifier.ValueText: "ContainsKey" } ||
             context.SemanticModel.GetOperation(syntax, context.CancellationToken) is not IInvocationOperation call ||
             call.Arguments.Length != 1 || !IsDictionaryMember(call.TargetMethod) ||
-            GetGuardedRead(syntax) is not { } candidate)
+            GetGuardedReads(syntax) is not { Count: > 0 } candidates)
         {
             return;
         }
 
-        bool repeatsLookup = candidate.DescendantNodesAndSelf(
-            static node => node is not AnonymousFunctionExpressionSyntax and not LocalFunctionStatementSyntax)
+        bool repeatsLookup = candidates.SelectMany(static candidate => candidate.DescendantNodesAndSelf(
+            static node => node is not AnonymousFunctionExpressionSyntax and not LocalFunctionStatementSyntax))
             .OfType<ElementAccessExpressionSyntax>().Any(access =>
                 context.SemanticModel.GetOperation(access, context.CancellationToken) is IPropertyReferenceOperation
                 { Property.IsIndexer: true, Arguments.Length: 1 } indexer &&
                 IsDictionaryMember(indexer.Property) &&
                 IsSameValue(call.Instance, indexer.Instance) &&
                 IsSameValue(call.Arguments[0].Value, indexer.Arguments[0].Value) &&
-                IsUnchangedRead(candidate, access));
+                IsUnchangedRead(candidates, access));
         if (repeatsLookup)
         {
             context.ReportDiagnostic(Diagnostic.Create(s_rule, syntax.GetLocation()));
@@ -82,7 +83,7 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
                 SymbolEqualityComparer.Default.Equals(owner.FindImplementationForInterfaceMember(contract), member));
     }
 
-    private static SyntaxNode? GetGuardedRead(InvocationExpressionSyntax invocation)
+    private static IReadOnlyList<SyntaxNode> GetGuardedReads(InvocationExpressionSyntax invocation)
     {
         ExpressionSyntax condition = SkipParentheses(invocation);
         bool negated = condition.Parent is PrefixUnaryExpressionSyntax unary &&
@@ -102,22 +103,23 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
 
         if (operand.Parent is BinaryExpressionSyntax logical && logical.Left == operand && logical.IsKind(chain))
         {
-            return logical.Right;
+            return [logical.Right];
         }
 
         return condition.Parent switch
         {
-            // The whole guarded branch is scanned; a possible mutation before the read stops the search.
+            // The whole guarded branch is scanned, or everything after an inverted guard that exits; a
+            // possible mutation before the read stops the search.
             IfStatementSyntax branch when branch.Condition == condition => negated
-                ? branch.Else is { } alternative ? alternative.Statement
-                    : Exits(branch.Statement) ? NextStatement(branch) : null
-                : branch.Statement,
+                ? branch.Else is { } alternative ? [alternative.Statement]
+                    : Exits(branch.Statement) ? FollowingStatements(branch) : []
+                : [branch.Statement],
             WhileStatementSyntax loop when loop.Condition == condition => negated
-                ? loop.Statement.DescendantNodesAndSelf().OfType<BreakStatementSyntax>().Any() ? null : NextStatement(loop)
-                : loop.Statement,
+                ? loop.Statement.DescendantNodesAndSelf().OfType<BreakStatementSyntax>().Any() ? [] : FollowingStatements(loop)
+                : [loop.Statement],
             ConditionalExpressionSyntax choice when choice.Condition == condition =>
-                negated ? choice.WhenFalse : choice.WhenTrue,
-            _ => null
+                [negated ? choice.WhenFalse : choice.WhenTrue],
+            _ => []
         };
     }
 
@@ -136,17 +138,12 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
     private static bool Exits(StatementSyntax statement) =>
         FirstStatement(statement) is ReturnStatementSyntax or ThrowStatementSyntax;
 
-    private static StatementSyntax? NextStatement(StatementSyntax statement)
-    {
-        if (statement.Parent is not BlockSyntax block)
-        {
-            return null;
-        }
-        int next = block.Statements.IndexOf(statement) + 1;
-        return next < block.Statements.Count ? block.Statements[next] : null;
-    }
+    private static IReadOnlyList<SyntaxNode> FollowingStatements(StatementSyntax statement) =>
+        statement.Parent is BlockSyntax block
+            ? [.. block.Statements.SkipWhile(candidate => candidate != statement).Skip(1)]
+            : [];
 
-    private static bool IsUnchangedRead(SyntaxNode candidate, ElementAccessExpressionSyntax access)
+    private static bool IsUnchangedRead(IReadOnlyList<SyntaxNode> candidates, ElementAccessExpressionSyntax access)
     {
         ExpressionSyntax target = SkipParentheses(access);
         if (target.Parent is AssignmentExpressionSyntax assignment && assignment.Left == target &&
@@ -155,7 +152,7 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        return !candidate.DescendantNodesAndSelf().Where(node => node.SpanStart < access.SpanStart).Any(static node =>
+        return !candidates.SelectMany(static candidate => candidate.DescendantNodesAndSelf()).Where(node => node.SpanStart < access.SpanStart).Any(static node =>
             node is AssignmentExpressionSyntax or InvocationExpressionSyntax or AwaitExpressionSyntax ||
             node is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None) ||
             node.IsKind(SyntaxKind.PreIncrementExpression) || node.IsKind(SyntaxKind.PreDecrementExpression) ||

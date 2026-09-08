@@ -64,12 +64,11 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            if (variable.Initializer?.Value is { } initializer)
+            if (variable.Initializer?.Value is { } initializer && CreatesResource(initializer))
             {
-                if (CreatesResource(initializer) &&
-                    (DisposableLocalOwnership.MayLeak(local, variable, declaration, block, context) ||
-                        initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
-                        HasConfiguredLibraryDisposal(local, block, context)))
+                if (DisposableLocalOwnership.MayLeak(local, variable, declaration, block, context) ||
+                    initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
+                    HasConfiguredLibraryDisposal(local, block, context))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), local.Name));
                 }
@@ -77,7 +76,8 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            // A resource assigned to the local later in the same block is tracked from that assignment.
+            // A local whose initializer owns nothing, such as null, is tracked from the first later
+            // statement in the block that assigns it a resource.
             if (FindResourceAssignment(local, declaration, block, context) is { } handoff &&
                 DisposableLocalOwnership.MayLeak(local, handoff.Assignment.Right, handoff.Statement, priorRisk: false, block, context))
             {

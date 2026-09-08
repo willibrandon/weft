@@ -307,7 +307,8 @@ public sealed class CodeQlConstantConditionAnalyzer : DiagnosticAnalyzer
 
     private static bool AlwaysExits(StatementSyntax statement)
     {
-        if (statement is ReturnStatementSyntax or ThrowStatementSyntax)
+        // A break or continue leaves the block the guard sits in as surely as a return does.
+        if (statement is ReturnStatementSyntax or ThrowStatementSyntax or BreakStatementSyntax or ContinueStatementSyntax)
         {
             return true;
         }

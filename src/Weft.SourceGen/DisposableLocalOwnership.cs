@@ -71,10 +71,17 @@ internal static class DisposableLocalOwnership
                 HasExceptionCleanup(protection, local, context))
             {
                 // A disposing finally ends ownership. Catch-only cleanup covers the try's own failures, so
-                // the scan continues on the normal path unless the try itself disposes or hands off the local.
-                if (DisposesInFinally(protection, local, context) || EndsOwnership(protection.Block, local, context))
+                // the scan continues on the normal path unless the try itself disposes or hands off the
+                // local, or leaves early while still owning it.
+                if (DisposesInFinally(protection, local, context) ||
+                    EndsOwnership(protection.Block, breakLeaves: true, throwLeaves: false, local, context))
                 {
                     return mayThrow;
+                }
+
+                if (LeaksOnExit(protection.Block, breakLeaves: true, throwLeaves: false, local, context))
+                {
+                    return true;
                 }
 
                 continue;
@@ -92,6 +99,12 @@ internal static class DisposableLocalOwnership
             if (mayThrow && HandsOff(statement, local, context))
             {
                 // Some path through the statement hands the local off after work that can throw.
+                return true;
+            }
+
+            if (LeaksOnExit(statement, breakLeaves: true, throwLeaves: true, local, context))
+            {
+                // Some path leaves the block early while the local is still owned.
                 return true;
             }
         }
@@ -124,31 +137,112 @@ internal static class DisposableLocalOwnership
     private static ITypeSymbol Unwrap(ITypeSymbol type) =>
         type is INamedTypeSymbol { Name: "Task" or "ValueTask", TypeArguments.Length: 1 } wrapped ? wrapped.TypeArguments[0] : type;
 
+    private static bool EndsOwnership(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        EndsOwnership(statement, breakLeaves: true, throwLeaves: true, local, context);
+
     // Ownership ends on every path through the statement when the local is disposed or handed off on each
     // of them; a branch that neither disposes nor hands off, or that may not run at all, keeps it owned.
-    private static bool EndsOwnership(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    // The flags say whether a break or a throw leaves the sequence under analysis while still owning it.
+    private static bool EndsOwnership(StatementSyntax statement, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         statement switch
         {
-            BlockSyntax block => block.Statements.Any(inner => EndsOwnership(inner, local, context)),
+            BlockSyntax block => EndsOwnership(block.Statements, breakLeaves, throwLeaves, local, context),
             ExpressionStatementSyntax expression => IsDisposalStatement(expression, local, context) || HandsOff(expression.Expression, local, context),
             LocalDeclarationStatementSyntax declaration => IsDisposalStatement(declaration, local, context) || HandsOff(declaration.Declaration, local, context),
             ReturnStatementSyntax returned => HandsOff(returned, local, context),
             UsingStatementSyntax scoped => IsDisposalStatement(scoped, local, context) || HandsOff(scoped.Expression, local, context) ||
-                HandsOff(scoped.Declaration, local, context) || EndsOwnership(scoped.Statement, local, context),
+                HandsOff(scoped.Declaration, local, context) || EndsOwnership(scoped.Statement, breakLeaves, throwLeaves, local, context),
             IfStatementSyntax conditional => HandsOff(conditional.Condition, local, context) ||
-                EndsOwnership(conditional.Statement, local, context) && conditional.Else is { } other && EndsOwnership(other.Statement, local, context),
-            SwitchStatementSyntax selection => HandsOff(selection.Expression, local, context) || EndsOwnershipInEverySection(selection, local, context),
+                EndsOwnershipOnBothBranches(conditional, breakLeaves, throwLeaves, local, context),
+            SwitchStatementSyntax selection => HandsOff(selection.Expression, local, context) || EndsOwnershipInEverySection(selection, throwLeaves, local, context),
             ForEachStatementSyntax loop => HandsOff(loop.Expression, local, context),
             WhileStatementSyntax loop => HandsOff(loop.Condition, local, context),
-            LockStatementSyntax guarded => EndsOwnership(guarded.Statement, local, context),
-            TryStatementSyntax attempt => EndsOwnership(attempt.Block, local, context) ||
-                attempt.Finally is { } cleanup && EndsOwnership(cleanup.Block, local, context),
+            LockStatementSyntax guarded => EndsOwnership(guarded.Statement, breakLeaves, throwLeaves, local, context),
+            TryStatementSyntax attempt => EndsOwnership(attempt.Block, breakLeaves, throwLeaves, local, context) ||
+                attempt.Finally is { } cleanup && EndsOwnership(cleanup.Block, breakLeaves, throwLeaves, local, context),
             _ => false
         };
 
-    private static bool EndsOwnershipInEverySection(SwitchStatementSyntax selection, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    private static bool EndsOwnershipOnBothBranches(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        EndsOwnership(conditional.Statement, breakLeaves, throwLeaves, local, context) &&
+        conditional.Else is { } other && EndsOwnership(other.Statement, breakLeaves, throwLeaves, local, context);
+
+    private static bool EndsOwnershipInEverySection(SwitchStatementSyntax selection, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         selection.Sections.Any(static section => section.Labels.Any(static label => label is DefaultSwitchLabelSyntax)) &&
-        selection.Sections.All(section => section.Statements.Any(inner => EndsOwnership(inner, local, context)));
+        selection.Sections.All(section => EndsOwnership(section.Statements, breakLeaves: false, throwLeaves, local, context));
+
+    // A sequence ends ownership when a statement does so before any path leaves the sequence early.
+    private static bool EndsOwnership(IEnumerable<StatementSyntax> statements, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        foreach (StatementSyntax statement in statements)
+        {
+            if (EndsOwnership(statement, breakLeaves, throwLeaves, local, context))
+            {
+                return true;
+            }
+
+            if (LeaksOnExit(statement, breakLeaves, throwLeaves, local, context))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    // A path that leaves the statement early, by a return, a throw, or a jump out of the enclosing
+    // sequence, leaks the local unless ownership ended before it. A break inside a switch only leaves
+    // the switch, and a throw inside a try whose handlers dispose the local is covered.
+    private static bool LeaksOnExit(StatementSyntax statement, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        statement switch
+        {
+            BreakStatementSyntax => breakLeaves,
+            ContinueStatementSyntax => true,
+            ThrowStatementSyntax => throwLeaves,
+            ReturnStatementSyntax or GotoStatementSyntax => !EndsOwnership(statement, local, context),
+            BlockSyntax block => LeaksOnExit(block.Statements, breakLeaves, throwLeaves, local, context),
+            IfStatementSyntax conditional => !HandsOff(conditional.Condition, local, context) &&
+                LeaksOnEitherBranch(conditional, breakLeaves, throwLeaves, local, context),
+            SwitchStatementSyntax selection => !HandsOff(selection.Expression, local, context) &&
+                selection.Sections.Any(section => LeaksOnExit(section.Statements, breakLeaves: false, throwLeaves, local, context)),
+            WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax => LeavesEnclosing(statement, throwLeaves, local, context),
+            TryStatementSyntax attempt => LeaksOnExit(attempt.Block, breakLeaves, throwLeaves, local, context) ||
+                attempt.Catches.Any(handler => LeaksOnExit(handler.Block, breakLeaves, throwLeaves, local, context)) ||
+                attempt.Finally is { } cleanup && LeaksOnExit(cleanup.Block, breakLeaves, throwLeaves, local, context),
+            UsingStatementSyntax scoped => LeaksOnExit(scoped.Statement, breakLeaves, throwLeaves, local, context),
+            LockStatementSyntax guarded => LeaksOnExit(guarded.Statement, breakLeaves, throwLeaves, local, context),
+            CheckedStatementSyntax region => LeaksOnExit(region.Block, breakLeaves, throwLeaves, local, context),
+            _ => false
+        };
+
+    private static bool LeaksOnEitherBranch(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        LeaksOnExit(conditional.Statement, breakLeaves, throwLeaves, local, context) ||
+        conditional.Else is { } other && LeaksOnExit(other.Statement, breakLeaves, throwLeaves, local, context);
+
+    private static bool LeaksOnExit(IEnumerable<StatementSyntax> statements, bool breakLeaves, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        foreach (StatementSyntax statement in statements)
+        {
+            if (EndsOwnership(statement, breakLeaves, throwLeaves, local, context))
+            {
+                return false;
+            }
+
+            if (LeaksOnExit(statement, breakLeaves, throwLeaves, local, context))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Only a return, a throw, or a goto leaves a loop for the enclosing sequence; break and continue stay in it.
+    private static bool LeavesEnclosing(StatementSyntax loop, bool throwLeaves, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        loop.DescendantNodes(DescendIntoExecution).Any(node =>
+            node is GotoStatementSyntax ||
+            node is ThrowStatementSyntax && throwLeaves ||
+            node is ReturnStatementSyntax returned && !EndsOwnership(returned, local, context));
 
     // Passing the local on, storing it, returning it, or capturing it may hand its ownership elsewhere.
     private static bool HandsOff(SyntaxNode? scope, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>

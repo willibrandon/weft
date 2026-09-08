@@ -286,6 +286,40 @@ public sealed class CodeQlConstantConditionAnalyzerTests(TestContext testContext
         Assert.Contains("false", diagnostic.GetMessage(CultureInfo.InvariantCulture));
     }
 
+    /// <summary>
+    /// Verifies a guard that continues the loop makes a later null test in the same iteration constant.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsNullTestMadeConstantByContinueGuard()
+    {
+        const string Source = """
+            internal static class Projection
+            {
+                internal static int Count(string?[] values)
+                {
+                    int total = 0;
+                    foreach (string? value in values)
+                    {
+                        if (value is null)
+                        {
+                            continue;
+                        }
+
+                        total += value is null ? 0 : value.Length;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlConstantConditionAnalyzer.DiagnosticId, diagnostic.Id);
+        Assert.Contains("false", diagnostic.GetMessage(CultureInfo.InvariantCulture));
+    }
+
     private async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         string sourcePath = Path.Join(Path.GetTempPath(), $"weft-constant-condition-{Guid.NewGuid():N}.cs");

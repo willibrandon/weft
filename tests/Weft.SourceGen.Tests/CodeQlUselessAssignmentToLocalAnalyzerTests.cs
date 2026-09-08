@@ -68,6 +68,7 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzerTests
     [DataRow("ref int answer = ref input; answer++; return input;")]
     [DataRow("int answer = input; ref int alias = ref answer; answer++; return alias;")]
     [DataRow("int answer = input; ref int alias = ref (answer); answer++; return alias;")]
+    [DataRow("int answer = input; ref int alias = ref answer; answer = 1; return alias;")]
     [DataRow("int answer = input; return ++answer;")]
     [DataRow("int answer = input; return answer++;")]
     [DataRow("int answer = 0; for (; answer < input; answer++) { System.Console.WriteLine(answer); } return answer;")]
