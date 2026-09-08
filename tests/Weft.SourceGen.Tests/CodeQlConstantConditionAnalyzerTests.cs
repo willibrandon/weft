@@ -253,6 +253,39 @@ public sealed class CodeQlConstantConditionAnalyzerTests(TestContext testContext
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a null test made constant by a guard in the same nested block is reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsNullTestMadeConstantByGuardInNestedBlock()
+    {
+        const string Source = """
+            internal static class Projection
+            {
+                internal static int Convert(string? value, bool enabled)
+                {
+                    if (enabled)
+                    {
+                        if (value is null)
+                        {
+                            return -1;
+                        }
+
+                        return value is null ? 0 : value.Length;
+                    }
+
+                    return 1;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlConstantConditionAnalyzer.DiagnosticId, diagnostic.Id);
+        Assert.Contains("false", diagnostic.GetMessage(CultureInfo.InvariantCulture));
+    }
+
     private async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         string sourcePath = Path.Join(Path.GetTempPath(), $"weft-constant-condition-{Guid.NewGuid():N}.cs");

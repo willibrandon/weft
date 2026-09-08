@@ -1320,6 +1320,55 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a resource assigned to a local after its declaration is tracked from that assignment.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsResourceAssignedAfterDeclaration()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static int Read()
+                {
+                    MemoryStream stream;
+                    stream = new MemoryStream();
+                    return stream.ReadByte();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource assigned after its declaration and disposed afterwards is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsResourceAssignedAfterDeclarationAndDisposed()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    MemoryStream stream;
+                    stream = new MemoryStream();
+                    stream.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }

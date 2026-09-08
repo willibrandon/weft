@@ -230,6 +230,38 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a lookup in the short-circuit operand after the guard is reported.
+    /// </summary>
+    /// <param name="condition">The guarded condition.</param>
+    [TestMethod]
+    [DataRow("values.ContainsKey(key) && values[key] > 0")]
+    [DataRow("!values.ContainsKey(key) || values[key] > 0")]
+    [DataRow("key.Length > 0 && values.ContainsKey(key) && values[key] > 0")]
+    public async Task ReportsLookupInShortCircuitOperand(string condition)
+    {
+        string source = $$"""
+            using System.Collections.Generic;
+            internal static class Lookup
+            {
+                internal static int Get(Dictionary<string, int> values, string key)
+                {
+                    if ({{condition}})
+                    {
+                        return 1;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlInefficientContainsKeyAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) =>
         CodeQlFileCompilation.AnalyzeAsync(source, new CodeQlInefficientContainsKeyAnalyzer(), testContext.CancellationToken);
 }

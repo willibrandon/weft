@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -73,11 +74,54 @@ public sealed class CodeQlConstantConditionAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        foreach (StatementSyntax statement in body.Statements)
+        // A guard is looked for in every block around the test, from the nearest outward to the method body.
+        foreach (BlockSyntax scope in EnclosingBlocks(pattern, body))
+        {
+            if (FindContainingTopLevelStatement(pattern, scope) is not StatementSyntax tested ||
+                FindGuardValue(context, pattern, scope, tested, testsNull) is not bool constantValue)
+            {
+                continue;
+            }
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                s_rule,
+                pattern.GetLocation(),
+                constantValue ? "true" : "false"));
+            return;
+        }
+    }
+
+    private static IEnumerable<BlockSyntax> EnclosingBlocks(SyntaxNode node, BlockSyntax body)
+    {
+        for (SyntaxNode? current = node.Parent; current is not null; current = current.Parent)
+        {
+            if (current is BlockSyntax block)
+            {
+                yield return block;
+                if (block == body)
+                {
+                    yield break;
+                }
+            }
+            else if (current is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+            {
+                yield break;
+            }
+        }
+    }
+
+    private static bool? FindGuardValue(
+        SyntaxNodeAnalysisContext context,
+        IsPatternExpressionSyntax pattern,
+        BlockSyntax scope,
+        StatementSyntax current,
+        bool testsNull)
+    {
+        foreach (StatementSyntax statement in scope.Statements)
         {
             if (ReferenceEquals(statement, current))
             {
-                return;
+                return null;
             }
 
             if (statement is not IfStatementSyntax guard ||
@@ -88,18 +132,15 @@ public sealed class CodeQlConstantConditionAnalyzer : DiagnosticAnalyzer
                 !SyntaxFactory.AreEquivalent(
                     UnwrapParentheses(guardPattern.Expression),
                     UnwrapParentheses(pattern.Expression)) ||
-                MayHaveChangedSince(context, body, statement, current, pattern.Expression))
+                MayHaveChangedSince(context, scope, statement, current, pattern.Expression))
             {
                 continue;
             }
 
-            bool constantValue = testsNull != guardTestsNull;
-            context.ReportDiagnostic(Diagnostic.Create(
-                s_rule,
-                pattern.GetLocation(),
-                constantValue ? "true" : "false"));
-            return;
+            return testsNull != guardTestsNull;
         }
+
+        return null;
     }
 
     private static bool TryGetCorrelatedNullValue(

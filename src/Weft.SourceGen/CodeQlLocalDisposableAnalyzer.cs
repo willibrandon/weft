@@ -59,19 +59,54 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
 
         foreach (VariableDeclaratorSyntax variable in declaration.Declaration.Variables)
         {
-            if (variable.Initializer?.Value is not { } initializer || !CreatesResource(initializer) ||
-                context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is not
-                    ILocalSymbol local ||
-                !(DisposableLocalOwnership.MayLeak(
-                    local, variable, declaration, block, context) ||
-                    initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
-                    HasConfiguredLibraryDisposal(local, block, context)))
+            if (context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is not ILocalSymbol local)
             {
                 continue;
             }
 
-            context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), local.Name));
+            if (variable.Initializer?.Value is { } initializer)
+            {
+                if (CreatesResource(initializer) &&
+                    (DisposableLocalOwnership.MayLeak(local, variable, declaration, block, context) ||
+                        initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
+                        HasConfiguredLibraryDisposal(local, block, context)))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), local.Name));
+                }
+
+                continue;
+            }
+
+            // A resource assigned to the local later in the same block is tracked from that assignment.
+            if (FindResourceAssignment(local, declaration, block, context) is { } handoff &&
+                DisposableLocalOwnership.MayLeak(local, handoff.Assignment.Right, handoff.Statement, priorRisk: false, block, context))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(s_rule, handoff.Assignment.Left.GetLocation(), local.Name));
+            }
         }
+    }
+
+    private static (ExpressionStatementSyntax Statement, AssignmentExpressionSyntax Assignment)? FindResourceAssignment(
+        ILocalSymbol local,
+        LocalDeclarationStatementSyntax declaration,
+        BlockSyntax block,
+        SyntaxNodeAnalysisContext context)
+    {
+        foreach (StatementSyntax statement in block.Statements.SkipWhile(candidate => candidate != declaration).Skip(1))
+        {
+            if (statement is ExpressionStatementSyntax
+                {
+                    Expression: AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment
+                } handoff &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                CreatesResource(assignment.Right) &&
+                SymbolEqualityComparer.Default.Equals(local, context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol))
+            {
+                return (handoff, assignment);
+            }
+        }
+
+        return null;
     }
 
     private static bool CreatesResource(ExpressionSyntax expression) => expression switch

@@ -92,6 +92,19 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
             condition = SkipParentheses(negative);
         }
 
+        // A short-circuit operand runs only when the guard held, so it is guarded like a branch.
+        SyntaxKind chain = negated ? SyntaxKind.LogicalOrExpression : SyntaxKind.LogicalAndExpression;
+        ExpressionSyntax operand = condition;
+        while (operand.Parent is BinaryExpressionSyntax inner && inner.Right == operand && inner.IsKind(chain))
+        {
+            operand = inner;
+        }
+
+        if (operand.Parent is BinaryExpressionSyntax logical && logical.Left == operand && logical.IsKind(chain))
+        {
+            return logical.Right;
+        }
+
         return condition.Parent switch
         {
             // The whole guarded branch is scanned; a possible mutation before the read stops the search.

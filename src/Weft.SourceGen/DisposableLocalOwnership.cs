@@ -29,20 +29,42 @@ internal static class DisposableLocalOwnership
         BlockSyntax block,
         SyntaxNodeAnalysisContext context)
     {
+        bool laterRisk = declaration.Declaration.Variables
+            .SkipWhile(candidate => candidate != variable)
+            .Skip(1)
+            .Any(candidate => MayThrow(candidate, local, context));
+        return MayLeak(local, variable.Initializer?.Value, declaration, laterRisk, block, context);
+    }
+
+    /// <summary>
+    /// Determines whether a local handed a resource by the given statement can leak from that point on.
+    /// </summary>
+    /// <param name="local">The local that receives the resource.</param>
+    /// <param name="value">The expression that produces the resource.</param>
+    /// <param name="origin">The statement that hands the resource to the local.</param>
+    /// <param name="priorRisk">Whether the origin statement can still fail after the local holds the resource.</param>
+    /// <param name="block">The enclosing executable block.</param>
+    /// <param name="context">The analyzer's semantic context.</param>
+    /// <returns>Whether the local can leak on some path through the block.</returns>
+    internal static bool MayLeak(
+        ILocalSymbol local,
+        ExpressionSyntax? value,
+        StatementSyntax origin,
+        bool priorRisk,
+        BlockSyntax block,
+        SyntaxNodeAnalysisContext context)
+    {
         // Only a local that owns its resource is tracked: one handed something by a construction or a
         // factory. A lookup returns something owned elsewhere, and a task is disposable in name only.
         if (!IsDisposableContract(local.Type) && !local.Type.AllInterfaces.Any(IsDisposableContract) ||
-            IsTask(local.Type) || !CreatesOwnedResource(variable.Initializer?.Value, context))
+            IsTask(local.Type) || !CreatesOwnedResource(value, context))
         {
             return false;
         }
 
-        bool mayThrow = declaration.Declaration.Variables
-            .SkipWhile(candidate => candidate != variable)
-            .Skip(1)
-            .Any(candidate => MayThrow(candidate, local, context));
+        bool mayThrow = priorRisk;
         foreach (StatementSyntax statement in block.Statements
-            .SkipWhile(candidate => candidate != declaration)
+            .SkipWhile(candidate => candidate != origin)
             .Skip(1))
         {
             if (statement is TryStatementSyntax protection &&
@@ -58,13 +80,13 @@ internal static class DisposableLocalOwnership
                 continue;
             }
 
-            bool priorRisk = mayThrow;
+            bool earlierRisk = mayThrow;
             mayThrow |= MayThrow(statement, local, context);
             if (EndsOwnership(statement, local, context))
             {
                 // A plain disposal is exception safe itself, so only an earlier failure could skip it; any
                 // other statement may still fail before the point where the local changes hands.
-                return IsDisposalStatement(statement, local, context) ? priorRisk : mayThrow;
+                return IsDisposalStatement(statement, local, context) ? earlierRisk : mayThrow;
             }
 
             if (mayThrow && HandsOff(statement, local, context))
