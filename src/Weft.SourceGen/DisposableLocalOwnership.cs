@@ -180,23 +180,27 @@ internal static class DisposableLocalOwnership
         SyntaxNode scope,
         ILocalSymbol local,
         SyntaxNodeAnalysisContext context) =>
-        scope.DescendantNodesAndSelf(DescendIntoExecution)
-            .Any(node => node is UsingStatementSyntax { Expression: { } scoped } &&
-                IsLocalOrConfigured(scoped, local, context) ||
-                node is LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } declaration &&
+        scope.DescendantNodesAndSelf(DescendIntoExecution).Any(node => IsDisposal(node, local, context));
+
+    private static bool IsDisposal(SyntaxNode node, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        node switch
+        {
+            UsingStatementSyntax { Expression: { } scoped } => IsLocalOrConfigured(scoped, local, context),
+            LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } declaration =>
                 declaration.Declaration.Variables.Any(variable => variable.Initializer is { } initializer &&
-                    IsLocalOrConfigured(initializer.Value, local, context)) ||
-                node is InvocationExpressionSyntax invocation &&
-                IsDisposeCall(invocation, local, context) ||
-                node is ConditionalAccessExpressionSyntax
+                    IsLocalOrConfigured(initializer.Value, local, context)),
+            InvocationExpressionSyntax invocation => IsDisposeCall(invocation, local, context),
+            ConditionalAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax guarded,
+                WhenNotNull: InvocationExpressionSyntax
                 {
-                    Expression: IdentifierNameSyntax guarded,
-                    WhenNotNull: InvocationExpressionSyntax
-                    {
-                        ArgumentList.Arguments.Count: 0,
-                        Expression: MemberBindingExpressionSyntax { Name.Identifier.ValueText: "Dispose" or "DisposeAsync" }
-                    }
-                } && IsLocal(guarded, local, context));
+                    ArgumentList.Arguments.Count: 0,
+                    Expression: MemberBindingExpressionSyntax { Name.Identifier.ValueText: "Dispose" or "DisposeAsync" }
+                }
+            } => IsLocal(guarded, local, context),
+            _ => false
+        };
 
     // A using over the local, or over its ConfigureAwait wrapper, disposes it when the scope ends.
     private static bool IsLocalOrConfigured(ExpressionSyntax expression, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
