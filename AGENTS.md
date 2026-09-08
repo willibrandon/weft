@@ -16,9 +16,11 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
 - Use Central Package Management as the single package-version source.
 - Support development with any compatible .NET 10 SDK. Do not add or retain a
   `global.json` SDK pin or an exact `dotnet-version` value.
-- Do not hard-code versions for SDKs, runtimes, tools, GitHub Actions, or editor
-  dependencies. Package manifests may retain versions only where the package
-  manager requires them.
+- Do not hard-code versions for SDKs, runtimes, tools, or editor dependencies.
+  Package manifests may retain versions only where the package manager requires
+  them. Reference GitHub Actions by major version tag, as in `actions/checkout@v7`,
+  never by an exact release or commit, so Dependabot moves them within a major and
+  a fix arrives without an edit.
 - Never use a version pin to work around a CI, network, registry, release, or
   runner failure. Diagnose the failure instead.
 - Keep nullable references, analyzers, deterministic builds, and warnings-as-errors enabled.

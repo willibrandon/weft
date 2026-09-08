@@ -105,24 +105,24 @@ static void VerifySources(string root, IReadOnlyList<string> tracked, ICollectio
     Regex typeDeclaration = Patterns.TypeDeclaration();
     foreach (string path in tracked)
     {
-        bool source = path.StartsWith("src/", StringComparison.Ordinal);
-        if (!path.EndsWith(".cs", StringComparison.Ordinal) || !(source || path.StartsWith("tests/", StringComparison.Ordinal) || path.StartsWith("benchmarks/", StringComparison.Ordinal)))
+        if (!path.EndsWith(".cs", StringComparison.Ordinal) || !(path.StartsWith("src/", StringComparison.Ordinal) || path.StartsWith("tests/", StringComparison.Ordinal) || path.StartsWith("benchmarks/", StringComparison.Ordinal)))
         {
             continue;
         }
 
         string text = File.ReadAllText(Path.Combine(root, path));
         int types = typeDeclaration.Count(text);
-        if (types > 1)
+        bool assemblyAttributesOnly = types == 0 && text.Contains("[assembly:", StringComparison.Ordinal);
+        if (types != 1 && !assemblyAttributesOnly)
         {
             failures.Add($"Each C# file holds exactly one type, nested types included: {path} declares {types}.");
         }
 
-        VerifyDocumentation(path, text, source, failures);
+        VerifyDocumentation(path, text, failures);
     }
 }
 
-static void VerifyDocumentation(string path, string text, bool source, ICollection<string> failures)
+static void VerifyDocumentation(string path, string text, ICollection<string> failures)
 {
     string[] lines = text.Split('\n');
     Regex visibleMember = Patterns.VisibleMember();
@@ -142,7 +142,7 @@ static void VerifyDocumentation(string path, string text, bool source, ICollecti
             }
         }
 
-        if (!source || !visibleMember.IsMatch(lines[i]))
+        if (!visibleMember.IsMatch(lines[i]))
         {
             continue;
         }
