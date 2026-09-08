@@ -108,6 +108,20 @@ public sealed class WeftServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Begins shutdown after a short delay so the requesting connection receives its response first.
+    /// </summary>
+    public void RequestShutdownSoon()
+    {
+        _ = ShutdownSoonAsync();
+    }
+
+    private async Task ShutdownSoonAsync()
+    {
+        await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
+        RequestShutdown();
+    }
+
+    /// <summary>
     /// Requests shutdown and waits for it.
     /// </summary>
     /// <returns>A task that completes after shutdown.</returns>

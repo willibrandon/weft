@@ -241,6 +241,10 @@ disconnected after a grace period to keep the client light; reattaching replays 
 
 Leader model with a single chord table, default leader `Ctrl+B`, all rebindable in
 configuration. Every binding names an action id; the palette lists actions with their bindings.
+Chord keys are limited to what the terminal input path can identify as keys: letters, digits,
+arrows, and the punctuation the key mapper knows (`-`, `,`, `.`, `/`, `?`, `=`). Symbols such as
+`%` and `"` arrive as bare characters and cannot terminate a chord, so tmux's split keys are
+replaced with `v` and `-`.
 
 | Chord | Action |
 | --- | --- |
@@ -248,7 +252,7 @@ configuration. Every binding names an action id; the palette lists actions with 
 | `leader c` | new tab |
 | `leader n` / `leader p` | next / previous tab |
 | `leader 1..9` | select tab |
-| `leader %` / `leader "` | split right / split down |
+| `leader v` / `leader -` | split right / split below |
 | `leader x` | close block (confirm if running) |
 | `leader z` | zoom block |
 | `leader f` | float block / re-tile block |
@@ -256,21 +260,13 @@ configuration. Every binding names an action id; the palette lists actions with 
 | `leader H J K L` | resize block by 5 |
 | `leader space` | next layout preset |
 | `leader ,` | rename block |
-| `leader $` | rename session |
+| `leader .` | rename tab |
 | `leader s` | session picker |
 | `leader w` | tab and block picker |
-| `leader [` | copy mode |
-| `leader ]` | paste |
-| `leader :` and `leader P` | command palette |
-| `leader ?` | key binding help |
-
-Non-leader defaults: `Alt+arrow` focus by direction, `Shift+PageUp/PageDown` scroll, mouse
-click to focus, drag on frames to resize, wheel to scroll or forwarded when the block tracks
-the mouse. A `locked` mode passes every key to the block until `leader L` is pressed again.
-`leader S` toggles synchronized input for the tab, sending typed keys to every block in it;
-individual blocks can opt out, which tmux's synchronize-panes cannot do. The status bar shows
-the active mode and the bindings that apply in it, so the key model documents itself the way
-zellij's mode ribbons do.
+| `leader PageUp` | copy mode |
+| `leader Insert` | paste the server paste buffer |
+| `leader ?` | help and command palette |
+| `leader Ctrl+B` | send a literal Ctrl+B |
 
 ### 5.3 Command palette
 

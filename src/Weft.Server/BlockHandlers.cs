@@ -15,10 +15,10 @@ internal static class BlockHandlers
     internal static void Register(RequestDispatcher dispatcher)
     {
         dispatcher.Register(ProtocolMethods.BlockList, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.BlockListResult,
-            (context, parameters, _) =>
+            async (context, parameters, cancellationToken) =>
             {
                 TargetSelector selector = Targets.Parse(parameters.Target);
-                IEnumerable<Session> sessions = selector.IsEmpty ? context.Registry.ListSessions() : [context.Registry.ResolveSession(selector)];
+                IEnumerable<Session> sessions = selector.IsEmpty ? context.Registry.ListSessions() : [await Targets.SessionAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false)];
                 List<BlockInfo> blocks = [];
                 foreach (Session session in sessions)
                 {
@@ -29,16 +29,16 @@ internal static class BlockHandlers
                     }
                 }
 
-                return ValueTask.FromResult(new BlockListResult { Blocks = blocks });
+                return (new BlockListResult { Blocks = blocks });
             });
 
         dispatcher.Register(ProtocolMethods.BlockGet, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.BlockInfo,
-            (context, parameters, _) => ValueTask.FromResult(context.Registry.ToInfo(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)))));
+            async (context, parameters, cancellationToken) => (context.Registry.ToInfo(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false))));
 
         dispatcher.Register(ProtocolMethods.BlockSplit, ProtocolJsonContext.Default.BlockSplitParams, ProtocolJsonContext.Default.BlockInfo,
             async (context, parameters, cancellationToken) =>
             {
-                Block target = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
+                Block target = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 Block created = await context.Registry.SplitBlockAsync(target, parameters.Orientation, parameters.Size, parameters.Before, parameters.Command, parameters.Cwd, parameters.Focus, keepOnExit: false, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToInfo(created);
             });
@@ -46,29 +46,29 @@ internal static class BlockHandlers
         dispatcher.Register(ProtocolMethods.BlockClose, ProtocolJsonContext.Default.BlockCloseParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                await context.Registry.CloseBlockAsync(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)), cancellationToken).ConfigureAwait(false);
+                await context.Registry.CloseBlockAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
 
         dispatcher.Register(ProtocolMethods.BlockKill, ProtocolJsonContext.Default.BlockKillParams, ProtocolJsonContext.Default.EmptyResult,
-            (context, parameters, _) =>
+            async (context, parameters, cancellationToken) =>
             {
-                SessionRegistry.KillBlock(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)), parameters.Signal);
-                return ValueTask.FromResult(EmptyResult.Instance);
+                SessionRegistry.KillBlock(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Signal);
+                return (EmptyResult.Instance);
             });
 
         dispatcher.Register(ProtocolMethods.BlockRename, ProtocolJsonContext.Default.BlockRenameParams, ProtocolJsonContext.Default.BlockInfo,
-            (context, parameters, _) =>
+            async (context, parameters, cancellationToken) =>
             {
-                Block block = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 context.Registry.RenameBlock(block, parameters.Title);
-                return ValueTask.FromResult(context.Registry.ToInfo(block));
+                return (context.Registry.ToInfo(block));
             });
 
         dispatcher.Register(ProtocolMethods.BlockFocus, ProtocolJsonContext.Default.BlockFocusParams, ProtocolJsonContext.Default.BlockInfo,
-            (context, parameters, _) =>
+            async (context, parameters, cancellationToken) =>
             {
-                Block block = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 if (parameters.Direction is { } direction)
                 {
                     block = context.Registry.Neighbor(block, direction)
@@ -76,13 +76,13 @@ internal static class BlockHandlers
                 }
 
                 context.Registry.FocusBlock(block);
-                return ValueTask.FromResult(context.Registry.ToInfo(block));
+                return (context.Registry.ToInfo(block));
             });
 
         dispatcher.Register(ProtocolMethods.BlockZoom, ProtocolJsonContext.Default.BlockZoomParams, ProtocolJsonContext.Default.TabInfo,
             async (context, parameters, cancellationToken) =>
             {
-                Block block = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 await context.Registry.ZoomBlockAsync(block, parameters.Zoom, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToInfo(block.Tab);
             });
@@ -90,8 +90,8 @@ internal static class BlockHandlers
         dispatcher.Register(ProtocolMethods.BlockSwap, ProtocolJsonContext.Default.BlockSwapParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                Block first = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
-                Block second = context.Registry.ResolveBlock(Targets.Parse(parameters.With));
+                Block first = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
+                Block second = await Targets.BlockAsync(context.Registry, parameters.With, cancellationToken).ConfigureAwait(false);
                 await context.Registry.SwapBlocksAsync(first, second, cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
@@ -99,30 +99,30 @@ internal static class BlockHandlers
         dispatcher.Register(ProtocolMethods.BlockSendKeys, ProtocolJsonContext.Default.BlockSendKeysParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                await SessionRegistry.SendKeysAsync(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)), parameters.Keys, parameters.Literal, cancellationToken).ConfigureAwait(false);
+                await SessionRegistry.SendKeysAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Keys, parameters.Literal, cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
 
         dispatcher.Register(ProtocolMethods.BlockType, ProtocolJsonContext.Default.BlockTextParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                await SessionRegistry.TypeAsync(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)), parameters.Text, cancellationToken).ConfigureAwait(false);
+                await SessionRegistry.TypeAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Text, cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
 
         dispatcher.Register(ProtocolMethods.BlockPaste, ProtocolJsonContext.Default.BlockTextParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {
-                await SessionRegistry.PasteAsync(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)), parameters.Text, cancellationToken).ConfigureAwait(false);
+                await SessionRegistry.PasteAsync(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Text, cancellationToken).ConfigureAwait(false);
                 return EmptyResult.Instance;
             });
 
         dispatcher.Register(ProtocolMethods.BlockCapture, ProtocolJsonContext.Default.BlockCaptureParams, ProtocolJsonContext.Default.BlockCaptureResult,
-            (context, parameters, _) =>
+            async (context, parameters, cancellationToken) =>
             {
-                Block block = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 BlockCapture capture = SessionRegistry.Capture(block, parameters.History, parameters.Format);
-                return ValueTask.FromResult(new BlockCaptureResult
+                return (new BlockCaptureResult
                 {
                     Block = block.Id.ToString(),
                     Revision = capture.Revision,
@@ -136,8 +136,11 @@ internal static class BlockHandlers
             });
 
         dispatcher.Register(ProtocolMethods.BlockWait, ProtocolJsonContext.Default.BlockWaitParams, ProtocolJsonContext.Default.BlockWaitResult,
-            (context, parameters, cancellationToken) =>
-                BlockWaiter.WaitAsync(context.Registry.ResolveBlock(Targets.Parse(parameters.Target)), parameters, cancellationToken));
+            async (context, parameters, cancellationToken) =>
+            {
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
+                return await BlockWaiter.WaitAsync(block, parameters, cancellationToken).ConfigureAwait(false);
+            });
 
         dispatcher.Register(ProtocolMethods.BlockRun, ProtocolJsonContext.Default.BlockRunParams, ProtocolJsonContext.Default.BlockRunResult,
             async (context, parameters, cancellationToken) =>

@@ -383,6 +383,30 @@ internal sealed partial class SessionRegistry
     }
 
     /// <summary>
+    /// Resurrects the session a selector names when it is stored but not running.
+    /// </summary>
+    /// <param name="selector">The selector.</param>
+    /// <param name="cancellationToken">Cancels startup.</param>
+    /// <returns>A task that completes when the session is running or nothing applies.</returns>
+    internal async Task EnsureRunningAsync(TargetSelector selector, CancellationToken cancellationToken)
+    {
+        if (selector.SessionName is not { } name)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_sessions.Exists(session => string.Equals(session.Name, name, StringComparison.Ordinal)))
+            {
+                return;
+            }
+        }
+
+        await ResurrectAsync(name, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Recreates a stored session that is not running.
     /// </summary>
     /// <param name="name">The session name.</param>

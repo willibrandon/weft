@@ -31,7 +31,7 @@ internal sealed class RequestDispatcher
         string method,
         JsonTypeInfo<TParams> parameters,
         JsonTypeInfo<TResult> result,
-        Func<RequestContext, TParams, CancellationToken, ValueTask<TResult>> handler)
+        Func<RequestContext, TParams, CancellationToken, Task<TResult>> handler)
     {
         _handlers[method] = async (context, request, cancellationToken) =>
         {

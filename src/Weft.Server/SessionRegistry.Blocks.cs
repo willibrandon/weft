@@ -349,6 +349,7 @@ internal sealed partial class SessionRegistry
             ServerLog.Error("Could not start block " + block.Id, exception);
             lock (_gate)
             {
+                block.State = BlockState.Closed;
                 tab.Blocks.Remove(block);
                 tab.Layout.Remove(block.Id);
                 if (tab.Active == block)
@@ -363,7 +364,10 @@ internal sealed partial class SessionRegistry
 
         lock (_gate)
         {
-            block.State = block.Host.HasExited ? BlockState.Exited : BlockState.Running;
+            if (block.State == BlockState.Starting)
+            {
+                block.State = BlockState.Running;
+            }
         }
 
         _events.Publish(ProtocolEvents.BlockCreated, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);

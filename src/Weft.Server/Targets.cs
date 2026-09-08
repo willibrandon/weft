@@ -23,4 +23,46 @@ internal static class Targets
 
         return selector;
     }
+
+    /// <summary>
+    /// Resolves a session, resurrecting a stored session when the name is not running.
+    /// </summary>
+    /// <param name="registry">The registry.</param>
+    /// <param name="target">The target text.</param>
+    /// <param name="cancellationToken">Cancels resurrection.</param>
+    /// <returns>The session.</returns>
+    internal static async Task<Session> SessionAsync(SessionRegistry registry, string? target, CancellationToken cancellationToken)
+    {
+        TargetSelector selector = Parse(target);
+        await registry.EnsureRunningAsync(selector, cancellationToken).ConfigureAwait(false);
+        return registry.ResolveSession(selector);
+    }
+
+    /// <summary>
+    /// Resolves a tab, resurrecting a stored session when the name is not running.
+    /// </summary>
+    /// <param name="registry">The registry.</param>
+    /// <param name="target">The target text.</param>
+    /// <param name="cancellationToken">Cancels resurrection.</param>
+    /// <returns>The tab.</returns>
+    internal static async Task<Tab> TabAsync(SessionRegistry registry, string? target, CancellationToken cancellationToken)
+    {
+        TargetSelector selector = Parse(target);
+        await registry.EnsureRunningAsync(selector, cancellationToken).ConfigureAwait(false);
+        return registry.ResolveTab(selector);
+    }
+
+    /// <summary>
+    /// Resolves a block, resurrecting a stored session when the name is not running.
+    /// </summary>
+    /// <param name="registry">The registry.</param>
+    /// <param name="target">The target text.</param>
+    /// <param name="cancellationToken">Cancels resurrection.</param>
+    /// <returns>The block.</returns>
+    internal static async Task<Block> BlockAsync(SessionRegistry registry, string? target, CancellationToken cancellationToken)
+    {
+        TargetSelector selector = Parse(target);
+        await registry.EnsureRunningAsync(selector, cancellationToken).ConfigureAwait(false);
+        return registry.ResolveBlock(selector);
+    }
 }

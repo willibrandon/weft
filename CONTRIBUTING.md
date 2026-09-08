@@ -13,7 +13,8 @@ dotnet run --file scripts/Verify-Repository.cs
 ```
 
 Tests use MSTest 4 on Microsoft.Testing.Platform. Always run `dotnet test` and
-never use `--no-build`. Product tests exercise real processes, pseudo-terminals,
+never use `--no-build`. Do not pass `--nologo` to `dotnet test`: it is forwarded to the
+test host, which rejects it and reports zero tests. Product tests exercise real processes, pseudo-terminals,
 Unix-domain sockets, and files. Mocking libraries and hand-written substitutes for
 production services are prohibited.
 

@@ -1,5 +1,3 @@
-using System.CommandLine;
-
 namespace Weft.App;
 
 /// <summary>
@@ -12,9 +10,6 @@ internal static class Program
     /// </summary>
     /// <param name="args">The command line arguments.</param>
     /// <returns>The process exit code.</returns>
-    private static async Task<int> Main(string[] args)
-    {
-        RootCommand root = new("weft: durable terminal sessions and a multiplexer for all work.");
-        return await root.Parse(args).InvokeAsync().ConfigureAwait(false);
-    }
+    private static async Task<int> Main(string[] args) =>
+        await RootCommandFactory.Create().Parse(args).InvokeAsync().ConfigureAwait(false);
 }

@@ -14,7 +14,7 @@ internal static class ServerHandlers
     internal static void Register(RequestDispatcher dispatcher)
     {
         dispatcher.Register(ProtocolMethods.ServerInfo, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.ServerInfoResult,
-            (context, _, _) => ValueTask.FromResult(new ServerInfoResult
+            (context, _, _) => Task.FromResult(new ServerInfoResult
             {
                 Version = context.Server.Options.Version,
                 Protocol = ProtocolVersion.Current,
@@ -29,25 +29,25 @@ internal static class ServerHandlers
         dispatcher.Register(ProtocolMethods.ServerShutdown, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.EmptyResult,
             (context, _, _) =>
             {
-                context.Server.RequestShutdown();
-                return ValueTask.FromResult(EmptyResult.Instance);
+                context.Server.RequestShutdownSoon();
+                return Task.FromResult(EmptyResult.Instance);
             });
 
         dispatcher.Register(ProtocolMethods.EventsSubscribe, ProtocolJsonContext.Default.EventsSubscribeParams, ProtocolJsonContext.Default.EmptyResult,
             (context, parameters, _) =>
             {
                 context.StartEventPump(context.Registry.Events.Subscribe(parameters.Since));
-                return ValueTask.FromResult(EmptyResult.Instance);
+                return Task.FromResult(EmptyResult.Instance);
             });
 
         dispatcher.Register(ProtocolMethods.PasteGet, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.PasteBuffer,
-            (context, _, _) => ValueTask.FromResult(new PasteBuffer { Text = context.Registry.PasteBuffer }));
+            (context, _, _) => Task.FromResult(new PasteBuffer { Text = context.Registry.PasteBuffer }));
 
         dispatcher.Register(ProtocolMethods.PasteSet, ProtocolJsonContext.Default.PasteBuffer, ProtocolJsonContext.Default.EmptyResult,
             (context, parameters, _) =>
             {
                 context.Registry.PasteBuffer = parameters.Text;
-                return ValueTask.FromResult(EmptyResult.Instance);
+                return Task.FromResult(EmptyResult.Instance);
             });
 
         dispatcher.Register(ProtocolMethods.WaitFor, ProtocolJsonContext.Default.WaitChannelParams, ProtocolJsonContext.Default.EmptyResult,
@@ -63,7 +63,7 @@ internal static class ServerHandlers
             (context, parameters, _) =>
             {
                 context.Server.Waits.Signal(parameters.Channel);
-                return ValueTask.FromResult(EmptyResult.Instance);
+                return Task.FromResult(EmptyResult.Instance);
             });
     }
 }

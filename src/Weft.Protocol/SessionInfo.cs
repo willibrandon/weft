@@ -6,7 +6,7 @@ namespace Weft.Protocol;
 /// <summary>
 /// A session as reported by the server.
 /// </summary>
-public sealed class SessionInfo
+public sealed record SessionInfo
 {
     /// <summary>
     /// Gets the session id in text form.

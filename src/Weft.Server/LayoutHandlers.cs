@@ -14,12 +14,12 @@ internal static class LayoutHandlers
     internal static void Register(RequestDispatcher dispatcher)
     {
         dispatcher.Register(ProtocolMethods.LayoutGet, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.LayoutInfo,
-            (context, parameters, _) => ValueTask.FromResult(context.Registry.ToLayoutInfo(context.Registry.ResolveTab(Targets.Parse(parameters.Target)))));
+            async (context, parameters, cancellationToken) => (context.Registry.ToLayoutInfo(await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false))));
 
         dispatcher.Register(ProtocolMethods.LayoutApply, ProtocolJsonContext.Default.LayoutApplyParams, ProtocolJsonContext.Default.LayoutInfo,
             async (context, parameters, cancellationToken) =>
             {
-                Tab tab = context.Registry.ResolveTab(Targets.Parse(parameters.Target));
+                Tab tab = await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 await context.Registry.ApplyLayoutAsync(tab, parameters.Layout, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToLayoutInfo(tab);
             });
@@ -27,7 +27,7 @@ internal static class LayoutHandlers
         dispatcher.Register(ProtocolMethods.LayoutPreset, ProtocolJsonContext.Default.LayoutPresetParams, ProtocolJsonContext.Default.LayoutInfo,
             async (context, parameters, cancellationToken) =>
             {
-                Tab tab = context.Registry.ResolveTab(Targets.Parse(parameters.Target));
+                Tab tab = await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 await context.Registry.ApplyPresetAsync(tab, parameters.Preset, parameters.MainPercent, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToLayoutInfo(tab);
             });
@@ -35,7 +35,7 @@ internal static class LayoutHandlers
         dispatcher.Register(ProtocolMethods.LayoutResize, ProtocolJsonContext.Default.LayoutResizeParams, ProtocolJsonContext.Default.LayoutInfo,
             async (context, parameters, cancellationToken) =>
             {
-                Block block = context.Registry.ResolveBlock(Targets.Parse(parameters.Target));
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 await context.Registry.ResizeBlockAsync(block, parameters.Direction, parameters.Amount, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToLayoutInfo(block.Tab);
             });

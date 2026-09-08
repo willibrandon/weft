@@ -5,7 +5,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Server runs real shells over the control socket with passing end-to-end tests; next is the attach client UI and CLI.
+- Phase 1 is usable end to end: attach UI, CLI, on-demand server, persistence. Next: headless client tests, then phase 2 UX.
 
 ## Phase 0: Research and scaffolding
 
@@ -22,20 +22,20 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Phase 1: Durable sessions
 
-- [x] Server process: unix-socket listener, lock file for single instance (on-demand start pending)
+- [x] Server process: unix-socket listener, lock file for single instance, on-demand start from any command
 - [x] Session, tab, and block model with stable ids
 - [x] PTY-backed blocks via Hex1b child processes with scrollback
-- [ ] Attach and detach from any number of clients
-- [ ] Client renders server-side state (smart client, no ANSI re-parsing)
+- [x] Attach and detach from any number of clients
+- [x] Client renders server-side state (smart client, no ANSI re-parsing)
 - [x] Session persistence across server restarts (layout, cwd, commands)
 - [x] Real tests: server process, real shells, real sockets
 
 ## Phase 2: Multiplexer UX
 
-- [ ] Layout tree: splits, resize, zoom, presets, even/main layouts
+- [x] Layout tree: splits, resize, zoom, presets, even/main layouts
 - [ ] Floating blocks
-- [ ] Status bar, block titles, activity indicators
-- [ ] Leader-key keybinding model with modes and repeat
+- [x] Status bar and block titles (activity indicators pending)
+- [x] Leader-key keybinding model (modes and repeat pending)
 - [ ] Command palette
 - [ ] Native scrollback, selection, search, copy
 - [ ] Mouse: focus, resize, select, scroll
@@ -43,7 +43,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Phase 3: Composable control surface
 
-- [ ] CLI: every UI action addressable from the command line
+- [x] CLI: every UI action addressable from the command line
 - [x] Event streaming with sequence numbers and replay ring
 - [x] Run-and-await, capture, wait-for-pattern, send-keys, named wait channels
 - [ ] Hooks
@@ -54,11 +54,13 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [ ] Multi-client live sharing with read-only observers
 - [ ] Remote attach over forwarded sockets
 - [ ] Session recording and replay
-- [ ] Native AOT release packaging for linux, macOS, windows
+- [ ] Native AOT release packaging for linux, macOS, windows (linux-x64 publish verified clean)
 
 ## Verification log
 
 | Date | What | Result |
 | --- | --- | --- |
 | 2026-09-08 | `dotnet test --test-modules` on Weft.Tests | 37 passed, 0 failed |
-| 2026-09-08 | `dotnet test --solution` | reports zero tests; host runs fine when invoked directly, cause under investigation |
+| 2026-09-08 | `dotnet test --solution` | 37 passed once `--nologo` was dropped; the flag is forwarded to the host and rejected |
+| 2026-09-08 | hex1b tool drives `weft attach`: type, assert, split, zoom, help, detach | all steps observed on screen; session survived detach with 3 shells |
+| 2026-09-08 | `dotnet publish -r linux-x64` Native AOT | clean, 9.8 MB |

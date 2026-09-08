@@ -13,10 +13,14 @@ internal sealed class BlockHost : IAsyncDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly OutputRevisionFilter _revision = new();
     private readonly Hex1bTerminalChildProcess _process;
+    private readonly Hmp1PresentationAdapter _presentation;
     private readonly Hex1bTerminal _terminal;
     private readonly LayoutAuthorityPeer _authority;
+    private readonly TaskCompletionSource<int> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Exception? _startError;
     private Task<int>? _runTask;
-    private Task? _exitTask;
+    private Task? _listenTask;
     private int _clientCount;
 
     /// <summary>
@@ -42,31 +46,36 @@ internal sealed class BlockHost : IAsyncDisposable
     {
         SocketPath = socketPath;
         _process = new Hex1bTerminalChildProcess(command, [.. arguments], workingDirectory, environment, inheritEnvironment: true, width, height);
-        _terminal = Hex1bTerminal.CreateBuilder()
-            .WithDimensions(width, height)
-            .WithScrollback(scrollback)
-            .WithWorkload(_process)
-            .WithHmp1UdsServer(socketPath, options =>
+        _presentation = new Hmp1PresentationAdapter(width, height)
+        {
+            OnClientConnected = (_, _) =>
             {
-                options.OnClientConnected = (_, _) =>
-                {
-                    Interlocked.Increment(ref _clientCount);
-                    return Task.CompletedTask;
-                };
-                options.OnClientDisconnected = (_, _) =>
-                {
-                    Interlocked.Decrement(ref _clientCount);
-                    return Task.CompletedTask;
-                };
-            })
-            .AddWorkloadFilter(_revision)
-            .Build();
+                Interlocked.Increment(ref _clientCount);
+                return Task.CompletedTask;
+            },
+            OnClientDisconnected = (_, _) =>
+            {
+                Interlocked.Decrement(ref _clientCount);
+                return Task.CompletedTask;
+            }
+        };
+        var options = new Hex1bTerminalOptions
+        {
+            Width = width,
+            Height = height,
+            WorkloadAdapter = _process,
+            PresentationAdapter = _presentation,
+            ScrollbackCapacity = scrollback,
+            RunCallback = RunProcessAsync
+        };
+        options.WorkloadFilters.Add(_revision);
+        _terminal = new Hex1bTerminal(options);
         _terminal.WindowTitleChanged += title => TitleChanged?.Invoke(title);
         _authority = new LayoutAuthorityPeer(socketPath, width, height);
     }
 
     /// <summary>
-    /// Raised when the process exits, with its exit code.
+    /// Raised when the process exits, with its exit code, after its final output has been applied.
     /// </summary>
     internal event Action<int>? Exited;
 
@@ -111,15 +120,29 @@ internal sealed class BlockHost : IAsyncDisposable
     internal int ClientCount => Volatile.Read(ref _clientCount);
 
     /// <summary>
-    /// Starts the terminal, the process, and the layout authority peer.
+    /// Starts the socket listener, the terminal, the process, and the layout authority peer.
     /// </summary>
     /// <param name="cancellationToken">Cancels startup.</param>
     /// <returns>A task that completes when the block is serving and the process is running.</returns>
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
+        _listenTask = ListenAsync(_stopping.Token);
         _runTask = _terminal.RunAsync(_stopping.Token);
-        await _process.StartAsync(cancellationToken).ConfigureAwait(false);
-        _exitTask = WatchExitAsync();
+        while (!_started.Task.IsCompleted)
+        {
+            if (_runTask.IsCompleted)
+            {
+                throw new InvalidOperationException("The block terminal stopped before its process started.");
+            }
+
+            await Task.Delay(5, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_startError is { } error)
+        {
+            throw new InvalidOperationException("The block process could not be started: " + error.Message, error);
+        }
+
         await _authority.StartAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -163,7 +186,8 @@ internal sealed class BlockHost : IAsyncDisposable
     internal BlockCapture Capture(int historyLines, CaptureFormat format)
     {
         long revision = Revision;
-        using Hex1bTerminalSnapshot snapshot = _terminal.CreateSnapshot(Math.Max(0, historyLines));
+        int wanted = Math.Max(0, Math.Min(historyLines, _terminal.ScrollbackCount));
+        using Hex1bTerminalSnapshot snapshot = _terminal.CreateSnapshot(wanted);
         List<string> lines = new(snapshot.Height);
         if (format == CaptureFormat.Ansi)
         {
@@ -213,12 +237,13 @@ internal sealed class BlockHost : IAsyncDisposable
             }
         }
 
-        if (_exitTask is { } exit)
+        if (_listenTask is { } listen)
         {
-            await exit.ConfigureAwait(false);
+            await listen.ConfigureAwait(false);
         }
 
         await _terminal.DisposeAsync().ConfigureAwait(false);
+        await _presentation.DisposeAsync().ConfigureAwait(false);
         await _process.DisposeAsync().ConfigureAwait(false);
         _stopping.Dispose();
         try
@@ -233,28 +258,122 @@ internal sealed class BlockHost : IAsyncDisposable
         }
     }
 
+    private async Task<int> RunProcessAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _process.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            _startError = exception;
+            _started.TrySetResult();
+            return -1;
+        }
+
+        _started.TrySetResult();
+        int exitCode;
+        try
+        {
+            exitCode = await _process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ServerLog.Warn("Could not wait for the block process: " + exception.Message);
+            exitCode = -1;
+        }
+
+        // The pseudo-terminal may still hold output the process wrote just before exiting; keep the
+        // pumps running until the screen has been quiet for a moment so captures see the final state.
+        await DrainOutputAsync(cancellationToken).ConfigureAwait(false);
+        _exited.TrySetResult(exitCode);
+        Exited?.Invoke(exitCode);
+        return exitCode;
+    }
+
+    private async Task DrainOutputAsync(CancellationToken cancellationToken)
+    {
+        long deadline = Environment.TickCount64 + 1500;
+        while (Environment.TickCount64 < deadline && !cancellationToken.IsCancellationRequested)
+        {
+            long before = _revision.Revision;
+            using var quiet = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            quiet.CancelAfter(80);
+            try
+            {
+                await _revision.Changed.WaitAsync(quiet.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                if (_revision.Revision == before)
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    private async Task ListenAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (Stream stream in Hmp1Transports.ListenUnixSocket(SocketPath, cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                _ = AcceptAsync(stream, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (IOException exception)
+        {
+            ServerLog.Warn("Block socket listener ended: " + exception.Message);
+        }
+        catch (System.Net.Sockets.SocketException exception)
+        {
+            ServerLog.Warn("Block socket listener ended: " + exception.Message);
+        }
+    }
+
+    private async Task AcceptAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _presentation.AddClient(stream, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ObjectDisposedException or System.Net.Sockets.SocketException)
+        {
+            ServerLog.Warn("A block peer failed to attach: " + exception.Message);
+            await stream.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     private async Task TerminateProcessAsync()
     {
-        if (!_process.HasStarted || _process.HasExited || _exitTask is not { } exit)
+        if (!_process.HasStarted || _process.HasExited)
         {
             return;
         }
 
         // A closing terminal sends SIGHUP; interactive shells ignore SIGTERM but honour SIGHUP.
         Kill(1);
-        if (await WaitForExitAsync(exit, TimeSpan.FromSeconds(2)).ConfigureAwait(false))
+        if (await WaitForExitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false))
         {
             return;
         }
 
         Kill(9);
-        await WaitForExitAsync(exit, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        await WaitForExitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
     }
 
-    private static async Task<bool> WaitForExitAsync(Task exit, TimeSpan timeout)
+    private async Task<bool> WaitForExitAsync(TimeSpan timeout)
     {
         long deadline = Environment.TickCount64 + (long)timeout.TotalMilliseconds;
-        while (!exit.IsCompleted)
+        while (!_exited.Task.IsCompleted && !_process.HasExited)
         {
             if (Environment.TickCount64 >= deadline)
             {
@@ -265,21 +384,5 @@ internal sealed class BlockHost : IAsyncDisposable
         }
 
         return true;
-    }
-
-    private async Task WatchExitAsync()
-    {
-        int exitCode;
-        try
-        {
-            exitCode = await _process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (InvalidOperationException exception)
-        {
-            ServerLog.Warn("Could not wait for the block process: " + exception.Message);
-            exitCode = -1;
-        }
-
-        Exited?.Invoke(exitCode);
     }
 }
