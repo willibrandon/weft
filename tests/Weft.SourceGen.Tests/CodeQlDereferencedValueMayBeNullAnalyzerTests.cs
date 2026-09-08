@@ -100,6 +100,74 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzerTests(TestContext te
         Assert.ContainsSingle(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a write in the branch not taken on the suppression's path does not void the guard.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsGuardWithWriteInSiblingBranch()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+
+            internal static class Lookup
+            {
+                internal static int Length(Dictionary<string, string> map, string key, bool use)
+                {
+                    if (map.TryGetValue(key, out string? value) && value is not null)
+                    {
+                        if (use)
+                        {
+                            return value!.Length;
+                        }
+                        else
+                        {
+                            value = null;
+                        }
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a write in the branch the suppression sits in still voids the guard.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsGuardWithWriteInTakenBranch()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+
+            internal static class Lookup
+            {
+                internal static int Length(Dictionary<string, string> map, string key, bool use)
+                {
+                    if (map.TryGetValue(key, out string? value) && value is not null)
+                    {
+                        if (use)
+                        {
+                            value = null;
+                            return value!.Length;
+                        }
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlDereferencedValueMayBeNullAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlDereferencedValueMayBeNullAnalyzer(), testContext.CancellationToken);
 }

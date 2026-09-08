@@ -145,8 +145,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             context.SemanticModel.GetSymbolInfo(
                 identifier,
                 context.CancellationToken).Symbol is not ILocalSymbol local ||
-            !local.Type.AllInterfaces.Any(static item =>
-                item.ToDisplayString() == "System.IDisposable") ||
+            !IsDisposable(local.Type) ||
             local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(
                 context.CancellationToken) is not VariableDeclaratorSyntax variable ||
             variable.Initializer?.Value is not
@@ -162,6 +161,10 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             variable.GetLocation(),
             local.Name));
     }
+
+    private static bool IsDisposable(ITypeSymbol type) =>
+        type.ToDisplayString() == "System.IDisposable" ||
+        type.AllInterfaces.Any(static item => item.ToDisplayString() == "System.IDisposable");
 
     private static ExpressionSyntax? GetLambdaValue(ExpressionSyntax expression) => expression switch
     {

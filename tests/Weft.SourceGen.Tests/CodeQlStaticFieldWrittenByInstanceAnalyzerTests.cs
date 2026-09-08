@@ -79,6 +79,58 @@ public sealed class CodeQlStaticFieldWrittenByInstanceAnalyzerTests(TestContext 
         Assert.IsEmpty(await AnalyzeAsync(source).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// Verifies an instance member that changes a mutable struct static field through a member is reported.
+    /// </summary>
+    /// <param name="member">The instance member performing the write.</param>
+    [TestMethod]
+    [DataRow("internal void Set() { s_state.Count = 1; }")]
+    [DataRow("internal void Set() { s_state.Increment(); }")]
+    public async Task ReportsInstanceWritesThroughStructMembers(string member)
+    {
+        string source = $$"""
+            internal struct State
+            {
+                public int Count;
+
+                public void Increment() => Count++;
+            }
+
+            internal sealed class Sample
+            {
+                internal static State s_state;
+                {{member}}
+            }
+            """;
+
+        Diagnostic diagnostic = Assert.ContainsSingle(await AnalyzeAsync(source).ConfigureAwait(false));
+        Assert.AreEqual(CodeQlStaticFieldWrittenByInstanceAnalyzer.DiagnosticId, diagnostic.Id);
+        Assert.AreEqual(source.LastIndexOf("s_state", StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
+    }
+
+    /// <summary>
+    /// Verifies reading a member of a mutable struct static field from an instance member is not a write.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsInstanceReadsThroughStructMembers()
+    {
+        const string Source = """
+            internal struct State
+            {
+                public int Count;
+            }
+
+            internal sealed class Sample
+            {
+                internal static State s_state;
+
+                internal int Read() => s_state.Count;
+            }
+            """;
+
+        Assert.IsEmpty(await AnalyzeAsync(Source).ConfigureAwait(false));
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlStaticFieldWrittenByInstanceAnalyzer(), testContext.CancellationToken);
 }

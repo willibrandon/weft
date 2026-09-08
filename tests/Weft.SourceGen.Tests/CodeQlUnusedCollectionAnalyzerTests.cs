@@ -65,6 +65,31 @@ public sealed class CodeQlUnusedCollectionAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies an alias declared as the collection interface itself is reported like a concrete list.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsMutationOnlyInterfaceTypedAlias()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+
+            internal static class Formatter
+            {
+                internal static void Append((List<int> Values, int Depth) state)
+                {
+                    (ICollection<int> values, int depth) = state;
+                    values.Add(depth);
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlUnusedCollectionAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         var parseOptions = new CSharpParseOptions(

@@ -46,30 +46,12 @@ public sealed class CodeQlStaticFieldWrittenByInstanceAnalyzer : DiagnosticAnaly
             context.ContainingSymbol is not IMethodSymbol { IsStatic: false } method ||
             !SymbolEqualityComparer.Default.Equals(
                 reference.Field.ContainingType.OriginalDefinition, method.ContainingType.OriginalDefinition) ||
-            !IsWrite(reference))
+            !FieldWrites.IsWrite(reference))
         {
             return;
         }
 
         context.ReportDiagnostic(Diagnostic.Create(
             s_rule, reference.Syntax.GetLocation(), method.Name, reference.Field.Name));
-    }
-
-    private static bool IsWrite(IFieldReferenceOperation reference)
-    {
-        IOperation current = reference;
-        while (current.Parent is IConversionOperation or IParenthesizedOperation or ITupleOperation)
-        {
-            current = current.Parent;
-        }
-
-        return current.Parent switch
-        {
-            IAssignmentOperation assignment => ReferenceEquals(assignment.Target, current),
-            IIncrementOrDecrementOperation increment => ReferenceEquals(increment.Target, current),
-            IArgumentOperation argument => argument.Parameter?.RefKind is RefKind.Ref or RefKind.Out,
-            IAddressOfOperation => true,
-            _ => false
-        };
     }
 }

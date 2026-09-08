@@ -179,21 +179,41 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzer : DiagnosticAnalyze
                 !WrittenBeforeSuppression(statement.Statement, suppression, local, context));
 
     private static bool WrittenBeforeSuppression(
-        StatementSyntax guarded,
+        SyntaxNode scope,
         PostfixUnaryExpressionSyntax suppression,
         ILocalSymbol local,
         SyntaxNodeAnalysisContext context)
     {
-        // A write to the local anywhere in the guarded region up to the suppression voids the guard's proof.
-        StatementSyntax first = guarded;
-        StatementSyntax last = guarded;
-        if (guarded is BlockSyntax block && block.Statements.Count > 0)
+        // Only a write that can run before the suppression voids the guard's proof: an earlier
+        // statement of the same block, the condition, or the branch on the suppression's own path.
+        // A construct the scan does not split, such as a loop or a try, counts as a whole.
+        if (!scope.Span.Contains(suppression.Span))
         {
-            first = block.Statements[0];
-            last = block.Statements.LastOrDefault(statement => statement.Span.Start <= suppression.Span.Start) ?? first;
+            return scope.SpanStart < suppression.SpanStart && Writes(scope, local, context);
         }
 
-        DataFlowAnalysis? flow = context.SemanticModel.AnalyzeDataFlow(first, last);
+        return scope switch
+        {
+            BlockSyntax block => block.Statements.Any(statement => WrittenBeforeSuppression(statement, suppression, local, context)),
+            IfStatementSyntax conditional => WrittenBeforeSuppression(conditional.Condition, suppression, local, context) ||
+                WrittenBeforeSuppression(TakenBranch(conditional, suppression), suppression, local, context),
+            _ => Writes(scope, local, context)
+        };
+    }
+
+    private static StatementSyntax TakenBranch(IfStatementSyntax conditional, PostfixUnaryExpressionSyntax suppression) =>
+        conditional.Statement.Span.Contains(suppression.Span) || conditional.Else is null
+            ? conditional.Statement
+            : conditional.Else.Statement;
+
+    private static bool Writes(SyntaxNode scope, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        DataFlowAnalysis? flow = scope switch
+        {
+            ExpressionSyntax expression => context.SemanticModel.AnalyzeDataFlow(expression),
+            StatementSyntax statement => context.SemanticModel.AnalyzeDataFlow(statement),
+            _ => null
+        };
         return flow is null || !flow.Succeeded ||
             flow.WrittenInside.Any(written => SymbolEqualityComparer.Default.Equals(written, local));
     }

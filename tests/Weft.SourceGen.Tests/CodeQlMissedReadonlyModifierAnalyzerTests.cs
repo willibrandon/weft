@@ -67,6 +67,61 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzerTests(TestContext testCo
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a field handed out by writable reference is not asked to become readonly.
+    /// </summary>
+    /// <param name="member">A member that exposes the field by ref.</param>
+    [TestMethod]
+    [DataRow("internal ref int Value => ref _value;")]
+    [DataRow("internal ref int Get() { return ref _value; }")]
+    [DataRow("internal void Bump() { ref int alias = ref _value; alias++; }")]
+    public async Task AcceptsFieldExposedByWritableReference(string member)
+    {
+        string source = $$"""
+            internal sealed class Holder
+            {
+                private int _value;
+
+                public Holder(int value)
+                {
+                    _value = value;
+                }
+
+                {{member}}
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a field returned by readonly reference still needs the modifier.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFieldExposedByReadonlyReference()
+    {
+        const string Source = """
+            internal sealed class Holder
+            {
+                private int _value;
+
+                public Holder(int value)
+                {
+                    _value = value;
+                }
+
+                internal ref readonly int Value => ref _value;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlMissedReadonlyModifierAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
     /// <summary>

@@ -116,6 +116,7 @@ public sealed class CodeQlUnusedCollectionAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool IsCollection(ITypeSymbol type) =>
+        type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_ICollection_T ||
         type.AllInterfaces.Any(static candidate =>
             candidate.OriginalDefinition.SpecialType ==
                 SpecialType.System_Collections_Generic_ICollection_T);

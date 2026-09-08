@@ -94,59 +94,13 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
         ConcurrentDictionary<IFieldSymbol, byte> disqualifyingWrites)
     {
         var reference = (IFieldReferenceOperation)context.Operation;
-        if (!IsWrite(reference) || IsInitializationWrite(reference, context.ContainingSymbol))
+        if (!FieldWrites.IsWrite(reference) || IsInitializationWrite(reference, context.ContainingSymbol))
         {
             return;
         }
 
         disqualifyingWrites.TryAdd(reference.Field, 0);
     }
-
-    private static bool IsWrite(IFieldReferenceOperation reference) => IsWrittenThrough(reference, reference.Field.Type);
-
-    private static bool IsWrittenThrough(IOperation reference, ITypeSymbol type)
-    {
-        IOperation? current = reference;
-        while (current.Parent is IConversionOperation or IParenthesizedOperation or ITupleOperation)
-        {
-            current = current.Parent;
-        }
-
-        // A mutable struct is changed in place through a non-readonly call or a member write on it; a
-        // readonly field would hand those a defensive copy and lose the update.
-        if (IsMutableStruct(type))
-        {
-            switch (current.Parent)
-            {
-                case IInvocationOperation invocation when ReferenceEquals(invocation.Instance, current) && !invocation.TargetMethod.IsReadOnly:
-                    return true;
-                case IMemberReferenceOperation member when ReferenceEquals(member.Instance, current):
-                    return member.Type is { } memberType && IsWrittenThrough(member, memberType);
-            }
-        }
-
-        return current.Parent switch
-        {
-            IDeconstructionAssignmentOperation deconstruction =>
-                ReferenceEquals(deconstruction.Target, current),
-            ISimpleAssignmentOperation assignment =>
-                ReferenceEquals(assignment.Target, current),
-            ICompoundAssignmentOperation assignment =>
-                ReferenceEquals(assignment.Target, current),
-            ICoalesceAssignmentOperation assignment =>
-                ReferenceEquals(assignment.Target, current),
-            IIncrementOrDecrementOperation increment =>
-                ReferenceEquals(increment.Target, current),
-            IArgumentOperation argument => argument.Parameter?.RefKind is RefKind.Ref or RefKind.Out,
-            IAddressOfOperation => true,
-            _ => false
-        };
-    }
-
-    private static bool IsMutableStruct(ITypeSymbol type) =>
-        type is INamedTypeSymbol { IsValueType: true, IsReadOnly: false, EnumUnderlyingType: null } &&
-            type.SpecialType == SpecialType.None ||
-        type is ITypeParameterSymbol { HasValueTypeConstraint: true };
 
     private static bool IsInitializationWrite(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {

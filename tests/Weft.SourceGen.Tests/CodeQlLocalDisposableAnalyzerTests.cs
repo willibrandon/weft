@@ -676,6 +676,42 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
             .ToString(diagnostic.Location.SourceSpan));
     }
 
+    /// <summary>
+    /// Verifies a local declared as the disposable interface itself is reported when a collection acquires it unscoped.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsInterfaceTypedLocalAcquiredWithoutScope()
+    {
+        const string Source = """
+            using System;
+            using System.IO;
+            namespace Weft.Debugger
+            {
+                internal sealed class DisposableCollection<T> where T : IDisposable
+                {
+                    public T Acquire(Func<T> create) => create();
+                }
+            }
+
+            namespace Sample
+            {
+                internal static class Holder
+                {
+                    internal static void Keep(Weft.Debugger.DisposableCollection<IDisposable> owner)
+                    {
+                        IDisposable resource = new MemoryStream();
+                        owner.Acquire(() => resource);
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsNotEmpty(diagnostics);
+        Assert.IsTrue(diagnostics.All(diagnostic => diagnostic.Id == CodeQlLocalDisposableAnalyzer.DiagnosticId));
+    }
+
     private async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         string sourcePath = Path.Join(Path.GetTempPath(), $"weft-disposable-local-{Guid.NewGuid():N}.cs");
