@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -28,7 +29,10 @@ internal static class DisposableLocalOwnership
         BlockSyntax block,
         SyntaxNodeAnalysisContext context)
     {
-        if (!IsDisposableContract(local.Type) && !local.Type.AllInterfaces.Any(IsDisposableContract))
+        // Only a local that owns its resource is tracked: one handed something by a construction or a
+        // factory. A lookup returns something owned elsewhere, and a task is disposable in name only.
+        if (!IsDisposableContract(local.Type) && !local.Type.AllInterfaces.Any(IsDisposableContract) ||
+            IsTask(local.Type) || !CreatesOwnedResource(variable.Initializer?.Value, context))
         {
             return false;
         }
@@ -36,7 +40,7 @@ internal static class DisposableLocalOwnership
         bool mayThrow = declaration.Declaration.Variables
             .SkipWhile(candidate => candidate != variable)
             .Skip(1)
-            .Any(candidate => MayThrow(candidate, context));
+            .Any(candidate => MayThrow(candidate, local, context));
         foreach (StatementSyntax statement in block.Statements
             .SkipWhile(candidate => candidate != declaration)
             .Skip(1))
@@ -55,103 +59,140 @@ internal static class DisposableLocalOwnership
             }
 
             bool priorRisk = mayThrow;
-            mayThrow |= MayThrow(statement, context);
-            if (EndsWithTransfer(statement, local, mayThrow, context))
+            mayThrow |= MayThrow(statement, local, context);
+            if (EndsOwnership(statement, local, context))
             {
-                return mayThrow;
+                // A plain disposal is exception safe itself, so only an earlier failure could skip it; any
+                // other statement may still fail before the point where the local changes hands.
+                return IsDisposalStatement(statement, local, context) ? priorRisk : mayThrow;
             }
 
-            if (DisposesOnNormalPath(statement, local, context))
+            if (mayThrow && HandsOff(statement, local, context))
             {
-                // The disposal itself is exception safe, but any earlier failure would have skipped it.
-                return priorRisk;
+                // Some path through the statement hands the local off after work that can throw.
+                return true;
             }
         }
 
-        // Reaching the end still owning a resource the local was handed leaks it on every path.
-        return CreatesOwnedResource(variable.Initializer?.Value, context) && StaysOwned(block, declaration, local, context);
+        // Reaching the end still owning the resource leaks it on every path.
+        return true;
     }
 
-    // Only a construction or a well-known factory hands the local a resource of its own; another call
-    // commonly returns something owned elsewhere, which is not a leak here.
+    // A construction, a File factory, or a static factory of the resource's own type hands the local a
+    // resource of its own; another call commonly returns something owned elsewhere.
     private static bool CreatesOwnedResource(ExpressionSyntax? initializer, SyntaxNodeAnalysisContext context) =>
         initializer switch
         {
             BaseObjectCreationExpressionSyntax => true,
-            InvocationExpressionSyntax invocation => context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol is
-                IMethodSymbol { IsStatic: true, ContainingType: { Name: "File", ContainingNamespace.Name: "IO" } },
+            ParenthesizedExpressionSyntax parenthesized => CreatesOwnedResource(parenthesized.Expression, context),
+            AwaitExpressionSyntax awaited => CreatesOwnedResource(awaited.Expression, context),
+            InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner, Name.Identifier.ValueText: "ConfigureAwait" } } =>
+                CreatesOwnedResource(inner, context),
+            InvocationExpressionSyntax invocation =>
+                context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol is IMethodSymbol method && IsFactory(method),
             ConditionalExpressionSyntax choice => CreatesOwnedResource(choice.WhenTrue, context) || CreatesOwnedResource(choice.WhenFalse, context),
             _ => false
         };
 
-    private static bool DisposesInFinally(TryStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        statement.Finally is { } cleanup && DisposesLocalOnEveryPath(cleanup.Block, local, context);
+    private static bool IsFactory(IMethodSymbol method) =>
+        method.IsStatic &&
+        (method.ContainingType is { Name: "File", ContainingNamespace.Name: "IO" } ||
+            SymbolEqualityComparer.Default.Equals(method.ContainingType, Unwrap(method.ReturnType)));
 
-    private static bool EndsOwnership(BlockSyntax block, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        DisposesLocal(block, local, context) || ReturnsLocal(block, local, context) ||
-        block.Statements.Any(statement => TransfersLocal(statement, local, context));
+    private static ITypeSymbol Unwrap(ITypeSymbol type) =>
+        type is INamedTypeSymbol { Name: "Task" or "ValueTask", TypeArguments.Length: 1 } wrapped ? wrapped.TypeArguments[0] : type;
 
-    // A handler only runs on failure, so a disposal inside one does not end ownership on the normal path.
-    private static bool DisposesOnNormalPath(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+    // Ownership ends on every path through the statement when the local is disposed or handed off on each
+    // of them; a branch that neither disposes nor hands off, or that may not run at all, keeps it owned.
+    private static bool EndsOwnership(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         statement switch
         {
-            TryStatementSyntax attempt => DisposesLocal(attempt.Block, local, context) ||
-                attempt.Finally is { } cleanup && DisposesLocal(cleanup.Block, local, context),
-            _ => DisposesLocal(statement, local, context)
+            BlockSyntax block => block.Statements.Any(inner => EndsOwnership(inner, local, context)),
+            ExpressionStatementSyntax expression => IsDisposalStatement(expression, local, context) || HandsOff(expression.Expression, local, context),
+            LocalDeclarationStatementSyntax declaration => IsDisposalStatement(declaration, local, context) || HandsOff(declaration.Declaration, local, context),
+            ReturnStatementSyntax returned => HandsOff(returned, local, context),
+            UsingStatementSyntax scoped => IsDisposalStatement(scoped, local, context) || HandsOff(scoped.Expression, local, context) ||
+                HandsOff(scoped.Declaration, local, context) || EndsOwnership(scoped.Statement, local, context),
+            IfStatementSyntax conditional => HandsOff(conditional.Condition, local, context) ||
+                EndsOwnership(conditional.Statement, local, context) && conditional.Else is { } other && EndsOwnership(other.Statement, local, context),
+            SwitchStatementSyntax selection => HandsOff(selection.Expression, local, context) || EndsOwnershipInEverySection(selection, local, context),
+            ForEachStatementSyntax loop => HandsOff(loop.Expression, local, context),
+            WhileStatementSyntax loop => HandsOff(loop.Condition, local, context),
+            LockStatementSyntax guarded => EndsOwnership(guarded.Statement, local, context),
+            TryStatementSyntax attempt => EndsOwnership(attempt.Block, local, context) ||
+                attempt.Finally is { } cleanup && EndsOwnership(cleanup.Block, local, context),
+            _ => false
         };
 
-    // A reference that only reads a member or compares with null keeps the local owned here; passing it
-    // on, storing it, returning it, or capturing it may hand the ownership elsewhere.
-    private static bool StaysOwned(
-        BlockSyntax block,
-        LocalDeclarationStatementSyntax declaration,
-        ILocalSymbol local,
-        SyntaxNodeAnalysisContext context) =>
-        block.Statements
-            .SkipWhile(candidate => candidate != declaration)
-            .SelectMany(static statement => statement.DescendantNodes().OfType<IdentifierNameSyntax>())
+    private static bool EndsOwnershipInEverySection(SwitchStatementSyntax selection, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        selection.Sections.Any(static section => section.Labels.Any(static label => label is DefaultSwitchLabelSyntax)) &&
+        selection.Sections.All(section => section.Statements.Any(inner => EndsOwnership(inner, local, context)));
+
+    // Passing the local on, storing it, returning it, or capturing it may hand its ownership elsewhere.
+    private static bool HandsOff(SyntaxNode? scope, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        scope is not null && scope.DescendantNodesAndSelf()
+            .OfType<IdentifierNameSyntax>()
             .Where(identifier => IsLocal(identifier, local, context))
-            .All(static identifier => identifier.Parent switch
+            .Any(static identifier => identifier.Parent switch
             {
-                MemberAccessExpressionSyntax member => member.Expression == identifier,
-                ConditionalAccessExpressionSyntax conditional => conditional.Expression == identifier,
-                ElementAccessExpressionSyntax element => element.Expression == identifier,
-                BinaryExpressionSyntax comparison => comparison.IsKind(SyntaxKind.EqualsExpression) || comparison.IsKind(SyntaxKind.NotEqualsExpression),
-                IsPatternExpressionSyntax => true,
+                ArgumentSyntax or EqualsValueClauseSyntax or ReturnStatementSyntax or YieldStatementSyntax => true,
+                InitializerExpressionSyntax or ExpressionElementSyntax or CastExpressionSyntax or AnonymousFunctionExpressionSyntax => true,
+                AssignmentExpressionSyntax assignment => assignment.Right == identifier,
+                ConditionalExpressionSyntax choice => choice.WhenTrue == identifier || choice.WhenFalse == identifier,
+                BinaryExpressionSyntax binary => binary.IsKind(SyntaxKind.CoalesceExpression),
                 _ => false
             });
 
-    // A transfer nested under a condition covers only some paths, so the scan continues for the
-    // others unless the risk already accumulated makes the transfer unsafe on its own.
-    private static bool EndsWithTransfer(
-        StatementSyntax statement,
-        ILocalSymbol local,
-        bool mayThrow,
-        SyntaxNodeAnalysisContext context) =>
-        (ReturnsLocal(statement, local, context) || TransfersLocal(statement, local, context)) &&
-        (mayThrow || statement is ReturnStatementSyntax or ExpressionStatementSyntax);
+    private static bool IsDisposalStatement(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        statement switch
+        {
+            ExpressionStatementSyntax { Expression: InvocationExpressionSyntax invocation } => IsDisposeCall(invocation, local, context),
+            ExpressionStatementSyntax { Expression: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } } => IsDisposeCall(awaited, local, context),
+            ExpressionStatementSyntax { Expression: ConditionalAccessExpressionSyntax guarded } => IsGuardedDisposeCall(guarded, local, context),
+            UsingStatementSyntax { Expression: { } scoped } => IsLocalOrConfigured(scoped, local, context),
+            LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } declaration =>
+                declaration.Declaration.Variables.Any(variable => variable.Initializer is { } initializer &&
+                    IsLocalOrConfigured(initializer.Value, local, context)),
+            _ => false
+        };
+
+    private static bool IsGuardedDisposeCall(ConditionalAccessExpressionSyntax guarded, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        guarded is
+        {
+            Expression: IdentifierNameSyntax receiver,
+            WhenNotNull: InvocationExpressionSyntax
+            {
+                ArgumentList.Arguments.Count: 0,
+                Expression: MemberBindingExpressionSyntax { Name.Identifier.ValueText: "Dispose" or "DisposeAsync" }
+            }
+        } && IsLocal(receiver, local, context);
+
+    private static bool DisposesInFinally(TryStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        statement.Finally is { } cleanup && DisposesLocalOnEveryPath(cleanup.Block, local, context);
 
     private static bool IsDisposableContract(ITypeSymbol type) =>
         type.ToDisplayString() is "System.IDisposable" or "System.IAsyncDisposable";
 
-    private static bool TransfersLocal(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        statement is ExpressionStatementSyntax
+    // A task is disposable in name only; nothing disposes one, and the CodeQL queries do not ask for it.
+    private static bool IsTask(ITypeSymbol type)
+    {
+        for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
         {
-            Expression: AssignmentExpressionSyntax
+            if (current.ToDisplayString() == "System.Threading.Tasks.Task")
             {
-                Left: IdentifierNameSyntax destination,
-                Right: IdentifierNameSyntax source
+                return true;
             }
-        } && IsLocal(source, local, context) &&
-        context.SemanticModel.GetSymbolInfo(destination, context.CancellationToken).Symbol is ILocalSymbol receiver &&
-        !SymbolEqualityComparer.Default.Equals(receiver, local);
+        }
+
+        return false;
+    }
 
     private static bool HasExceptionCleanup(
         TryStatementSyntax statement,
         ILocalSymbol local,
         SyntaxNodeAnalysisContext context)
     {
-        if (statement.Finally is { } cleanup && DisposesLocalOnEveryPath(cleanup.Block, local, context))
+        if (DisposesInFinally(statement, local, context))
         {
             return true;
         }
@@ -163,44 +204,6 @@ internal static class DisposableLocalOwnership
                 (clause.Declaration is null || context.SemanticModel.GetTypeInfo(
                     clause.Declaration.Type, context.CancellationToken).Type?.ToDisplayString() == "System.Exception"));
     }
-
-    private static bool ReturnsLocal(
-        StatementSyntax statement,
-        ILocalSymbol local,
-        SyntaxNodeAnalysisContext context) =>
-        statement.DescendantNodesAndSelf(DescendIntoExecution)
-            .OfType<ReturnStatementSyntax>()
-            .Any(returned => returned.Expression is IdentifierNameSyntax result &&
-                IsLocal(result, local, context) ||
-                returned.Expression is TupleExpressionSyntax tuple &&
-                tuple.Arguments.Any(argument => argument.Expression is IdentifierNameSyntax identifier &&
-                    IsLocal(identifier, local, context)));
-
-    private static bool DisposesLocal(
-        SyntaxNode scope,
-        ILocalSymbol local,
-        SyntaxNodeAnalysisContext context) =>
-        scope.DescendantNodesAndSelf(DescendIntoExecution).Any(node => IsDisposal(node, local, context));
-
-    private static bool IsDisposal(SyntaxNode node, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        node switch
-        {
-            UsingStatementSyntax { Expression: { } scoped } => IsLocalOrConfigured(scoped, local, context),
-            LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } declaration =>
-                declaration.Declaration.Variables.Any(variable => variable.Initializer is { } initializer &&
-                    IsLocalOrConfigured(initializer.Value, local, context)),
-            InvocationExpressionSyntax invocation => IsDisposeCall(invocation, local, context),
-            ConditionalAccessExpressionSyntax
-            {
-                Expression: IdentifierNameSyntax guarded,
-                WhenNotNull: InvocationExpressionSyntax
-                {
-                    ArgumentList.Arguments.Count: 0,
-                    Expression: MemberBindingExpressionSyntax { Name.Identifier.ValueText: "Dispose" or "DisposeAsync" }
-                }
-            } => IsLocal(guarded, local, context),
-            _ => false
-        };
 
     // A using over the local, or over its ConfigureAwait wrapper, disposes it when the scope ends.
     private static bool IsLocalOrConfigured(ExpressionSyntax expression, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
@@ -214,47 +217,56 @@ internal static class DisposableLocalOwnership
             _ => false
         };
 
-    private static bool DisposesLocalOnEveryPath(
-        SyntaxNode scope,
-        ILocalSymbol local,
-        SyntaxNodeAnalysisContext context)
-    {
-        // Only a disposal that is a statement of the handler itself runs on every path through it;
-        // one nested under a condition or loop can be skipped.
-        IEnumerable<StatementSyntax> statements = scope switch
-        {
-            BlockSyntax block => block.Statements,
-            CatchClauseSyntax handler => handler.Block.Statements,
-            FinallyClauseSyntax handler => handler.Block.Statements,
-            StatementSyntax statement => [statement],
-            _ => []
-        };
-        return statements.Any(statement => statement switch
-        {
-            ExpressionStatementSyntax { Expression: InvocationExpressionSyntax invocation } => IsDisposeCall(invocation, local, context),
-            ExpressionStatementSyntax { Expression: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } } => IsDisposeCall(awaited, local, context),
-            UsingStatementSyntax { Expression: IdentifierNameSyntax scoped } => IsLocal(scoped, local, context),
-            _ => false
-        });
-    }
+    // Only a disposal that is a statement of the block itself runs on every path through it; one nested
+    // under a condition or loop can be skipped.
+    private static bool DisposesLocalOnEveryPath(BlockSyntax block, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        block.Statements.Any(statement => IsDisposalStatement(statement, local, context));
 
     private static bool IsDisposeCall(InvocationExpressionSyntax invocation, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        invocation.ArgumentList.Arguments.Count == 0 &&
-        invocation.Expression is MemberAccessExpressionSyntax
+        invocation.Expression switch
         {
-            Expression: IdentifierNameSyntax receiver,
-            Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
-        } &&
-        IsLocal(receiver, local, context);
+            // The ConfigureAwait wrapper around an async disposal is still that disposal.
+            MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner, Name.Identifier.ValueText: "ConfigureAwait" } =>
+                IsDisposeCall(inner, local, context),
+            MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax receiver, Name.Identifier.ValueText: "Dispose" or "DisposeAsync" } =>
+                invocation.ArgumentList.Arguments.Count == 0 && IsLocal(receiver, local, context),
+            _ => false
+        };
 
-    private static bool MayThrow(SyntaxNode scope, SyntaxNodeAnalysisContext context) =>
-        scope.DescendantNodesAndSelf(DescendIntoExecution).Any(node =>
-            node is BaseObjectCreationExpressionSyntax or InvocationExpressionSyntax or
-                AwaitExpressionSyntax or ThrowStatementSyntax or ThrowExpressionSyntax or
-                ElementAccessExpressionSyntax or CastExpressionSyntax ||
-            node is MemberAccessExpressionSyntax member &&
-                context.SemanticModel.GetSymbolInfo(member, context.CancellationToken).Symbol is
-                    IPropertySymbol);
+    // A call that takes the local, directly or inside a wrapper or a lambda, is the handoff itself.
+    private static bool ReceivesLocal(ArgumentListSyntax? arguments, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        arguments is not null && arguments.Arguments.Any(argument =>
+            argument.Expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(identifier => IsLocal(identifier, local, context)));
+
+    // Neither the callee of the call that receives the local nor the target it is stored into runs after
+    // the handoff has started, so nothing in them counts as risk.
+    private static IEnumerable<TextSpan> HandoffSpans(SyntaxNode node, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        node switch
+        {
+            AssignmentExpressionSyntax { Right: IdentifierNameSyntax stored } assignment when IsLocal(stored, local, context) => [assignment.Left.Span],
+            InvocationExpressionSyntax invocation when ReceivesLocal(invocation.ArgumentList, local, context) => [invocation.Expression.Span],
+            _ => []
+        };
+
+    // Disposing the local itself cannot leak it, and a call handed the local owns it from then on, so
+    // neither counts as risk.
+    private static bool MayThrow(SyntaxNode scope, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        List<SyntaxNode> nodes = [.. scope.DescendantNodesAndSelf(DescendIntoExecution)];
+        List<TextSpan> handoffs = [.. nodes.SelectMany(node => HandoffSpans(node, local, context))];
+        return nodes
+            .Where(node => !handoffs.Any(span => span.Contains(node.Span)))
+            .Any(node => node switch
+            {
+                InvocationExpressionSyntax invocation => !IsDisposeCall(invocation, local, context) && !ReceivesLocal(invocation.ArgumentList, local, context),
+                AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => !IsDisposeCall(awaited, local, context) && !ReceivesLocal(awaited.ArgumentList, local, context),
+                BaseObjectCreationExpressionSyntax creation => !ReceivesLocal(creation.ArgumentList, local, context),
+                AwaitExpressionSyntax or ThrowStatementSyntax or ThrowExpressionSyntax => true,
+                ElementAccessExpressionSyntax or CastExpressionSyntax => true,
+                MemberAccessExpressionSyntax member => context.SemanticModel.GetSymbolInfo(member, context.CancellationToken).Symbol is IPropertySymbol,
+                _ => false
+            });
+    }
 
     private static bool IsLocal(
         IdentifierNameSyntax identifier,

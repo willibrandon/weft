@@ -1174,6 +1174,152 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a disposal that runs only under a condition does not end ownership on the other path.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsDisposalOnlyUnderCondition()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path, bool cleanup)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (cleanup)
+                    {
+                        stream.Dispose();
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a branch that hands the local off and one that disposes it together end ownership.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsHandoffOrDisposalOnEveryBranch()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path, bool keep, List<FileStream> owner)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (keep)
+                    {
+                        owner.Add(stream);
+                    }
+                    else
+                    {
+                        stream.Dispose();
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a handoff through an argument after fallible work is reported like a return.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsArgumentHandoffAfterFallibleWork()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Keep(string path, List<FileStream> owner)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    Prepare();
+                    owner.Add(stream);
+                }
+
+                private static void Prepare()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a store that happens only under a condition leaves the local owned on the other path.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsConditionalStoreLeavingOwnership()
+    {
+        const string Source = """
+            using System.IO;
+            internal sealed class Holder
+            {
+                private FileStream? _owner;
+
+                internal void Open(string path, bool keep)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (keep)
+                    {
+                        _owner = stream;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies disposing the local on an early exit is not counted as risk for the disposal that follows.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsEarlyDisposalBeforeFinalDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path, bool fail)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (fail)
+                    {
+                        stream.Dispose();
+                        return;
+                    }
+
+                    stream.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }
