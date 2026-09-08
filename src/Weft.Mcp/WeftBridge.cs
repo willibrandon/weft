@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Weft.Client;
 
 namespace Weft.Mcp;
@@ -22,7 +22,8 @@ public sealed class WeftBridge : IAsyncDisposable
     internal const int IdleCapacity = 4;
 
     private readonly Func<CancellationToken, Task<ControlClient>> _connect;
-    private readonly ConcurrentBag<ControlClient> _idle = [];
+    private readonly Lock _gate = new();
+    private readonly Stack<ControlClient> _idle = new();
 
     /// <summary>
     /// Creates a bridge that opens connections through the given delegate.
@@ -48,7 +49,7 @@ public sealed class WeftBridge : IAsyncDisposable
     /// <returns>A task that completes when the pool is empty.</returns>
     public async ValueTask DisposeAsync()
     {
-        while (_idle.TryTake(out ControlClient? client))
+        while (TryTakeIdle(out ControlClient? client))
         {
             await client.DisposeAsync().ConfigureAwait(false);
         }
@@ -61,18 +62,17 @@ public sealed class WeftBridge : IAsyncDisposable
     /// <param name="reusable">Whether the call finished, so no request is still running on the connection.</param>
     internal void Return(ControlClient client, bool reusable)
     {
-        if (!reusable || client.Closed.IsCompleted || _idle.Count >= IdleCapacity)
+        if (reusable && !client.Closed.IsCompleted && TryKeepIdle(client))
         {
-            _ = client.DisposeAsync().AsTask();
             return;
         }
 
-        _idle.Add(client);
+        _ = client.DisposeAsync().AsTask();
     }
 
     private async Task<ControlClient> AcquireAsync(CancellationToken cancellationToken)
     {
-        while (_idle.TryTake(out ControlClient? idle))
+        while (TryTakeIdle(out ControlClient? idle))
         {
             if (!idle.Closed.IsCompleted)
             {
@@ -83,5 +83,28 @@ public sealed class WeftBridge : IAsyncDisposable
         }
 
         return await _connect(cancellationToken).ConfigureAwait(false);
+    }
+
+    // The capacity check and the add happen under one lock, so concurrent returns cannot all see room.
+    private bool TryKeepIdle(ControlClient client)
+    {
+        lock (_gate)
+        {
+            if (_idle.Count >= IdleCapacity)
+            {
+                return false;
+            }
+
+            _idle.Push(client);
+            return true;
+        }
+    }
+
+    private bool TryTakeIdle([NotNullWhen(true)] out ControlClient? client)
+    {
+        lock (_gate)
+        {
+            return _idle.TryPop(out client);
+        }
     }
 }
