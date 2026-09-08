@@ -91,27 +91,27 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    // A local declared by a for initializer lives for the loop, so its body is the scope that must
-    // dispose it or hand it off before the loop is left.
+    // A local declared by a for initializer lives for the loop, so the loop must dispose it or hand it
+    // off on every path before it is left, the paths that skip the body included.
     private static void AnalyzeLoopDeclaration(SyntaxNodeAnalysisContext context)
     {
         var loop = (ForStatementSyntax)context.Node;
-        if (loop.Declaration is not { } declaration || loop.Statement is not BlockSyntax body)
+        if (loop.Declaration is not { } declaration)
         {
             return;
         }
 
-        foreach (VariableDeclaratorSyntax variable in declaration.Variables.Where(variable => LeaksFromLoopDeclaration(variable, body, context)))
+        foreach (VariableDeclaratorSyntax variable in declaration.Variables.Where(variable => LeaksFromLoopDeclaration(variable, loop, context)))
         {
             context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), variable.Identifier.ValueText));
         }
     }
 
-    private static bool LeaksFromLoopDeclaration(VariableDeclaratorSyntax variable, BlockSyntax body, SyntaxNodeAnalysisContext context) =>
+    private static bool LeaksFromLoopDeclaration(VariableDeclaratorSyntax variable, ForStatementSyntax loop, SyntaxNodeAnalysisContext context) =>
         variable.Initializer is { } initializer &&
         CreatesResource(initializer.Value) &&
         context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is ILocalSymbol local &&
-        DisposableLocalOwnership.MayLeak(local, initializer.Value, origin: null, priorRisk: false, body, context);
+        DisposableLocalOwnership.MayLeakInLoop(local, variable, loop, context);
 
     private static IEnumerable<ExpressionStatementSyntax> FindResourceAssignments(
         ILocalSymbol local,

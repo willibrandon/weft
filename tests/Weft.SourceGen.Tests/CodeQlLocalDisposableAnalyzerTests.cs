@@ -1839,6 +1839,138 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a for initializer resource with a braceless body that never disposes it is reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLoopDeclaredResourceWithEmbeddedBody()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    for (var stream = new MemoryStream(); ; )
+                        stream.WriteByte(1);
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a loop condition that can be false leaks a for initializer resource even when the body disposes it.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLoopDeclaredResourceWhenConditionCanSkipBody()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool condition)
+                {
+                    for (var stream = new MemoryStream(); condition; )
+                    {
+                        stream.Dispose();
+                        break;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a break out of a loop leads to cleanup after the loop when the local outlives it.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsLoopBreakFollowedByDisposalAfterLoop()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool condition)
+                {
+                    MemoryStream? stream = null;
+                    while (condition)
+                    {
+                        stream = new MemoryStream();
+                        break;
+                    }
+
+                    stream?.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a resource assigned each iteration without disposal is reported, since the next iteration overwrites it.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsResourceOverwrittenByNextIteration()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool condition)
+                {
+                    MemoryStream? stream = null;
+                    while (condition)
+                    {
+                        stream = new MemoryStream();
+                    }
+
+                    stream?.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a parenthesized return still hands the resource to the caller.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsParenthesizedReturn()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static MemoryStream Open()
+                {
+                    var stream = new MemoryStream();
+                    return (stream);
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }

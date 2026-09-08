@@ -54,10 +54,7 @@ internal static class DisposableLocalOwnership
         SyntaxNode scope,
         SyntaxNodeAnalysisContext context)
     {
-        // Only a local that owns its resource is tracked: one handed something by a construction or a
-        // factory. A lookup returns something owned elsewhere, and a task is disposable in name only.
-        if (!IsDisposableContract(local.Type) && !local.Type.AllInterfaces.Any(IsDisposableContract) ||
-            IsTask(local.Type) || !CreatesOwnedResource(value, context))
+        if (!Tracks(local, value, context))
         {
             return false;
         }
@@ -66,10 +63,21 @@ internal static class DisposableLocalOwnership
         StatementSyntax? cursor = origin;
         while (true)
         {
+            // A break inside a loop or switch that the local outlives leads to the statements after it,
+            // where cleanup may still follow; one inside a construct holding the declaration leaks.
+            StatementSyntax? target = EnclosingBreakTarget(scope);
+            bool leavesToCleanup = target is not null && DeclaredOutside(target, local, context);
+            bool jumped = false;
             foreach (StatementSyntax statement in StatementsOf(scope)
                 .SkipWhile(candidate => cursor is not null && candidate != cursor)
                 .Skip(cursor is null ? 0 : 1))
             {
+                if (statement is BreakStatementSyntax && leavesToCleanup)
+                {
+                    jumped = true;
+                    break;
+                }
+
                 if (statement is TryStatementSyntax protection &&
                     HasExceptionCleanup(protection, local, context))
                 {
@@ -104,11 +112,24 @@ internal static class DisposableLocalOwnership
                     return true;
                 }
 
-                if (LeaksOnExit(statement, breakLeaves: true, throwLeaves: true, local, context))
+                if (LeaksOnExit(statement, breakLeaves: !leavesToCleanup, throwLeaves: true, local, context))
                 {
                     // Some path leaves the block early while the local is still owned.
                     return true;
                 }
+            }
+
+            if (jumped)
+            {
+                SyntaxNode? after = target?.Parent;
+                if (after is not (BlockSyntax or SwitchSectionSyntax))
+                {
+                    return true;
+                }
+
+                cursor = target;
+                scope = after;
+                continue;
             }
 
             // The end of a nested block hands the scan to the enclosing block, after the statement that
@@ -139,13 +160,75 @@ internal static class DisposableLocalOwnership
         }
     }
 
+    /// <summary>
+    /// Determines whether a local declared by a for initializer can leak before or while the loop runs.
+    /// </summary>
+    /// <param name="local">The local the initializer declares.</param>
+    /// <param name="variable">The declarator whose initializer produces the resource.</param>
+    /// <param name="loop">The loop whose initializer declares the local.</param>
+    /// <param name="context">The analyzer's semantic context.</param>
+    /// <returns>Whether the local can leak on some path through the loop.</returns>
+    internal static bool MayLeakInLoop(ILocalSymbol local, VariableDeclaratorSyntax variable, ForStatementSyntax loop, SyntaxNodeAnalysisContext context)
+    {
+        if (loop.Declaration is null || !Tracks(local, variable.Initializer?.Value, context))
+        {
+            return false;
+        }
+
+        // The condition runs right after the initializer; when it can be false or can fail, the body may
+        // never run and the loop is left with the local still owned.
+        if (loop.Condition is { } condition &&
+            (!condition.IsKind(SyntaxKind.TrueLiteralExpression) || MayThrow(condition, local, context)))
+        {
+            return true;
+        }
+
+        bool laterRisk = loop.Declaration.Variables
+            .SkipWhile(candidate => candidate != variable)
+            .Skip(1)
+            .Any(candidate => MayThrow(candidate, local, context));
+        return MayLeak(local, variable.Initializer?.Value, null, laterRisk, loop.Statement, context);
+    }
+
+    // Only a local that owns its resource is tracked: one handed something by a construction or a
+    // factory. A lookup returns something owned elsewhere, and a task is disposable in name only.
+    private static bool Tracks(ILocalSymbol local, ExpressionSyntax? value, SyntaxNodeAnalysisContext context) =>
+        (IsDisposableContract(local.Type) || local.Type.AllInterfaces.Any(IsDisposableContract)) &&
+        !IsTask(local.Type) &&
+        CreatesOwnedResource(value, context);
+
+    // A scope is a block, a switch section, or a single embedded statement such as a braceless loop body.
     private static SyntaxList<StatementSyntax> StatementsOf(SyntaxNode scope) =>
         scope switch
         {
             BlockSyntax block => block.Statements,
             SwitchSectionSyntax section => section.Statements,
+            StatementSyntax embedded => new SyntaxList<StatementSyntax>(embedded),
             _ => default
         };
+
+    // The loop or switch that a break in the scope leaves, unless a function boundary comes first.
+    private static StatementSyntax? EnclosingBreakTarget(SyntaxNode scope)
+    {
+        for (SyntaxNode? node = scope.Parent; node is not null; node = node.Parent)
+        {
+            if (node is WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax or SwitchStatementSyntax)
+            {
+                return (StatementSyntax)node;
+            }
+
+            if (node is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax or MemberDeclarationSyntax)
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool DeclaredOutside(SyntaxNode construct, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(context.CancellationToken) is { } declared &&
+        !construct.Span.Contains(declared.Span);
 
     private static StatementSyntax? EnclosingStatement(SyntaxNode scope)
     {
@@ -342,15 +425,27 @@ internal static class DisposableLocalOwnership
         scope is not null && scope.DescendantNodesAndSelf()
             .OfType<IdentifierNameSyntax>()
             .Where(identifier => IsLocal(identifier, local, context))
-            .Any(static identifier => identifier.Parent switch
-            {
-                ArgumentSyntax or EqualsValueClauseSyntax or ReturnStatementSyntax or YieldStatementSyntax => true,
-                InitializerExpressionSyntax or ExpressionElementSyntax or CastExpressionSyntax or AnonymousFunctionExpressionSyntax => true,
-                AssignmentExpressionSyntax assignment => assignment.Right == identifier,
-                ConditionalExpressionSyntax choice => choice.WhenTrue == identifier || choice.WhenFalse == identifier,
-                BinaryExpressionSyntax binary => binary.IsKind(SyntaxKind.CoalesceExpression),
-                _ => false
-            });
+            .Any(IsHandoffUse);
+
+    private static bool IsHandoffUse(IdentifierNameSyntax identifier)
+    {
+        // Parentheses are transparent, so the use is classified by what wraps the parenthesized identifier.
+        SyntaxNode use = identifier;
+        while (use.Parent is ParenthesizedExpressionSyntax parentheses)
+        {
+            use = parentheses;
+        }
+
+        return use.Parent switch
+        {
+            ArgumentSyntax or EqualsValueClauseSyntax or ReturnStatementSyntax or YieldStatementSyntax => true,
+            InitializerExpressionSyntax or ExpressionElementSyntax or CastExpressionSyntax or AnonymousFunctionExpressionSyntax => true,
+            AssignmentExpressionSyntax assignment => assignment.Right == use,
+            ConditionalExpressionSyntax choice => choice.WhenTrue == use || choice.WhenFalse == use,
+            BinaryExpressionSyntax binary => binary.IsKind(SyntaxKind.CoalesceExpression),
+            _ => false
+        };
+    }
 
     private static bool IsDisposalStatement(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         statement switch
