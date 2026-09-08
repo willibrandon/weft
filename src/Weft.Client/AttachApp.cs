@@ -988,12 +988,9 @@ public sealed class AttachApp
 
     private static async Task SendStrokesAsync(BlockView view, IReadOnlyList<KeyStroke> strokes)
     {
-        foreach (KeyStroke stroke in strokes)
+        foreach (Hex1bKeyEvent keyEvent in strokes.Select(KeyMap.ToKeyEvent).Where(keyEvent => keyEvent is not null).Select(keyEvent => keyEvent!))
         {
-            if (KeyMap.ToKeyEvent(stroke) is { } keyEvent)
-            {
-                await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
-            }
+            await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
         }
     }
 

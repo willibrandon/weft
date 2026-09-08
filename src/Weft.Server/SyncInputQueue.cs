@@ -27,14 +27,16 @@ internal sealed class SyncInputQueue : IDisposable
         {
             foreach (BlockHost host in targets)
             {
-                SyncInputTarget target;
-                if (_targets.TryGetValue(host, out SyncInputTarget? existing) && !existing.Dead)
+                SyncInputTarget? target = _targets.GetValueOrDefault(host);
+                if (target is { Dead: true })
                 {
-                    target = existing;
+                    target.Dispose();
+                    _targets.Remove(host);
+                    target = null;
                 }
-                else
+
+                if (target is null)
                 {
-                    existing?.Dispose();
                     target = new SyncInputTarget(host);
                     _targets[host] = target;
                 }
