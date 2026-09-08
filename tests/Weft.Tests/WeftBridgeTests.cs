@@ -60,4 +60,41 @@ public sealed class WeftBridgeTests
             Assert.IsTrue(clients.All(client => client.Closed.IsCompleted));
         }
     }
+
+    /// <summary>
+    /// Verifies a lease returned after the bridge was disposed closes its connection instead of pooling it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task ReturnAfterDisposalClosesTheConnection()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            var bridge = new WeftBridge(token => ControlClient.ConnectAsync(fixture.SocketPath, token));
+            ControlLease lease;
+            try
+            {
+                lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                // The bridge goes away while the lease is still out.
+                await bridge.DisposeAsync().ConfigureAwait(false);
+            }
+
+            ControlClient client = lease.Client;
+            lease.Dispose();
+
+            while (!client.Closed.IsCompleted)
+            {
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+            }
+
+            await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
+        }
+    }
 }
