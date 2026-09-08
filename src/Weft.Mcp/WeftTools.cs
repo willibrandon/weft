@@ -116,7 +116,7 @@ public sealed class WeftTools(WeftBridge bridge)
     /// <param name="timeoutMs">How long to wait before returning with the block still running.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The exit code and the captured output.</returns>
-    [McpServerTool(Name = "run"), Description("Run a command in a new block, wait for it to exit, and return its exit code and output. Output is truncated head and tail when large. If the timeout passes the block keeps running and its id is returned so you can watch it with wait_for and capture.")]
+    [McpServerTool(Name = "run"), Description("Run a command in a new block, wait for it to exit, and return its exit code and output. Output is truncated head and tail when large. If the timeout passes the block keeps running and its id is returned so you can watch it with wait_for and capture; it stays until close_block, even after it exits.")]
     public async Task<string> RunAsync(
         [Description("Command and arguments, one string per argument.")] string[] command,
         [Description("Session to run in. Omit for the latest session, which is created when none exists.")] string? target = null,
@@ -276,5 +276,10 @@ public sealed class WeftTools(WeftBridge bridge)
         }
     }
     private static bool IsSessionName(string? target) =>
-        target is { Length: > 0 } && !target.Contains(':', StringComparison.Ordinal) && !target.Contains('.', StringComparison.Ordinal) && !BlockId.TryParse(target, out _);
+        target is { Length: > 0 }
+        && !target.Contains(':', StringComparison.Ordinal)
+        && !target.Contains('.', StringComparison.Ordinal)
+        && !BlockId.TryParse(target, out _)
+        && !SessionId.TryParse(target, out _)
+        && !TabId.TryParse(target, out _);
 }

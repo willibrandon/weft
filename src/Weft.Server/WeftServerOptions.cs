@@ -55,7 +55,7 @@ public sealed class WeftServerOptions
     /// <summary>
     /// Gets the server version string reported to clients.
     /// </summary>
-    public string Version { get; init; } = "0.1.0";
+    public string Version { get; init; } = typeof(WeftServerOptions).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     /// <summary>
     /// Gets hooks: event name to a shell command run with the event in environment variables.

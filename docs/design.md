@@ -482,8 +482,9 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 - Attach with 20 blocks: under 300 ms to first full paint on a local socket.
 - Idle server with 50 blocks: no periodic wakeups; every loop awaits I/O.
 - Native AOT binary under 20 MB with no runtime dependency. The linux-x64 build measures about
-  18 MB; System.Text.Json, the MCP SDK, and its AI abstractions account for roughly 6 MB of that,
-  and the CI size check holds the line at 20 MB.
+  18 MB; System.Text.Json, the MCP SDK, and its AI abstractions account for roughly 6 MB of that.
+  The CI size check reads the compiler's size report, whose total runs about 2 MB above the file
+  on disk, so its budget is 22 MB.
 
 Benchmarks in `benchmarks/Weft.Benchmarks` cover layout computation, protocol encoding, and
 capture serialization.

@@ -81,13 +81,11 @@ internal static class BlockRunner
             DurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
         };
 
+        // A finished command is closed when asked. One that outran the timeout stays, exited or not, until an
+        // explicit close, so the caller can still read its final output and exit code afterwards.
         if (completed && parameters.Close)
         {
             await registry.CloseBlockAsync(block, cancellationToken).ConfigureAwait(false);
-        }
-        else if (!completed)
-        {
-            block.KeepOnExit = false;
         }
 
         return result;
