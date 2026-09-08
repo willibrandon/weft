@@ -38,6 +38,7 @@ internal sealed partial class SessionRegistry
     /// <returns>A task that completes when the block floats.</returns>
     internal async Task FloatBlockAsync(Block block, LayoutRect? bounds, CancellationToken cancellationToken)
     {
+        bool renamed = false;
         List<PendingResize> resizes;
         lock (_gate)
         {
@@ -56,16 +57,22 @@ internal sealed partial class SessionRegistry
             }
 
             tab.Active = block;
-            if (!tab.NamePinned)
+            if (!tab.NamePinned && !string.Equals(tab.Name, block.DisplayTitle, StringComparison.Ordinal))
             {
                 tab.Name = block.DisplayTitle;
+                renamed = true;
             }
+
             resizes = RelayoutUnsafe(tab);
         }
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         Persist(block.Tab.Session);
         _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        if (renamed)
+        {
+            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+        }
     }
 
     /// <summary>
@@ -76,6 +83,7 @@ internal sealed partial class SessionRegistry
     /// <returns>A task that completes when blocks have been resized.</returns>
     internal async Task TileBlockAsync(Block block, CancellationToken cancellationToken)
     {
+        bool renamed = false;
         List<PendingResize> resizes;
         lock (_gate)
         {
@@ -105,16 +113,22 @@ internal sealed partial class SessionRegistry
             }
 
             tab.Active = block;
-            if (!tab.NamePinned)
+            if (!tab.NamePinned && !string.Equals(tab.Name, block.DisplayTitle, StringComparison.Ordinal))
             {
                 tab.Name = block.DisplayTitle;
+                renamed = true;
             }
+
             resizes = RelayoutUnsafe(tab);
         }
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         Persist(block.Tab.Session);
         _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        if (renamed)
+        {
+            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+        }
     }
 
     /// <summary>
