@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 
 if (args.Length == 1 && args[0] is "--help" or "-h" or "-?")
 {
-    await Console.Out.WriteLineAsync("Verifies weft repository policies: no personal paths, no shell scripts, one type per file, documented members.").ConfigureAwait(false);
+    await Console.Out.WriteLineAsync("Verifies weft repository policies: no personal paths, no scripts outside file-based C#, one type per file, documented members with three-line summaries.").ConfigureAwait(false);
     await Console.Out.WriteLineAsync("Usage: dotnet run --file scripts/Verify-Repository.cs").ConfigureAwait(false);
     return 0;
 }
@@ -17,7 +17,7 @@ if (args.Length == 1 && args[0] is "--help" or "-h" or "-?")
 string root = FindRepositoryRoot();
 IReadOnlyList<string> tracked = await ReadTrackedPathsAsync(root).ConfigureAwait(false);
 var failures = new List<string>();
-VerifyFilePolicy(tracked, failures);
+VerifyFilePolicy(root, tracked, failures);
 VerifyTrackedText(root, tracked, failures);
 VerifySources(root, tracked, failures);
 if (failures.Count != 0)
@@ -33,31 +33,54 @@ if (failures.Count != 0)
 await Console.Out.WriteLineAsync($"Verified {tracked.Count} tracked files.").ConfigureAwait(false);
 return 0;
 
-static void VerifyFilePolicy(IReadOnlyList<string> tracked, ICollection<string> failures)
+static void VerifyFilePolicy(string root, IReadOnlyList<string> tracked, ICollection<string> failures)
 {
-    string[] forbiddenExtensions = [".sh", ".ps1", ".psm1", ".bat", ".cmd"];
+    string[] scriptExtensions = [".sh", ".bash", ".zsh", ".ksh", ".fish", ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".py", ".rb", ".pl", ".php"];
+    string[] scriptNames = ["Makefile", "makefile", "GNUmakefile", "justfile", "Justfile", "Taskfile.yml", "Taskfile.yaml", "Rakefile"];
     foreach (string path in tracked)
     {
+        string name = Path.GetFileName(path);
         string extension = Path.GetExtension(path);
-        if (forbiddenExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        if (scriptExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase) || scriptNames.Contains(name, StringComparer.Ordinal))
         {
             failures.Add($"Repository automation must be a file-based C# app, not a script: {path}");
         }
+        else if (path.StartsWith("scripts/", StringComparison.Ordinal) && !extension.Equals(".cs", StringComparison.Ordinal) && !name.Equals("Directory.Build.props", StringComparison.Ordinal))
+        {
+            failures.Add($"Everything under scripts/ must be a file-based C# app or its build settings: {path}");
+        }
+        else if (HasForeignShebang(Path.Combine(root, path)))
+        {
+            failures.Add($"Repository automation must be a file-based C# app, not an interpreter script: {path}");
+        }
 
-        if (path.StartsWith("docs/references.md", StringComparison.Ordinal) || string.Equals(Path.GetFileName(path), "progress.local.md", StringComparison.Ordinal))
+        if (string.Equals(path, "docs/references.md", StringComparison.Ordinal))
         {
             failures.Add($"Local-only documents must not be tracked: {path}");
         }
     }
 }
 
+static bool HasForeignShebang(string full)
+{
+    if (!File.Exists(full))
+    {
+        return false;
+    }
+
+    using var reader = new StreamReader(full);
+    string? first = reader.ReadLine();
+    return first is not null && first.StartsWith("#!", StringComparison.Ordinal) && !first.Contains("dotnet", StringComparison.Ordinal);
+}
+
 static void VerifyTrackedText(string root, IReadOnlyList<string> tracked, ICollection<string> failures)
 {
     Regex personalPath = Patterns.PersonalPath();
-    string[] textExtensions = [".md", ".cs", ".csproj", ".props", ".targets", ".json", ".yml", ".yaml", ".slnx", ".editorconfig", ".globalconfig"];
+    string[] textExtensions = [".md", ".cs", ".csproj", ".props", ".targets", ".rsp", ".json", ".yml", ".yaml", ".slnx", ".editorconfig", ".globalconfig", ".config", ".txt"];
     foreach (string path in tracked)
     {
-        if (!textExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && !path.StartsWith('.'))
+        string name = Path.GetFileName(path);
+        if (!textExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && !name.StartsWith('.') && !string.Equals(name, "LICENSE", StringComparison.Ordinal))
         {
             continue;
         }
@@ -69,9 +92,10 @@ static void VerifyTrackedText(string root, IReadOnlyList<string> tracked, IColle
         }
 
         string text = File.ReadAllText(full);
-        if (personalPath.IsMatch(text))
+        Match match = personalPath.Match(text);
+        if (match.Success)
         {
-            failures.Add($"Tracked files must not contain personal paths: {path}");
+            failures.Add($"Tracked files must not contain personal paths: {path} contains '{match.Value}'.");
         }
     }
 }
@@ -81,31 +105,58 @@ static void VerifySources(string root, IReadOnlyList<string> tracked, ICollectio
     Regex typeDeclaration = Patterns.TypeDeclaration();
     foreach (string path in tracked)
     {
-        if (!path.EndsWith(".cs", StringComparison.Ordinal) || !(path.StartsWith("src/", StringComparison.Ordinal) || path.StartsWith("tests/", StringComparison.Ordinal)))
+        bool source = path.StartsWith("src/", StringComparison.Ordinal);
+        if (!path.EndsWith(".cs", StringComparison.Ordinal) || !(source || path.StartsWith("tests/", StringComparison.Ordinal) || path.StartsWith("benchmarks/", StringComparison.Ordinal)))
         {
             continue;
         }
 
         string text = File.ReadAllText(Path.Combine(root, path));
-        int topLevelTypes = 0;
-        foreach (Match match in typeDeclaration.Matches(text))
+        int types = typeDeclaration.Count(text);
+        if (types > 1)
         {
-            string line = text[..match.Index];
-            int depth = line.Count(c => c == '{') - line.Count(c => c == '}');
-            if (depth == 0)
+            failures.Add($"Each C# file holds exactly one type, nested types included: {path} declares {types}.");
+        }
+
+        VerifyDocumentation(path, text, source, failures);
+    }
+}
+
+static void VerifyDocumentation(string path, string text, bool source, ICollection<string> failures)
+{
+    string[] lines = text.Split('\n');
+    Regex visibleMember = Patterns.VisibleMember();
+    for (int i = 0; i < lines.Length; i++)
+    {
+        string trimmed = lines[i].Trim();
+        if (trimmed.StartsWith("/// <summary>", StringComparison.Ordinal))
+        {
+            // Exactly three lines: the opening tag, one line of text, the closing tag.
+            bool wellFormed = trimmed.Equals("/// <summary>", StringComparison.Ordinal)
+                && i + 2 < lines.Length
+                && lines[i + 1].Trim() is { Length: > 4 } textLine && textLine.StartsWith("/// ", StringComparison.Ordinal) && !textLine.StartsWith("/// <", StringComparison.Ordinal)
+                && lines[i + 2].Trim().Equals("/// </summary>", StringComparison.Ordinal);
+            if (!wellFormed)
             {
-                topLevelTypes++;
+                failures.Add($"XML summaries are exactly three lines, opening tag, text, closing tag: {path}:{i + 1}.");
             }
         }
 
-        if (topLevelTypes > 1)
+        if (!source || !visibleMember.IsMatch(lines[i]))
         {
-            failures.Add($"Each C# file holds exactly one type: {path} declares {topLevelTypes}.");
+            continue;
         }
 
-        if (path.StartsWith("src/", StringComparison.Ordinal) && Patterns.VisibleType().IsMatch(text) && !text.Contains("/// <summary>", StringComparison.Ordinal))
+        // Walk up over attributes, which may span lines, to the line that must be documentation.
+        int above = i - 1;
+        while (above >= 0 && lines[above].Trim() is { Length: > 0 } candidate && !candidate.StartsWith("///", StringComparison.Ordinal) && !candidate.EndsWith(';') && !candidate.EndsWith('{') && !candidate.EndsWith('}'))
         {
-            failures.Add($"Public and internal types need XML documentation: {path}");
+            above--;
+        }
+
+        if (above < 0 || !lines[above].Trim().StartsWith("///", StringComparison.Ordinal))
+        {
+            failures.Add($"Public and internal members need XML documentation: {path}:{i + 1}.");
         }
     }
 }
@@ -128,13 +179,25 @@ static string FindRepositoryRoot()
 
 static async Task<IReadOnlyList<string>> ReadTrackedPathsAsync(string root)
 {
-    var start = new ProcessStartInfo("git") { WorkingDirectory = root, RedirectStandardOutput = true, UseShellExecute = false };
+    var start = new ProcessStartInfo("git") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
     start.ArgumentList.Add("ls-files");
     start.ArgumentList.Add("-z");
     using Process process = Process.Start(start) ?? throw new InvalidOperationException("git did not start.");
     string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+    string error = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
     await process.WaitForExitAsync().ConfigureAwait(false);
-    return output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+    if (process.ExitCode != 0)
+    {
+        throw new InvalidOperationException($"git ls-files failed with exit code {process.ExitCode}: {error.Trim()}");
+    }
+
+    string[] paths = output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+    if (paths.Length == 0)
+    {
+        throw new InvalidOperationException("git ls-files listed no tracked files; refusing to verify an empty tree.");
+    }
+
+    return paths;
 }
 
 /// <summary>
@@ -143,23 +206,23 @@ static async Task<IReadOnlyList<string>> ReadTrackedPathsAsync(string root)
 internal static partial class Patterns
 {
     /// <summary>
-    /// Matches personal home directory paths.
+    /// Matches personal or machine-specific home directory paths on any platform.
     /// </summary>
     /// <returns>The expression.</returns>
-    [GeneratedRegex(@"(/home/[a-z][a-z0-9_-]*|/Users/[A-Za-z][A-Za-z0-9_-]*|C:\\Users\\)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(/home/[a-z][a-z0-9_-]*|/root(/|\b)|/Users/[A-Za-z][A-Za-z0-9_-]*|[A-Za-z]:[\\/]Users[\\/])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     internal static partial Regex PersonalPath();
 
     /// <summary>
     /// Matches a type declaration at any nesting depth.
     /// </summary>
     /// <returns>The expression.</returns>
-    [GeneratedRegex(@"^\s*(public|internal|private|protected|file)?\s*(static\s+|sealed\s+|abstract\s+|partial\s+|readonly\s+)*(class|interface|enum|record\s+struct|record|struct|delegate)\s+[A-Z]", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*(public|internal|private|protected|file)?\s*(static\s+|sealed\s+|abstract\s+|partial\s+|readonly\s+|ref\s+)*(class|interface|enum|record\s+struct|record\s+class|record|struct|delegate)\s+\w", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     internal static partial Regex TypeDeclaration();
 
     /// <summary>
-    /// Matches a public or internal type declaration that needs documentation.
+    /// Matches a public or internal member or type declaration that needs documentation.
     /// </summary>
     /// <returns>The expression.</returns>
-    [GeneratedRegex(@"^\s*(public|internal)\s+(static\s+|sealed\s+|abstract\s+|readonly\s+|partial\s+)*(class|interface|enum|record|struct)\s", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
-    internal static partial Regex VisibleType();
+    [GeneratedRegex(@"^\s*(public|internal|protected internal)\s+[^=]*\S", RegexOptions.CultureInvariant)]
+    internal static partial Regex VisibleMember();
 }
