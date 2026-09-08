@@ -278,4 +278,57 @@ public sealed class ServerTests
 
         Directory.Delete(fixture.Root, recursive: true);
     }
+
+    /// <summary>
+    /// Verifies restoring a tab with a floating block announces the finished tab once, without rename events for transient titles.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(90_000, CooperativeCancellation = true)]
+    public async Task RestoreAnnouncesFloatingBlocksOnlyWithTheTab()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var first = ServerFixture.Start();
+        string root;
+        await using (first.ConfigureAwait(false))
+        {
+            root = first.Root;
+            await first.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (client.ConfigureAwait(false))
+            {
+                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                BlockInfo anchor = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
+                BlockInfo floating = await client.SplitAsync(new BlockSplitParams { Target = anchor.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
+                await client.RenameBlockAsync(new BlockRenameParams { Target = floating.Id, Title = "float-me" }, cancellationToken).ConfigureAwait(false);
+                await client.FloatAsync(new BlockFloatParams { Target = floating.Id }, cancellationToken).ConfigureAwait(false);
+                await client.FocusAsync(new BlockFocusParams { Target = anchor.Id }, cancellationToken).ConfigureAwait(false);
+            }
+
+            await first.StopKeepingStateAsync().ConfigureAwait(false);
+        }
+
+        var second = ServerFixture.Resume(root);
+        await using (second.ConfigureAwait(false))
+        {
+            await second.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient resumed = await second.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (resumed.ConfigureAwait(false))
+            {
+                // The stored session is restored on first use, so a live subscription sees every event the restore publishes.
+                await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                SessionAttachResult attached = await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
+                Assert.HasCount(1, attached.Layout.Floating);
+
+                var names = new List<string>();
+                while (!names.Contains(ProtocolEvents.TabCreated, StringComparer.Ordinal))
+                {
+                    ProtocolMessage message = await resumed.Events.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    names.Add(message.Event ?? string.Empty);
+                }
+
+                Assert.DoesNotContain(ProtocolEvents.TabRenamed, names);
+            }
+        }
+    }
 }
