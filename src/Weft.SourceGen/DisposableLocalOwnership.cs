@@ -67,14 +67,14 @@ internal static class DisposableLocalOwnership
             // where cleanup may still follow; one inside a construct holding the declaration leaks.
             StatementSyntax? target = EnclosingBreakTarget(scope);
             bool leavesToCleanup = target is not null && DeclaredOutside(target, local, context);
-            bool jumped = false;
+            StatementSyntax? left = null;
             foreach (StatementSyntax statement in StatementsOf(scope)
                 .SkipWhile(candidate => cursor is not null && candidate != cursor)
                 .Skip(cursor is null ? 0 : 1))
             {
                 if (statement is BreakStatementSyntax && leavesToCleanup)
                 {
-                    jumped = true;
+                    left = target;
                     break;
                 }
 
@@ -119,15 +119,15 @@ internal static class DisposableLocalOwnership
                 }
             }
 
-            if (jumped)
+            if (left is not null)
             {
-                SyntaxNode? after = target?.Parent;
+                SyntaxNode? after = left.Parent;
                 if (after is not (BlockSyntax or SwitchSectionSyntax))
                 {
                     return true;
                 }
 
-                cursor = target;
+                cursor = left;
                 scope = after;
                 continue;
             }
