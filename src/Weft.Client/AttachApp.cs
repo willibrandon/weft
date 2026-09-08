@@ -55,7 +55,7 @@ public sealed class AttachApp
         await using (control.ConfigureAwait(false))
         {
             _control = control;
-            (int width, int height) = HostSize.Read();
+            (int width, int height) = HostSize.Read(_options.Headless);
             _reportedWidth = width;
             _reportedHeight = height - 1;
             SessionAttachResult attached = await control.AttachAsync(new SessionAttachParams
@@ -109,24 +109,39 @@ public sealed class AttachApp
         }
     }
 
+    /// <summary>
+    /// Gets the outer terminal once running, for automation in tests.
+    /// </summary>
+    internal Hex1bTerminal? Terminal { get; private set; }
+
     private async Task RunTerminalAsync(CancellationToken cancellationToken)
     {
-        Hex1bTerminal terminal = Hex1bTerminal.CreateBuilder()
+        Hex1bTerminalBuilder builder = Hex1bTerminal.CreateBuilder()
             .WithMouse()
             .WithHex1bApp(_ => { }, app =>
             {
                 _app = app;
                 return Render;
-            })
-            .Build();
+            });
+        if (_options.Headless is { } headless)
+        {
+            builder = builder.WithHeadless().WithDimensions(headless.Width, headless.Height);
+        }
+
+        Hex1bTerminal terminal = builder.Build();
         await using (terminal.ConfigureAwait(false))
         {
+            Terminal = terminal;
             try
             {
                 await terminal.RunAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
+            }
+            finally
+            {
+                Terminal = null;
             }
         }
     }
@@ -269,7 +284,7 @@ public sealed class AttachApp
     private Hex1bWidget Render(RootContext ctx)
     {
         SessionMirror mirror = _mirror!;
-        (int width, int height) = HostSize.Read();
+        (int width, int height) = HostSize.Read(_options.Headless);
         int availableWidth = Math.Max(1, width);
         int availableHeight = Math.Max(1, height - 1);
         ReportSize(availableWidth, availableHeight);
@@ -287,7 +302,7 @@ public sealed class AttachApp
             body = ctx.Align(fits ? Alignment.Center : Alignment.TopLeft, tree).Fill();
         }
 
-        Hex1bWidget content = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [body, RenderInfoBar(v, mirror, layout)]));
+        Hex1bWidget content = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [body, RenderInfoBar(v, mirror, layout, _status)]));
         return content.InputBindings(bindings => RegisterBindings(bindings, mirror));
     }
 
@@ -411,7 +426,7 @@ public sealed class AttachApp
         return ctx.Center(ctx.Border(b => [b.VStack(v => [.. lines.Select(line => (Hex1bWidget)v.Text(line))])]).Title(" weft "));
     }
 
-    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
+    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status)
         where TParent : Hex1bWidget
     {
         IReadOnlyList<TabInfo> tabs = mirror.Tabs;
@@ -423,6 +438,7 @@ public sealed class AttachApp
             s.Section(" " + mirror.Session.Name + " "),
             s.Section(tabText),
             s.Spacer(),
+            s.Section(status ?? string.Empty),
             s.Section(size),
             s.Section("Ctrl+B ?"),
             s.Section("help")

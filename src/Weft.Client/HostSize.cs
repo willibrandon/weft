@@ -8,9 +8,15 @@ internal static class HostSize
     /// <summary>
     /// Gets the host terminal size, falling back to a sane default when unavailable.
     /// </summary>
+    /// <param name="fixedSize">A fixed size that overrides the console, for headless runs.</param>
     /// <returns>The columns and rows.</returns>
-    internal static (int Width, int Height) Read()
+    internal static (int Width, int Height) Read((int Width, int Height)? fixedSize)
     {
+        if (fixedSize is { } fixedValue)
+        {
+            return fixedValue;
+        }
+
         try
         {
             int width = Console.WindowWidth;

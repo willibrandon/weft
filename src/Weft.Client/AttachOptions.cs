@@ -24,4 +24,9 @@ public sealed class AttachOptions
     /// Gets the display name reported to the server.
     /// </summary>
     public string Name { get; init; } = Environment.MachineName;
+
+    /// <summary>
+    /// Gets a fixed headless viewport for tests; null renders to the real console.
+    /// </summary>
+    internal (int Width, int Height)? Headless { get; init; }
 }
