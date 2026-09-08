@@ -491,6 +491,12 @@ capture serialization.
 
 ## 13. Testing
 
+The repository's own analyzers, in `Weft.SourceGen`, compile into every project. They enforce
+the conventions in `AGENTS.md` and mirror the CodeQL queries CI runs, so those findings fail
+the local build instead of costing a CI round trip. Each rule has real Roslyn compilation
+tests in `Weft.SourceGen.Tests`.
+
+
 Real processes only. Test tiers:
 
 - **Model tests**: layout tree, geometry, targets, protocol codec, configuration parsing.

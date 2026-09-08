@@ -254,12 +254,11 @@ public sealed class AttachApp
             }
 
             var view = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => _app?.Invalidate());
+            _views[block.Id] = view;
             if (!_options.ReadOnly)
             {
                 view.Handle.TextCopied += text => Fire(client => client.SetPasteAsync(text, CancellationToken.None));
             }
-
-            _views[block.Id] = view;
         }
     }
 

@@ -35,7 +35,7 @@ return 0;
 
 static void VerifyFilePolicy(string root, IReadOnlyList<string> tracked, ICollection<string> failures)
 {
-    string[] scriptExtensions = [".sh", ".bash", ".zsh", ".ksh", ".fish", ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".py", ".rb", ".pl", ".php"];
+    string[] scriptExtensions = [".sh", ".bash", ".zsh", ".ksh", ".fish", ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".py", ".rb", ".pl", ".php", ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"];
     string[] scriptNames = ["Makefile", "makefile", "GNUmakefile", "justfile", "Justfile", "Taskfile.yml", "Taskfile.yaml", "Rakefile"];
     foreach (string path in tracked)
     {
@@ -76,7 +76,7 @@ static bool HasForeignShebang(string full)
 static void VerifyTrackedText(string root, IReadOnlyList<string> tracked, ICollection<string> failures)
 {
     Regex personalPath = Patterns.PersonalPath();
-    string[] textExtensions = [".md", ".cs", ".csproj", ".props", ".targets", ".rsp", ".json", ".yml", ".yaml", ".slnx", ".editorconfig", ".globalconfig", ".config", ".txt"];
+    string[] textExtensions = [".md", ".cs", ".csproj", ".props", ".targets", ".rsp", ".json", ".yml", ".yaml", ".slnx", ".editorconfig", ".globalconfig", ".config", ".txt", ".xml", ".resx", ".nuspec", ".toml", ".ini", ".html", ".css", ".svg", ".sarif"];
     foreach (string path in tracked)
     {
         string name = Path.GetFileName(path);
@@ -111,14 +111,15 @@ static void VerifySources(string root, IReadOnlyList<string> tracked, ICollectio
         }
 
         string text = File.ReadAllText(Path.Combine(root, path));
-        int types = typeDeclaration.Count(text);
+        string code = Patterns.StringLiterals().Replace(text, string.Empty);
+        int types = typeDeclaration.Count(code);
         bool assemblyAttributesOnly = types == 0 && text.Contains("[assembly:", StringComparison.Ordinal);
         if (types != 1 && !assemblyAttributesOnly)
         {
             failures.Add($"Each C# file holds exactly one type, nested types included: {path} declares {types}.");
         }
 
-        VerifyDocumentation(path, text, failures);
+        VerifyDocumentation(path, code, failures);
     }
 }
 
@@ -128,7 +129,7 @@ static void VerifyDocumentation(string path, string text, ICollection<string> fa
     Regex visibleMember = Patterns.VisibleMember();
     for (int i = 0; i < lines.Length; i++)
     {
-        string trimmed = lines[i].Trim();
+        string trimmed = Patterns.DocLine().Replace(lines[i].Trim(), "/// ");
         if (trimmed.StartsWith("/// <summary>", StringComparison.Ordinal))
         {
             // Exactly three lines: the opening tag, one line of text, the closing tag.
@@ -142,7 +143,7 @@ static void VerifyDocumentation(string path, string text, ICollection<string> fa
             }
         }
 
-        if (!visibleMember.IsMatch(lines[i]))
+        if (!visibleMember.IsMatch(lines[i]) && !IsInterfaceMember(lines, i))
         {
             continue;
         }
@@ -159,6 +160,49 @@ static void VerifyDocumentation(string path, string text, ICollection<string> fa
             failures.Add($"Public and internal members need XML documentation: {path}:{i + 1}.");
         }
     }
+}
+
+static bool IsInterfaceMember(string[] lines, int index)
+{
+    // Walk up to the enclosing type declaration at one less brace depth; members of an interface need no modifier.
+    string trimmed = lines[index].Trim();
+    if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('[') ||
+        trimmed.StartsWith('{') || trimmed.StartsWith('}') || trimmed.StartsWith('#') ||
+        !(trimmed.EndsWith(';') || trimmed.EndsWith('{') || trimmed.EndsWith('}') || trimmed.Contains('(', StringComparison.Ordinal) || trimmed.Contains("=>", StringComparison.Ordinal)))
+    {
+        return false;
+    }
+
+    int depth = 0;
+    for (int above = index - 1; above >= 0; above--)
+    {
+        string line = lines[above];
+        depth += line.Count(character => character == '}') - line.Count(character => character == '{');
+        if (depth < 0)
+        {
+            return IsInterfaceDeclarationAbove(lines, above);
+        }
+    }
+
+    return false;
+}
+
+static bool IsInterfaceDeclarationAbove(string[] lines, int brace)
+{
+    // In Allman style the opening brace sits on its own line, so the declaration is the nearest line above it
+    // that is not a brace, blank, attribute, or comment; in the other style the brace line is the declaration.
+    for (int declaration = brace; declaration >= 0; declaration--)
+    {
+        string candidate = lines[declaration].Trim();
+        if (candidate.Length == 0 || candidate == "{" || candidate.StartsWith('[') || candidate.StartsWith("//", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        return Patterns.InterfaceDeclaration().IsMatch(lines[declaration]);
+    }
+
+    return false;
 }
 
 static string FindRepositoryRoot()
@@ -216,13 +260,36 @@ internal static partial class Patterns
     /// Matches a type declaration at any nesting depth.
     /// </summary>
     /// <returns>The expression.</returns>
-    [GeneratedRegex(@"^\s*(public|internal|private|protected|file)?\s*(static\s+|sealed\s+|abstract\s+|partial\s+|readonly\s+|ref\s+)*(class|interface|enum|record\s+struct|record\s+class|record|struct|delegate)\s+\w", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*((public|internal|private|protected|file)\s+)*(static\s+|sealed\s+|abstract\s+|partial\s+|readonly\s+|ref\s+|new\s+|unsafe\s+)*(class|interface|enum|record\s+struct|record\s+class|record|struct|delegate)\s+\w", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     internal static partial Regex TypeDeclaration();
 
     /// <summary>
     /// Matches a public or internal member or type declaration that needs documentation.
     /// </summary>
     /// <returns>The expression.</returns>
-    [GeneratedRegex(@"^\s*(public|internal|protected internal)\s+[^=]*\S", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*(public|internal|protected\s+internal)\s+[^=]*\S", RegexOptions.CultureInvariant)]
     internal static partial Regex VisibleMember();
+
+    /// <summary>
+    /// Matches string literals of every kind, so fixtures embedded in tests are not mistaken for code.
+    /// </summary>
+    /// <returns>The expression.</returns>
+    [GeneratedRegex(""""
+        ("""+)[\s\S]*?\1|@"(?:[^"]|"")*"|"(?:[^"\\\n]|\\.)*"
+        """", RegexOptions.CultureInvariant)]
+    internal static partial Regex StringLiterals();
+
+    /// <summary>
+    /// Matches the start of a documentation comment line with any spacing after the slashes.
+    /// </summary>
+    /// <returns>The expression.</returns>
+    [GeneratedRegex(@"^///\s*", RegexOptions.CultureInvariant)]
+    internal static partial Regex DocLine();
+
+    /// <summary>
+    /// Matches an interface declaration line.
+    /// </summary>
+    /// <returns>The expression.</returns>
+    [GeneratedRegex(@"^\s*((public|internal|private|protected|file)\s+)*(partial\s+)?interface\s+\w", RegexOptions.CultureInvariant)]
+    internal static partial Regex InterfaceDeclaration();
 }

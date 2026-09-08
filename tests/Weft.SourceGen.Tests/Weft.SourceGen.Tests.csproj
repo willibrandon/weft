@@ -1,0 +1,17 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.SourceGen.Tests</AssemblyName>
+    <RootNamespace>Weft.SourceGen.Tests</RootNamespace>
+    <Description>Real Roslyn compilation tests for weft repository analyzers.</Description>
+    <MSTestAnalysisMode>All</MSTestAnalysisMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <ProjectReference Include="../../src/Weft.SourceGen/Weft.SourceGen.csproj" />
+  </ItemGroup>
+</Project>
