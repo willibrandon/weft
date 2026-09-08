@@ -25,6 +25,8 @@ public sealed class WeftBridge : IAsyncDisposable
     private readonly Lock _gate = new();
     private readonly Stack<ControlClient> _idle = new();
 
+    private bool _disposed;
+
     /// <summary>
     /// Creates a bridge that opens connections through the given delegate.
     /// </summary>
@@ -40,8 +42,15 @@ public sealed class WeftBridge : IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">Cancels connecting.</param>
     /// <returns>The lease; dispose it to return the connection.</returns>
-    public async Task<ControlLease> LeaseAsync(CancellationToken cancellationToken) =>
-        new ControlLease(this, await AcquireAsync(cancellationToken).ConfigureAwait(false), cancellationToken);
+    public async Task<ControlLease> LeaseAsync(CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+        }
+
+        return new ControlLease(this, await AcquireAsync(cancellationToken).ConfigureAwait(false), cancellationToken);
+    }
 
     /// <summary>
     /// Disposes every idle connection.
@@ -49,7 +58,17 @@ public sealed class WeftBridge : IAsyncDisposable
     /// <returns>A task that completes when the pool is empty.</returns>
     public async ValueTask DisposeAsync()
     {
-        while (TryTakeIdle(out ControlClient? client))
+        // Marked under the lock, so a lease returned after this point closes its connection instead of
+        // pooling it into a bridge nothing will drain again.
+        List<ControlClient> idle;
+        lock (_gate)
+        {
+            _disposed = true;
+            idle = [.. _idle];
+            _idle.Clear();
+        }
+
+        foreach (ControlClient client in idle)
         {
             await client.DisposeAsync().ConfigureAwait(false);
         }
@@ -90,7 +109,7 @@ public sealed class WeftBridge : IAsyncDisposable
     {
         lock (_gate)
         {
-            if (_idle.Count >= IdleCapacity)
+            if (_disposed || _idle.Count >= IdleCapacity)
             {
                 return false;
             }
