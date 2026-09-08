@@ -84,8 +84,31 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             {
                 context.ReportDiagnostic(Diagnostic.Create(s_rule, ((AssignmentExpressionSyntax)handoff.Expression).Left.GetLocation(), local.Name));
             }
+
+            // An assignment in a for initializer is an expression rather than a statement, and the loop
+            // condition decides whether the body ever runs, so it is analyzed with the loop.
+            foreach (AssignmentExpressionSyntax handoff in FindLoopAssignments(local, declaration, block, context)
+                .Where(handoff => handoff.Parent is ForStatementSyntax loop && DisposableLocalOwnership.MayLeakInLoop(local, handoff, loop, context)))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(s_rule, handoff.Left.GetLocation(), local.Name));
+            }
         }
     }
+
+    private static IEnumerable<AssignmentExpressionSyntax> FindLoopAssignments(
+        ILocalSymbol local,
+        LocalDeclarationStatementSyntax declaration,
+        SyntaxNode block,
+        SyntaxNodeAnalysisContext context) =>
+        block.ChildNodes()
+            .OfType<StatementSyntax>()
+            .SkipWhile(candidate => candidate != declaration)
+            .Skip(1)
+            .SelectMany(static statement => statement.DescendantNodesAndSelf(
+                static node => node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)))
+            .OfType<ForStatementSyntax>()
+            .SelectMany(static loop => loop.Initializers.OfType<AssignmentExpressionSyntax>())
+            .Where(assignment => IsResourceAssignment(assignment, local, context));
 
     // A local declared by a for initializer lives for the loop, so the loop must dispose it or hand it
     // off on every path before it is left, the paths that skip the body included.
@@ -128,7 +151,10 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         DisposableLocalOwnership.MayLeak(local, ((AssignmentExpressionSyntax)handoff.Expression).Right, handoff, priorRisk: false, scope, context);
 
     private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        statement.Expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment &&
+        statement.Expression is AssignmentExpressionSyntax assignment && IsResourceAssignment(assignment, local, context);
+
+    private static bool IsResourceAssignment(AssignmentExpressionSyntax assignment, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        assignment is { Left: IdentifierNameSyntax target } &&
         assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
         CreatesResource(assignment.Right) &&
         SymbolEqualityComparer.Default.Equals(local, context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol);

@@ -205,6 +205,38 @@ internal static class DisposableLocalOwnership
             return false;
         }
 
+        bool laterRisk = loop.Declaration.Variables
+            .SkipWhile(candidate => candidate != variable)
+            .Skip(1)
+            .Any(candidate => MayThrow(candidate, owners, context));
+        return ScanLoop(owners, variable.Initializer?.Value, loop, laterRisk, context);
+    }
+
+    /// <summary>
+    /// Determines whether a local handed a resource by a for initializer assignment can leak before or while the loop runs.
+    /// </summary>
+    /// <param name="local">The local the assignment targets.</param>
+    /// <param name="assignment">The initializer assignment whose right side produces the resource.</param>
+    /// <param name="loop">The loop whose initializer assigns the local.</param>
+    /// <param name="context">The analyzer's semantic context.</param>
+    /// <returns>Whether the local can leak on some path through the loop.</returns>
+    internal static bool MayLeakInLoop(ILocalSymbol local, AssignmentExpressionSyntax assignment, ForStatementSyntax loop, SyntaxNodeAnalysisContext context)
+    {
+        var owners = new OwningLocals(local);
+        if (!Tracks(owners, assignment.Right, context))
+        {
+            return false;
+        }
+
+        bool laterRisk = loop.Initializers
+            .SkipWhile(candidate => candidate != assignment)
+            .Skip(1)
+            .Any(candidate => MayThrow(candidate, owners, context));
+        return ScanLoop(owners, assignment.Right, loop, laterRisk, context);
+    }
+
+    private static bool ScanLoop(OwningLocals owners, ExpressionSyntax? value, ForStatementSyntax loop, bool laterRisk, SyntaxNodeAnalysisContext context)
+    {
         // The condition runs right after the initializer; when it can be false or can fail, the body may
         // never run and the loop is left with the local still owned.
         if (loop.Condition is { } condition &&
@@ -213,11 +245,7 @@ internal static class DisposableLocalOwnership
             return true;
         }
 
-        bool laterRisk = loop.Declaration.Variables
-            .SkipWhile(candidate => candidate != variable)
-            .Skip(1)
-            .Any(candidate => MayThrow(candidate, owners, context));
-        return Scan(owners, variable.Initializer?.Value, null, laterRisk, loop.Statement, context);
+        return Scan(owners, value, null, laterRisk, loop.Statement, context);
     }
 
     // Only a local that owns its resource is tracked: one handed something by a construction or a
@@ -345,6 +373,7 @@ internal static class DisposableLocalOwnership
         statement switch
         {
             BlockSyntax block => EndsOwnership(block.Statements, breakLeaves, throwLeaves, local, context),
+            ExpressionStatementSyntax or LocalDeclarationStatementSyntax when AliasOf(statement, local, context) is { } alias => Track(local, alias),
             ExpressionStatementSyntax expression => IsDisposalStatement(expression, local, context) || HandsOff(expression.Expression, local, context),
             LocalDeclarationStatementSyntax declaration => IsDisposalStatement(declaration, local, context) || HandsOff(declaration.Declaration, local, context),
             ReturnStatementSyntax returned => HandsOff(returned, local, context),
@@ -360,6 +389,14 @@ internal static class DisposableLocalOwnership
                 attempt.Finally is { } cleanup && EndsOwnership(cleanup.Block, breakLeaves, throwLeaves, local, context),
             _ => false
         };
+
+    // A copy into another local inside a branch keeps the resource owned; the alias joins the owners so
+    // cleanup through it counts, wherever it happens.
+    private static bool Track(OwningLocals local, ILocalSymbol alias)
+    {
+        local.Add(alias);
+        return false;
+    }
 
     private static bool EndsOwnershipOnBothBranches(IfStatementSyntax conditional, bool breakLeaves, bool throwLeaves, OwningLocals local, SyntaxNodeAnalysisContext context) =>
         EndsOwnership(conditional.Statement, breakLeaves, throwLeaves, local, context) &&

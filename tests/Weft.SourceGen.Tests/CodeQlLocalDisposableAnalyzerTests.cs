@@ -2120,6 +2120,123 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a branch that only copies the resource into another local leaves it owned and is reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsBranchThatOnlyAliasesTheResource()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool keep)
+                {
+                    var stream = new MemoryStream();
+                    if (keep)
+                    {
+                        Stream alias = stream;
+                    }
+                    else
+                    {
+                        stream.Dispose();
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a branch that copies the resource into another local and disposes it there is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsBranchThatDisposesThroughAlias()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool keep)
+                {
+                    var stream = new MemoryStream();
+                    if (keep)
+                    {
+                        Stream alias = stream;
+                        alias.Dispose();
+                    }
+                    else
+                    {
+                        stream.Dispose();
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a resource assigned in a for initializer is reported when the condition can skip the body.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsResourceAssignedInLoopInitializer()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(bool condition)
+                {
+                    MemoryStream? stream = null;
+                    for (stream = new MemoryStream(); condition; )
+                    {
+                        stream.Dispose();
+                        break;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a resource assigned in a for initializer and disposed before the loop is left is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsResourceAssignedInLoopInitializerAndDisposed()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    MemoryStream? stream = null;
+                    for (stream = new MemoryStream(); ; )
+                    {
+                        stream.Dispose();
+                        break;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }
