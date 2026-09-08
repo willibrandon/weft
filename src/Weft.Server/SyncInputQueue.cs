@@ -27,9 +27,14 @@ internal sealed class SyncInputQueue : IDisposable
         {
             foreach (BlockHost host in targets)
             {
-                if (!_targets.TryGetValue(host, out SyncInputTarget? target) || target.Dead)
+                SyncInputTarget target;
+                if (_targets.TryGetValue(host, out SyncInputTarget? existing) && !existing.Dead)
                 {
-                    target?.Dispose();
+                    target = existing;
+                }
+                else
+                {
+                    existing?.Dispose();
                     target = new SyncInputTarget(host);
                     _targets[host] = target;
                 }
@@ -39,6 +44,21 @@ internal sealed class SyncInputQueue : IDisposable
         }
 
         return Task.WhenAll(writes).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Drops the queue for a host whose block closed, so the host is not retained for the life of the tab.
+    /// </summary>
+    /// <param name="host">The host that went away.</param>
+    internal void Remove(BlockHost host)
+    {
+        lock (_gate)
+        {
+            if (_targets.Remove(host, out SyncInputTarget? target))
+            {
+                target.Dispose();
+            }
+        }
     }
 
     /// <summary>

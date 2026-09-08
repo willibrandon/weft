@@ -44,6 +44,11 @@ internal sealed partial class SessionRegistry
                 return;
             }
 
+            if (block.Host is { } closedHost)
+            {
+                tab.SyncInput.Remove(closedHost);
+            }
+
             tab.Layout.Remove(block.Id);
             if (tab.Zoomed == block)
             {
@@ -265,7 +270,8 @@ internal sealed partial class SessionRegistry
     {
         lock (_gate)
         {
-            if (!source.Tab.Synchronized)
+            // An excluded block neither receives synchronized input nor sends it.
+            if (!source.Tab.Synchronized || source.ExcludedFromSync)
             {
                 return Task.CompletedTask;
             }
@@ -472,6 +478,7 @@ internal sealed partial class SessionRegistry
             {
                 block.State = BlockState.Closed;
                 tab.Blocks.Remove(block);
+                tab.SyncInput.Remove(host);
                 tab.Layout.Remove(block.Id);
                 if (tab.Active == block)
                 {

@@ -318,6 +318,12 @@ public sealed class AttachApp
     {
         // Any input marks this client as the most recently active one, which the latest size policy follows.
         // Leader actions activate through Execute as well; this covers ordinary typing that goes straight to a block.
+        // A read-only viewer never becomes the size authority, whatever it presses.
+        if (_options.ReadOnly)
+        {
+            return;
+        }
+
         long now = Environment.TickCount64;
         if (now - Volatile.Read(ref _lastActivation) < ActivationIntervalMs)
         {
@@ -619,12 +625,12 @@ public sealed class AttachApp
 
         bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
         claimed.Add(new KeyStroke(KeyModifiers.None, "escape"));
-        foreach (KeyStroke stroke in KeyMap.AllStrokes())
+        foreach ((KeyStroke stroke, Hex1bKeyEvent keyEvent) in KeyMap.AllStrokes()
+            .Where(stroke => !claimed.Contains(stroke))
+            .Select(stroke => (stroke, KeyMap.ToKeyEvent(stroke)))
+            .Where(pair => pair.Item2 is not null)
+            .Select(pair => (pair.stroke, pair.Item2!)))
         {
-            if (claimed.Contains(stroke) || KeyMap.ToKeyEvent(stroke) is not { } keyEvent)
-            {
-                continue;
-            }
 
             BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(context =>
             {
@@ -641,12 +647,9 @@ public sealed class AttachApp
     {
         // A read-only client never forwards keys, even if a click focused a block: every stroke it can name is
         // bound to nothing, and the leader is the only key that still opens a menu of harmless actions.
-        foreach (KeyStroke stroke in KeyMap.AllStrokes())
+        foreach (KeyStroke stroke in KeyMap.AllStrokes().Where(stroke => !claimed.Contains(stroke)))
         {
-            if (!claimed.Contains(stroke))
-            {
-                BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
-            }
+            BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
         }
     }
 
@@ -697,6 +700,14 @@ public sealed class AttachApp
 
     private void Execute(string action, InputBindingActionContext context, SessionMirror mirror)
     {
+        // The palette and pickers route here too, so the read-only allowlist is enforced once, in one place.
+        if (_options.ReadOnly && !ClientActions.IsReadOnlySafe(action))
+        {
+            _status = "read-only";
+            _app?.Invalidate();
+            return;
+        }
+
         Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
         switch (action)
         {
@@ -849,7 +860,12 @@ public sealed class AttachApp
     {
         PopupStack popups = context.Popups;
         RootContext ctx = _root!;
-        List<PaletteEntry> entries = [.. ClientActions.Defaults.Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))];
+        List<PaletteEntry> entries =
+        [
+            .. ClientActions.Defaults
+                .Where(item => !_options.ReadOnly || ClientActions.IsReadOnlySafe(item.Action))
+                .Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))
+        ];
         popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
         [
             b.SelectionPrompt(entries)

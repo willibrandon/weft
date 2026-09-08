@@ -89,7 +89,7 @@ public sealed class AttachAppTests
         await using (fixture.ConfigureAwait(false))
         {
             await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
-            var config = new WeftConfig { Leader = "ctrl+a", Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["leader b"] = "split.down" } };
+            var config = new WeftConfig { Leader = "ctrl+a", Bindings = { ["leader b"] = "split.down" } };
             var app = new AttachApp(new AttachOptions { SocketPath = fixture.SocketPath, Target = "keys", Name = "test", Headless = (100, 30), Config = config });
             Task run = app.RunAsync(cancellationToken);
             Hex1bTerminal terminal = await WaitForTerminalAsync(app, run, cancellationToken).ConfigureAwait(false);
