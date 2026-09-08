@@ -39,23 +39,27 @@ internal sealed class ControlConnection
     {
         using var closed = CancellationTokenSource.CreateLinkedTokenSource(stopping);
         var stream = new NetworkStream(_socket, ownsSocket: true);
-        var writer = new ProtocolWriter(stream);
+        using var writer = new ProtocolWriter(stream);
         try
         {
             await ServeAsync(stream, writer, closed).ConfigureAwait(false);
         }
         finally
         {
-            await closed.CancelAsync().ConfigureAwait(false);
-            _subscription?.Dispose();
-            if (_pump is { } pump)
-            {
-                await pump.ConfigureAwait(false);
-            }
-
-            writer.Dispose();
-            await _server.Registry.DetachConnectionAsync(_id, CancellationToken.None).ConfigureAwait(false);
+            await CloseAsync(closed).ConfigureAwait(false);
         }
+    }
+
+    private async Task CloseAsync(CancellationTokenSource closed)
+    {
+        await closed.CancelAsync().ConfigureAwait(false);
+        _subscription?.Dispose();
+        if (_pump is { } pump)
+        {
+            await pump.ConfigureAwait(false);
+        }
+
+        await _server.Registry.DetachConnectionAsync(_id, CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task ServeAsync(NetworkStream stream, ProtocolWriter writer, CancellationTokenSource closed)

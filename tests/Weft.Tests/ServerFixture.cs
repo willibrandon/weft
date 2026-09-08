@@ -35,7 +35,7 @@ internal sealed class ServerFixture : IAsyncDisposable
     /// </summary>
     /// <returns>The fixture.</returns>
     internal static ServerFixture Start() =>
-        Resume(Path.Combine(Path.GetTempPath(), "weft-test-" + Guid.NewGuid().ToString("N")[..10]));
+        Resume(Path.Join(Path.GetTempPath(), "weft-test-" + Guid.NewGuid().ToString("N")[..10]));
 
     /// <summary>
     /// Starts a server on an existing root so stored sessions can be resurrected.
@@ -46,8 +46,8 @@ internal sealed class ServerFixture : IAsyncDisposable
     {
         var options = new WeftServerOptions
         {
-            RuntimeDirectory = Path.Combine(root, "run"),
-            StateDirectory = Path.Combine(root, "state"),
+            RuntimeDirectory = Path.Join(root, "run"),
+            StateDirectory = Path.Join(root, "state"),
             HomeDirectory = root,
             DefaultShell = "/bin/sh",
             Scrollback = 500,

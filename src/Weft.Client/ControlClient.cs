@@ -81,13 +81,12 @@ public sealed class ControlClient : IAsyncDisposable
                 }
             }
 
-            var client = new ControlClient(socket, hello);
-            socket = null;
-            return client;
+            return new ControlClient(socket, hello);
         }
-        finally
+        catch
         {
-            socket?.Dispose();
+            socket.Dispose();
+            throw;
         }
     }
 

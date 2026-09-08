@@ -34,7 +34,7 @@ public sealed class ProtocolCodecTests
     {
         CancellationToken cancellationToken = TestContext.CancellationToken;
         using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        string path = Path.Combine(Path.GetTempPath(), "weft-codec-" + Guid.NewGuid().ToString("N")[..8] + ".sock");
+        string path = Path.Join(Path.GetTempPath(), "weft-codec-" + Guid.NewGuid().ToString("N")[..8] + ".sock");
         listener.Bind(new UnixDomainSocketEndPoint(path));
         listener.Listen(1);
         try

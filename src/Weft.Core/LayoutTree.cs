@@ -644,12 +644,9 @@ public sealed class LayoutTree(LayoutOptions options)
         }
 
         Spread(root);
-        foreach (LayoutCell child in root.Children)
+        foreach (LayoutCell child in root.Children.Where(child => !child.IsLeaf))
         {
-            if (!child.IsLeaf)
-            {
-                Spread(child);
-            }
+            Spread(child);
         }
 
         return root;
