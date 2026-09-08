@@ -79,11 +79,24 @@ internal sealed class BindingTable
                 continue;
             }
 
+            if (!table.IsUsable(chord))
+            {
+                // A chord the client could never register must not count as bound, or lock mode would strand it.
+                table.Warnings.Add("Ignoring binding '" + chordText + "': a single-stroke leader takes exactly one key after it.");
+                continue;
+            }
+
             table._bindings.Add((chord, action));
         }
 
         return table;
     }
+
+    // A single-stroke leader arms exactly one key after it, so a longer remainder can never be entered,
+    // and a stroke without a terminal key cannot be matched at all.
+    private bool IsUsable(KeyChord chord) =>
+        chord.Steps.All(stroke => KeyMap.ToHex1bKey(stroke.Key) is not null) &&
+        (Leader.Steps.Count != 1 || !TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest) || rest.Count == 1);
 
     /// <summary>
     /// Splits a chord into the leader prefix and the strokes that follow it.
