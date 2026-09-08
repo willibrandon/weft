@@ -13,6 +13,11 @@ namespace Weft.App;
 internal static class ServerCommand
 {
     /// <summary>
+    /// The version advertised by the server and the MCP server.
+    /// </summary>
+    internal const string Version = "0.1.0";
+
+    /// <summary>
     /// Creates the server command.
     /// </summary>
     /// <returns>The command.</returns>

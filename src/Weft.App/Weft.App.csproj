@@ -24,6 +24,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Weft.Client/Weft.Client.csproj" />
+    <ProjectReference Include="../Weft.Mcp/Weft.Mcp.csproj" />
     <ProjectReference Include="../Weft.Server/Weft.Server.csproj" />
   </ItemGroup>
   <ItemGroup>

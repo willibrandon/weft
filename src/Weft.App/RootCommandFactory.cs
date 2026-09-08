@@ -49,6 +49,7 @@ internal static class RootCommandFactory
         root.Subcommands.Add(EventCommands.CreateSignal());
         root.Subcommands.Add(EventCommands.CreateWaitFor());
         root.Subcommands.Add(ServerCommand.Create());
+        root.Subcommands.Add(McpCommand.Create());
         root.Subcommands.Add(ServerCommand.CreateShutdown());
         return root;
     }

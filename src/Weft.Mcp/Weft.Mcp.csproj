@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Mcp</AssemblyName>
+    <RootNamespace>Weft.Mcp</RootNamespace>
+    <Description>Model Context Protocol server exposing weft sessions and blocks to agents.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="ModelContextProtocol" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Weft.Client/Weft.Client.csproj" />
+    <ProjectReference Include="../Weft.Protocol/Weft.Protocol.csproj" />
+  </ItemGroup>
+</Project>
