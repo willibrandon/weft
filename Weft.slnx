@@ -21,6 +21,7 @@
     <Project Path="src/Weft.App/Weft.App.csproj" />
     <Project Path="src/Weft.Client/Weft.Client.csproj" />
     <Project Path="src/Weft.Core/Weft.Core.csproj" />
+    <Project Path="src/Weft.Mcp/Weft.Mcp.csproj" />
     <Project Path="src/Weft.Protocol/Weft.Protocol.csproj" />
     <Project Path="src/Weft.Server/Weft.Server.csproj" />
   </Folder>

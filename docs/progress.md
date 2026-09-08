@@ -52,7 +52,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [x] Event streaming with sequence numbers and replay ring
 - [x] Run-and-await, capture, wait-for-pattern, send-keys, named wait channels
 - [x] Hooks (configuration driven; protocol methods pending)
-- [ ] MCP server for agents
+- [x] MCP server for agents (`weft mcp`: eight tools, two resources, SDK client test over in-memory pipes)
 
 ## Phase 4: Sharing and operations
 

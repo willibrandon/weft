@@ -13,6 +13,11 @@ namespace Weft.App;
 internal static class ServerCommand
 {
     /// <summary>
+    /// The version advertised by the server and the MCP server, read from the assembly so it follows the build.
+    /// </summary>
+    internal static string Version { get; } = typeof(ServerCommand).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
+    /// <summary>
     /// Creates the server command.
     /// </summary>
     /// <returns>The command.</returns>
