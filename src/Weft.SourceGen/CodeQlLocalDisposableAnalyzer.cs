@@ -92,22 +92,19 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         BlockSyntax block,
         SyntaxNodeAnalysisContext context)
     {
-        foreach (StatementSyntax statement in block.Statements.SkipWhile(candidate => candidate != declaration).Skip(1))
-        {
-            if (statement is ExpressionStatementSyntax
-                {
-                    Expression: AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment
-                } handoff &&
-                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
-                CreatesResource(assignment.Right) &&
-                SymbolEqualityComparer.Default.Equals(local, context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol))
-            {
-                return (handoff, assignment);
-            }
-        }
-
-        return null;
+        ExpressionStatementSyntax? handoff = block.Statements
+            .SkipWhile(candidate => candidate != declaration)
+            .Skip(1)
+            .OfType<ExpressionStatementSyntax>()
+            .FirstOrDefault(statement => IsResourceAssignment(statement, local, context));
+        return handoff is null ? null : (handoff, (AssignmentExpressionSyntax)handoff.Expression);
     }
+
+    private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        statement.Expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment &&
+        assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+        CreatesResource(assignment.Right) &&
+        SymbolEqualityComparer.Default.Equals(local, context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol);
 
     private static bool CreatesResource(ExpressionSyntax expression) => expression switch
     {
