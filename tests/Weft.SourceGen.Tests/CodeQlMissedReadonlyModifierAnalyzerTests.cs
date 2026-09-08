@@ -121,6 +121,37 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzerTests(TestContext testCo
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a field holding a mutable struct that is changed through a method call is not asked to be readonly.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsMutableStructFieldChangedThroughCall()
+    {
+        const string Source = """
+            internal struct Counter
+            {
+                private int _count;
+
+                internal void Increment() => _count++;
+
+                internal readonly int Count => _count;
+            }
+
+            internal sealed class Tally
+            {
+                private Counter _counter;
+
+                internal void Bump() => _counter.Increment();
+
+                internal int Count => _counter.Count;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
 }

@@ -175,18 +175,51 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzer : DiagnosticAnalyze
             .OfType<IfStatementSyntax>()
             .Any(statement =>
                 statement.Statement.Span.Contains(suppression.Span) &&
-                statement.Condition.DescendantNodesAndSelf()
-                    .OfType<IsPatternExpressionSyntax>()
-                    .Any(expression =>
-                        expression.Pattern is UnaryPatternSyntax
-                        {
-                            RawKind: (int)SyntaxKind.NotPattern,
-                            Pattern: ConstantPatternSyntax
-                            {
-                                Expression.RawKind: (int)SyntaxKind.NullLiteralExpression,
-                            },
-                        } &&
-                        SymbolEquals(expression.Expression, local, context)));
+                ImpliesNotNull(statement.Condition, local, context));
+
+    private static bool ImpliesNotNull(ExpressionSyntax condition, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        // Only the Boolean structure decides: a conjunction needs one side, a disjunction needs both.
+        switch (condition)
+        {
+            case ParenthesizedExpressionSyntax parenthesized:
+                return ImpliesNotNull(parenthesized.Expression, local, context);
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalAndExpression } and:
+                return ImpliesNotNull(and.Left, local, context) || ImpliesNotNull(and.Right, local, context);
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalOrExpression } or:
+                return ImpliesNotNull(or.Left, local, context) && ImpliesNotNull(or.Right, local, context);
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.NotEqualsExpression } unequal:
+                return unequal.Right.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(unequal.Left, local, context) ||
+                    unequal.Left.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(unequal.Right, local, context);
+            case PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalNotExpression } negation:
+                return ImpliesNull(negation.Operand, local, context);
+            case IsPatternExpressionSyntax pattern:
+                return pattern.Pattern is UnaryPatternSyntax
+                {
+                    RawKind: (int)SyntaxKind.NotPattern,
+                    Pattern: ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression },
+                } && SymbolEquals(pattern.Expression, local, context);
+            default:
+                return false;
+        }
+    }
+
+    private static bool ImpliesNull(ExpressionSyntax condition, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        switch (condition)
+        {
+            case ParenthesizedExpressionSyntax parenthesized:
+                return ImpliesNull(parenthesized.Expression, local, context);
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression } equal:
+                return equal.Right.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(equal.Left, local, context) ||
+                    equal.Left.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(equal.Right, local, context);
+            case IsPatternExpressionSyntax pattern:
+                return pattern.Pattern is ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression } &&
+                    SymbolEquals(pattern.Expression, local, context);
+            default:
+                return false;
+        }
+    }
 
     private static bool SymbolEquals(
         ExpressionSyntax expression,

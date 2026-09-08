@@ -144,4 +144,41 @@ public sealed class CodeQlMissedWhereAnalyzerTests(TestContext testContext)
 
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedWhereAnalyzer(), testContext.CancellationToken);
+    /// <summary>
+    /// Verifies a braced continue filter with later work is reported like the unbraced form.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsBracedContinueFilter()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+
+            internal static class Totals
+            {
+                internal static int Sum(IEnumerable<int> values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        if (value <= 0)
+                        {
+                            continue;
+                        }
+
+                        total += value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlMissedWhereAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlMissedWhereAnalyzer(), testContext.CancellationToken);
 }

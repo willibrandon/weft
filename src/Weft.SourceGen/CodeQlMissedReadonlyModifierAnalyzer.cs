@@ -102,12 +102,27 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
         disqualifyingWrites.TryAdd(reference.Field, 0);
     }
 
-    private static bool IsWrite(IFieldReferenceOperation reference)
+    private static bool IsWrite(IFieldReferenceOperation reference) => IsWrittenThrough(reference, reference.Field.Type);
+
+    private static bool IsWrittenThrough(IOperation reference, ITypeSymbol type)
     {
         IOperation? current = reference;
         while (current.Parent is IConversionOperation or IParenthesizedOperation or ITupleOperation)
         {
             current = current.Parent;
+        }
+
+        // A mutable struct is changed in place through a non-readonly call or a member write on it; a
+        // readonly field would hand those a defensive copy and lose the update.
+        if (IsMutableStruct(type))
+        {
+            switch (current.Parent)
+            {
+                case IInvocationOperation invocation when ReferenceEquals(invocation.Instance, current) && !invocation.TargetMethod.IsReadOnly:
+                    return true;
+                case IMemberReferenceOperation member when ReferenceEquals(member.Instance, current):
+                    return member.Type is { } memberType && IsWrittenThrough(member, memberType);
+            }
         }
 
         return current.Parent switch
@@ -127,6 +142,10 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
             _ => false
         };
     }
+
+    private static bool IsMutableStruct(ITypeSymbol type) =>
+        type is INamedTypeSymbol { IsValueType: true, IsReadOnly: false, EnumUnderlyingType: null } &&
+        type.SpecialType == SpecialType.None;
 
     private static bool IsInitializationWrite(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {

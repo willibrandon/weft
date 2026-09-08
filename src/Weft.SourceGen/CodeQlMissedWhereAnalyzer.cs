@@ -119,7 +119,8 @@ public sealed class CodeQlMissedWhereAnalyzer : DiagnosticAnalyzer
                 SyntaxKind.FalseLiteralExpression));
 
     private static bool IsContinue(StatementSyntax statement) =>
-        statement is ContinueStatementSyntax;
+        statement is ContinueStatementSyntax ||
+        statement is BlockSyntax { Statements.Count: 1 } block && block.Statements[0] is ContinueStatementSyntax;
 
     private static SyntaxList<StatementSyntax> GetStatements(StatementSyntax statement) =>
         statement is BlockSyntax block ? block.Statements : new SyntaxList<StatementSyntax>(statement);

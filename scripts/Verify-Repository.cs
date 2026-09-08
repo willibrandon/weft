@@ -257,7 +257,7 @@ internal static partial class Patterns
     /// </summary>
     /// <returns>The expression.</returns>
     [GeneratedRegex(""""
-        """[\s\S]*?"""|@"(?:[^"]|"")*"|"(?:[^"\\\n]|\\.)*"
+        ("""+)[\s\S]*?\1|@"(?:[^"]|"")*"|"(?:[^"\\\n]|\\.)*"
         """", RegexOptions.CultureInvariant)]
     internal static partial Regex StringLiterals();
 
