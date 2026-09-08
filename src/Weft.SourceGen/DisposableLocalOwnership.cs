@@ -27,8 +27,7 @@ internal static class DisposableLocalOwnership
         BlockSyntax block,
         SyntaxNodeAnalysisContext context)
     {
-        if (!local.Type.AllInterfaces.Any(static type =>
-                type.ToDisplayString() is "System.IDisposable" or "System.IAsyncDisposable"))
+        if (!IsDisposableContract(local.Type) && !local.Type.AllInterfaces.Any(IsDisposableContract))
         {
             return false;
         }
@@ -47,20 +46,30 @@ internal static class DisposableLocalOwnership
                 return mayThrow;
             }
 
+            bool priorRisk = mayThrow;
             mayThrow |= MayThrow(statement, context);
             if (ReturnsLocal(statement, local, context) || TransfersLocal(statement, local, context))
             {
-                return mayThrow;
+                // A transfer nested under a condition covers only some paths, so the scan continues
+                // for the others unless the risk already accumulated makes the transfer unsafe.
+                if (mayThrow || statement is ReturnStatementSyntax or ExpressionStatementSyntax)
+                {
+                    return mayThrow;
+                }
             }
 
             if (statement is ExpressionStatementSyntax && DisposesLocal(statement, local, context))
             {
-                return false;
+                // The disposal itself is exception safe, but any earlier failure would have skipped it.
+                return priorRisk;
             }
         }
 
         return false;
     }
+
+    private static bool IsDisposableContract(ITypeSymbol type) =>
+        type.ToDisplayString() is "System.IDisposable" or "System.IAsyncDisposable";
 
     private static bool TransfersLocal(StatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
         statement is ExpressionStatementSyntax

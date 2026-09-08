@@ -745,8 +745,9 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
 
         ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
 
-        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
-        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+        // The child leaks when the handler skips it, and the first stream leaks if opening the child throws.
+        Assert.HasCount(2, diagnostics);
+        Assert.IsTrue(diagnostics.All(diagnostic => diagnostic.Id == CodeQlLocalDisposableAnalyzer.DiagnosticId));
     }
 
     /// <summary>
@@ -813,6 +814,116 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
 
         Assert.IsNotEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a local declared as the disposable interface itself is analyzed like any other owner.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsInterfaceTypedLocalTransferredAfterFallibleWork()
+    {
+        const string Source = """
+            using System;
+            using System.IO;
+            internal static class Factory
+            {
+                internal static IDisposable Open(string path)
+                {
+                    IDisposable resource = File.OpenRead(path);
+                    Console.WriteLine(path);
+                    return resource;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a return under a condition does not end the scan for the paths that continue.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleWorkAfterConditionalReturn()
+    {
+        const string Source = """
+            using System.IO;
+            using System.Threading.Tasks;
+            internal static class Reader
+            {
+                internal static async Task<FileStream> OpenAsync(string path, bool cached)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (cached)
+                    {
+                        return stream;
+                    }
+
+                    await Task.Delay(1).ConfigureAwait(false);
+                    return stream;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.ContainsSingle(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a conditional return followed by a safe disposal on the other path is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsConditionalReturnFollowedBySafeDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static FileStream? Open(string path, bool keep)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (keep)
+                    {
+                        return stream;
+                    }
+
+                    stream.Dispose();
+                    return null;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies fallible work before a direct disposal is reported because a failure skips the disposal.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleWorkBeforeDirectDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Swap(FileStream current, string path)
+                {
+                    FileStream child = File.OpenRead(path);
+                    current.Dispose();
+                    child.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
