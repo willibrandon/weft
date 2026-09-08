@@ -147,24 +147,23 @@ internal static class DisposableLocalOwnership
             StatementSyntax statement => [statement],
             _ => []
         };
-        return statements.Any(statement =>
-            statement is ExpressionStatementSyntax { Expression: var expression } &&
-            (expression is InvocationExpressionSyntax invocation &&
-                invocation.ArgumentList.Arguments.Count == 0 &&
-                invocation.Expression is MemberAccessExpressionSyntax
-                {
-                    Expression: IdentifierNameSyntax receiver,
-                    Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
-                } && IsLocal(receiver, local, context) ||
-             expression is AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } &&
-                awaited.ArgumentList.Arguments.Count == 0 &&
-                awaited.Expression is MemberAccessExpressionSyntax
-                {
-                    Expression: IdentifierNameSyntax awaitedReceiver,
-                    Name.Identifier.ValueText: "DisposeAsync"
-                } && IsLocal(awaitedReceiver, local, context)) ||
-            statement is UsingStatementSyntax { Expression: IdentifierNameSyntax scoped } && IsLocal(scoped, local, context));
+        return statements.Any(statement => statement switch
+        {
+            ExpressionStatementSyntax { Expression: InvocationExpressionSyntax invocation } => IsDisposeCall(invocation, local, context),
+            ExpressionStatementSyntax { Expression: AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } } => IsDisposeCall(awaited, local, context),
+            UsingStatementSyntax { Expression: IdentifierNameSyntax scoped } => IsLocal(scoped, local, context),
+            _ => false
+        });
     }
+
+    private static bool IsDisposeCall(InvocationExpressionSyntax invocation, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
+        invocation.ArgumentList.Arguments.Count == 0 &&
+        invocation.Expression is MemberAccessExpressionSyntax
+        {
+            Expression: IdentifierNameSyntax receiver,
+            Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
+        } &&
+        IsLocal(receiver, local, context);
 
     private static bool MayThrow(SyntaxNode scope, SyntaxNodeAnalysisContext context) =>
         scope.DescendantNodesAndSelf(DescendIntoExecution).Any(node =>
