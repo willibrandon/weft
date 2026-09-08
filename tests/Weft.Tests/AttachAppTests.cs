@@ -21,8 +21,7 @@ public sealed class AttachAppTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// Verifies the attach UI renders the block frame and info bar, splits on the leader chord,
-    /// shows shell output typed through the focused block, and detaches on the leader chord.
+    /// Verifies the attach UI renders the block frame and info bar, splits on the leader chord, shows shell output typed through the focused block, and detaches on the leader chord.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [TestMethod]

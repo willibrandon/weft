@@ -28,6 +28,8 @@ public sealed class AttachApp
     private CancellationTokenSource? _stopping;
     private string? _status;
     private const int LeaderSafetyTimeoutMs = 10_000;
+    private const int ActivationIntervalMs = 1000;
+    private long _lastActivation;
     private long _bindingBuilds;
     private bool _lastRenderPending;
     private bool _locked;
@@ -158,6 +160,7 @@ public sealed class AttachApp
         Hex1bTheme theme = ThemeFor(_options.Config.Theme);
         Hex1bTerminalBuilder builder = Hex1bTerminal.CreateBuilder()
             .WithMouse()
+            .AddWorkloadFilter(new InputActivityFilter(OnUserInput))
             .WithHex1bApp(options => options.Theme = theme, app =>
             {
                 _app = app;
@@ -251,7 +254,11 @@ public sealed class AttachApp
             }
 
             var view = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => _app?.Invalidate());
-            view.Handle.TextCopied += text => Fire(client => client.SetPasteAsync(text, CancellationToken.None));
+            if (!_options.ReadOnly)
+            {
+                view.Handle.TextCopied += text => Fire(client => client.SetPasteAsync(text, CancellationToken.None));
+            }
+
             _views[block.Id] = view;
         }
     }
@@ -307,8 +314,30 @@ public sealed class AttachApp
         }
     }
 
+    private void OnUserInput()
+    {
+        // Any input marks this client as the most recently active one, which the latest size policy follows.
+        // Leader actions activate through Execute as well; this covers ordinary typing that goes straight to a block.
+        long now = Environment.TickCount64;
+        if (now - Volatile.Read(ref _lastActivation) < ActivationIntervalMs)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _lastActivation, now);
+        if (_mirror is { } mirror)
+        {
+            Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
+        }
+    }
+
     private void FocusView(string id)
     {
+        if (_options.ReadOnly)
+        {
+            return;
+        }
+
         BlockView? view = ViewFor(id);
         if (view is not null)
         {
@@ -538,9 +567,19 @@ public sealed class AttachApp
         }
 
         HashSet<KeyStroke> claimed = [];
+        if (singleStrokeLeader)
+        {
+            claimed.Add(_bindings.Leader.Steps[0]);
+        }
+
         foreach ((KeyChord chord, string action) in _bindings.Bindings)
         {
             if (_locked && !string.Equals(action, ClientActions.Lock, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (_options.ReadOnly && !ClientActions.IsReadOnlySafe(action))
             {
                 continue;
             }
@@ -570,6 +609,11 @@ public sealed class AttachApp
 
         if (!pending)
         {
+            if (_options.ReadOnly)
+            {
+                SwallowUnclaimed(bindings, claimed);
+            }
+
             return;
         }
 
@@ -585,11 +629,24 @@ public sealed class AttachApp
             BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(context =>
             {
                 DisarmLeader();
-                if (ViewFor(FocusedBlockId()) is { } view)
+                if (!_options.ReadOnly && ViewFor(FocusedBlockId()) is { } view)
                 {
                     _ = view.Handle.SendEventAsync(keyEvent);
                 }
             }, "Forward " + stroke);
+        }
+    }
+
+    private static void SwallowUnclaimed(InputBindingsBuilder bindings, HashSet<KeyStroke> claimed)
+    {
+        // A read-only client never forwards keys, even if a click focused a block: every stroke it can name is
+        // bound to nothing, and the leader is the only key that still opens a menu of harmless actions.
+        foreach (KeyStroke stroke in KeyMap.AllStrokes())
+        {
+            if (!claimed.Contains(stroke))
+            {
+                BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
+            }
         }
     }
 

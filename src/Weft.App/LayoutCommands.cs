@@ -11,7 +11,9 @@ namespace Weft.App;
 /// </summary>
 internal static class LayoutCommands
 {
-    /// <summary>Creates the layout command.</summary>
+    /// <summary>
+    /// Creates the layout command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateLayout()
     {
@@ -61,7 +63,9 @@ internal static class LayoutCommands
         return command;
     }
 
-    /// <summary>Creates the resize command.</summary>
+    /// <summary>
+    /// Creates the resize command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateResize()
     {

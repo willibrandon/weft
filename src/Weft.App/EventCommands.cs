@@ -9,7 +9,9 @@ namespace Weft.App;
 /// </summary>
 internal static class EventCommands
 {
-    /// <summary>Creates the events command.</summary>
+    /// <summary>
+    /// Creates the events command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateEvents()
     {
@@ -27,7 +29,9 @@ internal static class EventCommands
         return command;
     }
 
-    /// <summary>Creates the signal command.</summary>
+    /// <summary>
+    /// Creates the signal command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateSignal()
     {
@@ -42,7 +46,9 @@ internal static class EventCommands
         return command;
     }
 
-    /// <summary>Creates the wait-for command.</summary>
+    /// <summary>
+    /// Creates the wait-for command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateWaitFor()
     {

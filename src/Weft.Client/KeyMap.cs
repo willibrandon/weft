@@ -84,18 +84,25 @@ internal static class KeyMap
             "up", "down", "left", "right", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
             "-", ",", ".", "/", "="
         ];
+        KeyModifiers[] modifiers =
+        [
+            KeyModifiers.None, KeyModifiers.Shift, KeyModifiers.Control, KeyModifiers.Alt,
+            KeyModifiers.Control | KeyModifiers.Shift, KeyModifiers.Alt | KeyModifiers.Shift, KeyModifiers.Control | KeyModifiers.Alt
+        ];
         foreach (char letter in "abcdefghijklmnopqrstuvwxyz0123456789")
         {
-            yield return new KeyStroke(KeyModifiers.None, letter.ToString());
-            yield return new KeyStroke(KeyModifiers.Shift, letter.ToString());
-            yield return new KeyStroke(KeyModifiers.Control, letter.ToString());
+            foreach (KeyModifiers modifier in modifiers)
+            {
+                yield return new KeyStroke(modifier, letter.ToString());
+            }
         }
 
         foreach (string name in names)
         {
-            yield return new KeyStroke(KeyModifiers.None, name);
-            yield return new KeyStroke(KeyModifiers.Shift, name);
-            yield return new KeyStroke(KeyModifiers.Control, name);
+            foreach (KeyModifiers modifier in modifiers)
+            {
+                yield return new KeyStroke(modifier, name);
+            }
         }
     }
 

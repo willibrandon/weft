@@ -349,7 +349,7 @@ required members keep init, since they must be present anyway.
 ### 6.2 Events
 
 `session.created`, `session.renamed`, `session.closed`, `tab.created`, `tab.selected`,
-`tab.renamed`, `tab.changed`, `tab.closed`, `block.created`, `block.titled`, `block.exited`, `block.closed`,
+`tab.renamed`, `tab.changed`, `tab.closed`, `block.created`, `block.titled`, `block.changed`, `block.exited`, `block.closed`,
 `block.focused`, `block.output` (throttled, carries revision), `layout.changed` (full geometry
 for the tab), `client.attached`, `client.detached`, `size.changed`, `server.stopping`.
 
@@ -456,7 +456,11 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 - Sockets live in a `0700` directory owned by the user; there is no network listener.
 - The server runs commands as the user; there is no privilege boundary between clients of the
   same user, which matches tmux and screen.
-- Read-only clients are enforced at the server, not the client.
+- Read-only attachments are enforced in the client: it never focuses a block, forwards no keys,
+  and keeps only actions that change nothing on the server. The block sockets accept input from
+  any peer, because the muxer protocol does not attribute input to a peer, so read-only guards
+  against accidents by the same user rather than against a hostile process; the private runtime
+  directory is the actual boundary.
 - No telemetry, no outbound connections.
 
 ## 12. Performance budgets

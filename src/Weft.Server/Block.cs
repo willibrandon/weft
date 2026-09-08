@@ -129,4 +129,9 @@ internal sealed class Block
     /// Gets or sets the tick count of the last published output event.
     /// </summary>
     internal long LastActivityPublished { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a trailing activity event is scheduled for output that arrived inside the quiet window.
+    /// </summary>
+    internal bool ActivityTrailing { get; set; }
 }

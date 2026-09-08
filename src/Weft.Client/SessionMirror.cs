@@ -192,6 +192,7 @@ internal sealed class SessionMirror
                     return null;
                 case ProtocolEvents.BlockCreated:
                 case ProtocolEvents.BlockTitled:
+                case ProtocolEvents.BlockChanged:
                 case ProtocolEvents.BlockExited:
                 case ProtocolEvents.BlockFocused:
                     BlockInfo block = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block;

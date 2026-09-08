@@ -66,8 +66,7 @@ public sealed class LayoutTree(LayoutOptions options)
     public LayoutCell? Find(BlockId block) => Leaves().Find(leaf => leaf.Block == block);
 
     /// <summary>
-    /// Resizes the whole layout to a new size, spreading the change across cells and never
-    /// shrinking a block below its minimum.
+    /// Resizes the whole layout to a new size, spreading the change across cells and never shrinking a block below its minimum.
     /// </summary>
     /// <param name="width">The target width.</param>
     /// <param name="height">The target height.</param>
@@ -377,8 +376,7 @@ public sealed class LayoutTree(LayoutOptions options)
     public string Serialize() => _root is null ? string.Empty : LayoutSerializer.Serialize(_root);
 
     /// <summary>
-    /// Replaces the tree with a parsed layout, assigning blocks to leaves in order when the
-    /// leaf ids do not name exactly the given blocks.
+    /// Replaces the tree with a parsed layout, assigning blocks to leaves in order when the leaf ids do not name exactly the given blocks.
     /// </summary>
     /// <param name="root">The parsed root.</param>
     /// <param name="blocks">The blocks to place.</param>

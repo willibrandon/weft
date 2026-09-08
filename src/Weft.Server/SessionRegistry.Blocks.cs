@@ -8,6 +8,8 @@ namespace Weft.Server;
 /// </summary>
 internal sealed partial class SessionRegistry
 {
+    private const int ActivityIntervalMs = 250;
+
     /// <summary>
     /// Splits a block to create a new one running a command.
     /// </summary>
@@ -256,7 +258,7 @@ internal sealed partial class SessionRegistry
             block.ExcludedFromSync = excluded;
         }
 
-        _events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     private Task FanOutAsync(Block source, ReadOnlyMemory<byte> bytes, string? pasteText, CancellationToken cancellationToken)
@@ -299,12 +301,42 @@ internal sealed partial class SessionRegistry
         long now = Environment.TickCount64;
         lock (_gate)
         {
-            if (block.State == BlockState.Closed || now - block.LastActivityPublished < 250)
+            if (block.State == BlockState.Closed)
             {
                 return;
             }
 
+            if (now - block.LastActivityPublished < ActivityIntervalMs)
+            {
+                // Output inside the quiet window is coalesced into one trailing event rather than dropped,
+                // so a short burst after a client looked away still raises the activity marker.
+                if (!block.ActivityTrailing)
+                {
+                    block.ActivityTrailing = true;
+                    _ = PublishTrailingActivityAsync(block);
+                }
+
+                return;
+            }
+
             block.LastActivityPublished = now;
+        }
+
+        _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+    }
+
+    private async Task PublishTrailingActivityAsync(Block block)
+    {
+        await Task.Delay(ActivityIntervalMs).ConfigureAwait(false);
+        lock (_gate)
+        {
+            block.ActivityTrailing = false;
+            if (block.State == BlockState.Closed)
+            {
+                return;
+            }
+
+            block.LastActivityPublished = Environment.TickCount64;
         }
 
         _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);

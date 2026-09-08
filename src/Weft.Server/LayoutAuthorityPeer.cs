@@ -3,8 +3,7 @@ using Hex1b;
 namespace Weft.Server;
 
 /// <summary>
-/// An in-process HMP1 peer that holds the primary role on a block so the server, not any
-/// attached client, decides the block's size.
+/// An in-process HMP1 peer that holds the primary role on a block so the server, not any attached client, decides the block's size.
 /// </summary>
 internal sealed class LayoutAuthorityPeer : IAsyncDisposable
 {

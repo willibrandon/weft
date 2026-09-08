@@ -5,8 +5,7 @@ using Weft.Protocol;
 namespace Weft.Server;
 
 /// <summary>
-/// Hosts one block: a Hex1b terminal over a pseudo-terminal, served to clients through an
-/// HMP1 socket, with the server holding the primary role through a layout authority peer.
+/// Hosts one block: a Hex1b terminal over a pseudo-terminal, served to clients through an HMP1 socket, with the server holding the primary role through a layout authority peer.
 /// </summary>
 internal sealed class BlockHost : IAsyncDisposable
 {

@@ -11,7 +11,9 @@ namespace Weft.App;
 /// </summary>
 internal static class BlockCommands
 {
-    /// <summary>Creates the split command.</summary>
+    /// <summary>
+    /// Creates the split command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateSplit()
     {
@@ -48,7 +50,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the send command.</summary>
+    /// <summary>
+    /// Creates the send command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateSend()
     {
@@ -72,7 +76,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the type command.</summary>
+    /// <summary>
+    /// Creates the type command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateType()
     {
@@ -89,7 +95,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the paste command.</summary>
+    /// <summary>
+    /// Creates the paste command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreatePaste()
     {
@@ -113,7 +121,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the capture command.</summary>
+    /// <summary>
+    /// Creates the capture command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateCapture()
     {
@@ -137,7 +147,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the wait command.</summary>
+    /// <summary>
+    /// Creates the wait command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateWait()
     {
@@ -172,7 +184,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the run command.</summary>
+    /// <summary>
+    /// Creates the run command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateRun()
     {
@@ -208,7 +222,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the focus command.</summary>
+    /// <summary>
+    /// Creates the focus command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateFocus()
     {
@@ -225,7 +241,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the zoom command.</summary>
+    /// <summary>
+    /// Creates the zoom command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateZoom()
     {
@@ -240,7 +258,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the close command.</summary>
+    /// <summary>
+    /// Creates the close command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateClose()
     {
@@ -255,7 +275,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the kill command.</summary>
+    /// <summary>
+    /// Creates the kill command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateKill()
     {
@@ -272,7 +294,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the rename command.</summary>
+    /// <summary>
+    /// Creates the rename command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateRename()
     {
@@ -308,7 +332,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the float command.</summary>
+    /// <summary>
+    /// Creates the float command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateFloat()
     {
@@ -338,7 +364,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the tile command.</summary>
+    /// <summary>
+    /// Creates the tile command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateTile()
     {
@@ -353,7 +381,9 @@ internal static class BlockCommands
         return command;
     }
 
-    /// <summary>Creates the move command.</summary>
+    /// <summary>
+    /// Creates the move command.
+    /// </summary>
     /// <returns>The command.</returns>
     internal static Command CreateMove()
     {

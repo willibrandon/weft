@@ -3,8 +3,7 @@ using System.Globalization;
 namespace Weft.Core;
 
 /// <summary>
-/// A parsed target in the form <c>session:tab.block</c>, where each part is optional and may be a
-/// name, an index, or a prefixed id.
+/// A parsed target in the form <c>session:tab.block</c>, where each part is optional and may be a name, an index, or a prefixed id.
 /// </summary>
 /// <param name="SessionName">The session name, when given by name.</param>
 /// <param name="Session">The session id, when given by id.</param>
@@ -31,8 +30,7 @@ public sealed record TargetSelector(
     public bool IsEmpty => SessionName is null && Session is null && TabIndex is null && Tab is null && BlockIndex is null && Block is null;
 
     /// <summary>
-    /// Parses a target. A bare token that looks like <c>s1</c>, <c>t2</c>, or <c>b3</c> is an id;
-    /// digits after <c>:</c> or <c>.</c> are indices; anything else before <c>:</c> is a session name.
+    /// Parses a target. A bare token that looks like <c>s1</c>, <c>t2</c>, or <c>b3</c> is an id; digits after <c>:</c> or <c>.</c> are indices; anything else before <c>:</c> is a session name.
     /// </summary>
     /// <param name="text">The target text; null or empty means the current target.</param>
     /// <param name="selector">The parsed selector.</param>

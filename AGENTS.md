@@ -46,4 +46,4 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
 - Reference repositories for hex1b, sibling projects, other multiplexers, and agent
   runtimes are listed in `docs/references.md`, a local, uncommitted file. Treat every
   reference repository as read-only. Never modify one.
-- `docs/progress.md` is a local, uncommitted work tracker. `docs/design.md` is committed.
+- `docs/design.md` and `docs/progress.md` are both committed; the design links to the progress tracker.
