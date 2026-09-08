@@ -313,4 +313,33 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzerTests
 
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessAssignmentToLocalAnalyzer(), TestContext.CancellationToken);
+    /// <summary>
+    /// Verifies a using statement whose variable is only disposed is not reported.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsUsingStatementDeclaration()
+    {
+        const string Source = """
+            using System;
+            using System.IO;
+
+            internal static class Scoped
+            {
+                internal static void Work()
+                {
+                    using (var stream = new MemoryStream())
+                    {
+                        Console.WriteLine("working");
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlUselessAssignmentToLocalAnalyzer(), CancellationToken.None);
 }

@@ -144,4 +144,18 @@ public sealed class CodeQlMissedWhereAnalyzerTests(TestContext testContext)
 
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedWhereAnalyzer(), testContext.CancellationToken);
+    count++;
+                    }
+
+                    return count;
+                }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+Assert.IsEmpty(diagnostics);
+    }
+
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlMissedWhereAnalyzer(), testContext.CancellationToken);
 }

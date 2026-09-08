@@ -163,4 +163,98 @@ public sealed class CodeQlUselessUpcastAnalyzerTests
 
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessUpcastAnalyzer(), TestContext.CancellationToken);
+    /// <summary>
+    /// Verifies an inner upcast that chooses between user-defined conversions of the outer cast is kept.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsNestedCastSelectingUserDefinedConversion()
+    {
+        const string Source = """
+            internal class Base
+            {
+            }
+
+            internal sealed class Derived : Base
+            {
+            }
+
+            internal readonly struct Target
+            {
+                internal Target(int origin) => Origin = origin;
+
+                internal int Origin { get; }
+
+                public static implicit operator Target(Base value) => new(1);
+
+                public static implicit operator Target(Derived value) => new(2);
+            }
+
+            internal static class Convert
+            {
+                internal static Target AsBase(Derived derived) => (Target)(Base)derived;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a receiver upcast that selects a different extension overload is kept.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsUpcastSelectingExtensionOverload()
+    {
+        const string Source = """
+            internal class Base
+            {
+            }
+
+            internal sealed class Derived : Base
+            {
+            }
+
+            internal static class Reads
+            {
+                internal static int Read(this Base value) => 1;
+
+                internal static int Read(this Derived value) => 2;
+
+                internal static int ReadAsBase(Derived derived) => ((Base)derived).Read();
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a receiver upcast that binds to the same virtual member with or without it is still reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsUpcastOnVirtualMemberReceiver()
+    {
+        const string Source = """
+            internal class Base
+            {
+                internal virtual int Read() => 1;
+            }
+
+            internal sealed class Derived : Base
+            {
+                internal override int Read() => 2;
+
+                internal int ReadSelf() => ((Base)this).Read();
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.ContainsSingle(diagnostics);
+    }
+
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlUselessUpcastAnalyzer(), CancellationToken.None);
 }

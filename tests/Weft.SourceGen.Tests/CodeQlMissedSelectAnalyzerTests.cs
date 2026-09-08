@@ -88,4 +88,33 @@ public sealed class CodeQlMissedSelectAnalyzerTests(TestContext testContext)
 
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedSelectAnalyzer(), testContext.CancellationToken);
+    /// <summary>
+    /// Verifies a ref local projected from the iteration variable is not asked to become Select.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsRefLocalProjection()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+
+            internal static class Bumps
+            {
+                internal static void Increment(int[] values, IEnumerable<int> indexes)
+                {
+                    foreach (int index in indexes)
+                    {
+                        ref int value = ref values[index];
+                        value++;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlMissedSelectAnalyzer(), testContext.CancellationToken);
 }

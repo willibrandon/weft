@@ -141,4 +141,37 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
             }
         }
         """, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
+    /// <summary>
+    /// Verifies a parameter or field reset before it is appended in each iteration is not reported.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsParameterAndFieldResetEachIteration()
+    {
+        const string Source = """
+            internal sealed class Lines
+            {
+                private string _seed = string.Empty;
+
+                internal string Last(string[] items, string seed)
+                {
+                    foreach (string item in items)
+                    {
+                        seed = string.Empty;
+                        seed += item;
+                        _seed = string.Empty;
+                        _seed += item;
+                    }
+
+                    return seed + _seed;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
 }

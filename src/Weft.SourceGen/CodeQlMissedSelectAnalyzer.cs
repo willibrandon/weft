@@ -51,6 +51,7 @@ public sealed class CodeQlMissedSelectAnalyzer : DiagnosticAnalyzer
             statement.Statement is not BlockSyntax { Statements.Count: > 0 } body ||
             body.Statements[0] is not LocalDeclarationStatementSyntax declaration ||
             declaration.Declaration.Variables.Count != 1 ||
+            declaration.Declaration.Type is RefTypeSyntax ||
             declaration.Declaration.Variables[0].Initializer?.Value is not
                 ExpressionSyntax initializer ||
             initializer is CastExpressionSyntax ||

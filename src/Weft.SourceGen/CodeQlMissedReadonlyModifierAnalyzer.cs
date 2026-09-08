@@ -77,6 +77,7 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
         if (field.IsImplicitlyDeclared ||
             field.IsConst ||
             field.IsReadOnly ||
+            field.IsRequired ||
             field.IsVolatile ||
             field.ContainingType.TypeKind != TypeKind.Class ||
             field.Locations.FirstOrDefault(static location => location.IsInSource) is not
@@ -104,13 +105,15 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
     private static bool IsWrite(IFieldReferenceOperation reference)
     {
         IOperation? current = reference;
-        while (current.Parent is IConversionOperation or IParenthesizedOperation)
+        while (current.Parent is IConversionOperation or IParenthesizedOperation or ITupleOperation)
         {
             current = current.Parent;
         }
 
         return current.Parent switch
         {
+            IDeconstructionAssignmentOperation deconstruction =>
+                ReferenceEquals(deconstruction.Target, current),
             ISimpleAssignmentOperation assignment =>
                 ReferenceEquals(assignment.Target, current),
             ICompoundAssignmentOperation assignment =>

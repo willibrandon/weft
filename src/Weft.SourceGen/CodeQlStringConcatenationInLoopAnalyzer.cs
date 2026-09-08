@@ -75,9 +75,15 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
 
     private static bool FlowsIntoBody(IOperation assignment, ILoopOperation loop, ISymbol variable)
     {
+        if (variable is IFieldSymbol)
+        {
+            // Data flow does not track fields; a plain assignment earlier in the same body discards the old value.
+            return !ResetBeforeAppend(assignment, loop, variable);
+        }
+
         // The whole loop statement counts, so a for loop's condition and incrementors are read as well.
         SemanticModel? model = assignment.SemanticModel ?? loop.SemanticModel;
-        if (variable is not ILocalSymbol || loop.Syntax is not StatementSyntax statement || model is null)
+        if (loop.Syntax is not StatementSyntax statement || model is null)
         {
             return true;
         }
@@ -85,6 +91,30 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
         DataFlowAnalysis? flow = model.AnalyzeDataFlow(statement);
         return flow is null || !flow.Succeeded ||
             flow.DataFlowsIn.Any(symbol => SymbolEqualityComparer.Default.Equals(symbol, variable));
+    }
+
+    private static bool ResetBeforeAppend(IOperation assignment, ILoopOperation loop, ISymbol variable)
+    {
+        if (loop.Body is not IBlockOperation body)
+        {
+            return false;
+        }
+
+        foreach (IOperation statement in body.Operations)
+        {
+            if (statement.Syntax.Span.Contains(assignment.Syntax.Span))
+            {
+                return false;
+            }
+
+            if (statement is IExpressionStatementOperation { Operation: ISimpleAssignmentOperation reset } &&
+                SymbolEqualityComparer.Default.Equals(GetVariable(reset.Target), variable))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ISymbol? GetVariable(IOperation operation) => operation switch

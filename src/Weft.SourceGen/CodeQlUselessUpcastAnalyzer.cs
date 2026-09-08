@@ -4,7 +4,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System;
 using System.Collections.Immutable;
-using System.Linq;
 
 namespace Weft.SourceGen;
 
@@ -86,8 +85,13 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
             return;
         }
 
+        if (nested && expression.Parent is CastExpressionSyntax outer && FeedsUserDefinedConversion(context, outer, sourceType, targetType))
+        {
+            return;
+        }
+
         if (classReceiver && expression.Parent is MemberAccessExpressionSyntax access &&
-            SelectsHiddenMember(context, access, sourceType, targetType))
+            BindsDifferentlyWithoutCast(context, access, expression, cast))
         {
             return;
         }
@@ -98,31 +102,62 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
             targetType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
     }
 
-    private static bool SelectsHiddenMember(
+    private static bool FeedsUserDefinedConversion(
         SyntaxNodeAnalysisContext context,
-        MemberAccessExpressionSyntax access,
+        CastExpressionSyntax outer,
         ITypeSymbol sourceType,
-        ITypeSymbol targetType)
+        ITypeSymbol innerType)
     {
-        // A derived type may hide the member with 'new'; the cast then chooses the base member on purpose.
-        if (context.SemanticModel.GetSymbolInfo(access, context.CancellationToken).Symbol is not ISymbol bound)
+        // The inner cast picks which user-defined conversion the outer cast resolves to, so it is not redundant.
+        if (context.SemanticModel.GetTypeInfo(outer.Type, context.CancellationToken).Type is not ITypeSymbol outerType)
         {
             return true;
         }
 
-        string name = access.Name.Identifier.ValueText;
-        for (ITypeSymbol? type = sourceType;
-            type is not null && !SymbolEqualityComparer.Default.Equals(type, targetType);
-            type = type.BaseType)
+        return context.Compilation.ClassifyConversion(innerType, outerType).IsUserDefined ||
+            context.Compilation.ClassifyConversion(sourceType, outerType).IsUserDefined;
+    }
+
+    private static bool BindsDifferentlyWithoutCast(
+        SyntaxNodeAnalysisContext context,
+        MemberAccessExpressionSyntax access,
+        SyntaxNode castExpression,
+        CastExpressionSyntax cast)
+    {
+        // Rebind the access with the cast removed. A different member, a hidden one or another extension overload,
+        // means the cast chooses the member and stays. Overrides bind virtually, so they compare by their root.
+        SyntaxNode target = access.Parent is InvocationExpressionSyntax invocation && invocation.Expression == access
+            ? invocation
+            : access;
+        if (context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol is not ISymbol bound)
         {
-            if (type.GetMembers(name).Any(candidate => !candidate.IsOverride &&
-                !SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, bound.OriginalDefinition)))
-            {
-                return true;
-            }
+            return true;
         }
 
-        return false;
+        var rewritten = (ExpressionSyntax)target.ReplaceNode(castExpression, cast.Expression.WithTriviaFrom(castExpression));
+        ISymbol? without = context.SemanticModel.GetSpeculativeSymbolInfo(
+            target.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression).Symbol;
+        return without is null || !SymbolEqualityComparer.Default.Equals(Root(without), Root(bound));
+    }
+
+    private static ISymbol Root(ISymbol symbol)
+    {
+        while (true)
+        {
+            ISymbol? overridden = symbol switch
+            {
+                IMethodSymbol method => method.OverriddenMethod,
+                IPropertySymbol property => property.OverriddenProperty,
+                IEventSymbol @event => @event.OverriddenEvent,
+                _ => null
+            };
+            if (overridden is null)
+            {
+                return symbol.OriginalDefinition;
+            }
+
+            symbol = overridden;
+        }
     }
 
     private static bool IsRedundantNullUpcast(

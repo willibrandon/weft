@@ -190,6 +190,7 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzer : DiagnosticAnalyzer
         if (declarator.Initializer is null ||
             declarator.Parent?.Parent is LocalDeclarationStatementSyntax
             { UsingKeyword.RawKind: not 0 } ||
+            declarator.Parent?.Parent is UsingStatementSyntax ||
             context.SemanticModel.GetDeclaredSymbol(
                 declarator,
                 context.CancellationToken) is not ILocalSymbol local ||

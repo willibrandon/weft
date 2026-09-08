@@ -69,4 +69,58 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzerTests(TestContext testCo
 
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
+    /// <summary>
+    /// Verifies a required field, which consumers set through initializers, is not asked to be readonly.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsRequiredField()
+    {
+        const string Source = """
+            internal sealed class Options
+            {
+                public required int Value;
+
+                internal int Doubled => Value * 2;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a field written through deconstruction counts as written.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsFieldWrittenByDeconstruction()
+    {
+        const string Source = """
+            internal sealed class Pair
+            {
+                private int _value;
+
+                public Pair()
+                {
+                    _value = 0;
+                }
+
+                internal void Refresh()
+                {
+                    (_value, _) = Read();
+                }
+
+                internal int Value => _value;
+
+                private static (int, int) Read() => (1, 2);
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
 }
