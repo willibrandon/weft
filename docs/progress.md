@@ -5,7 +5,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Phase 2 UX landed through pull requests; CI, CodeQL, and the size check are being made green. The MCP server is on its branch. Next: release pipeline, mouse resize.
+- Phases 2 and 3 have landed on main, including the MCP server with per-call connection leases, and the repository's own analyzers are in review. Next: release pipeline, mouse resize, search.
 
 ## Phase 0: Research and scaffolding
 
