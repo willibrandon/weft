@@ -176,7 +176,24 @@ internal sealed partial class SessionRegistry
             }
         }
 
-        if (first is null)
+        // A tab whose only blocks float has no tiled anchor; each floating block then starts as a root block and is
+        // floated straight away, so the tab comes back the way it was left.
+        foreach (StoredBlock storedBlock in stored.Blocks.Where(block => block.Floating))
+        {
+            try
+            {
+                Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null && restored.Count == 0, keepOnExit: false, cancellationToken).ConfigureAwait(false);
+                block.PinnedTitle = storedBlock.Title;
+                await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), cancellationToken).ConfigureAwait(false);
+                restored[storedBlock.Id] = block;
+            }
+            catch (ProtocolException exception)
+            {
+                ServerLog.Warn("Could not restore floating block " + storedBlock.Command + ": " + exception.Message);
+            }
+        }
+
+        if (restored.Count == 0)
         {
             lock (_gate)
             {
@@ -188,21 +205,6 @@ internal sealed partial class SessionRegistry
             }
 
             return;
-        }
-
-        foreach (StoredBlock storedBlock in stored.Blocks.Where(block => block.Floating))
-        {
-            try
-            {
-                Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: false, keepOnExit: false, cancellationToken).ConfigureAwait(false);
-                block.PinnedTitle = storedBlock.Title;
-                await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), cancellationToken).ConfigureAwait(false);
-                restored[storedBlock.Id] = block;
-            }
-            catch (ProtocolException exception)
-            {
-                ServerLog.Warn("Could not restore floating block " + storedBlock.Command + ": " + exception.Message);
-            }
         }
 
         List<PendingResize> resizes = [];

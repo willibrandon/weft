@@ -110,7 +110,9 @@ internal sealed partial class SessionRegistry
             }
             else if (block.Floating)
             {
-                bounds = block.FloatingBounds;
+                // The session may have shrunk since the block was floated; keep it inside the new size.
+                bounds = ClampBounds(session, block.FloatingBounds);
+                block.FloatingBounds = bounds;
             }
             else if (tab.Layout.Find(block.Id) is { } cell)
             {

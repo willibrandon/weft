@@ -28,6 +28,13 @@ public static class WeftConfigLoader
         {
             byte[] bytes = File.ReadAllBytes(path);
             config = JsonSerializer.Deserialize(bytes, WeftConfigJsonContext.Default.WeftConfig) ?? new WeftConfig();
+            if (NullMember(config) is { } member)
+            {
+                error = "The configuration member '" + member + "' must not be null.";
+                config = new WeftConfig();
+                return false;
+            }
+
             if (!KeyChord.TryParse(config.Leader, null, out _))
             {
                 error = "The leader chord '" + config.Leader + "' is not valid.";
@@ -37,8 +44,9 @@ public static class WeftConfigLoader
 
             return true;
         }
-        catch (JsonException exception)
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException)
         {
+            // A null where an object is expected surfaces as InvalidOperationException from the populated dictionaries.
             error = "Could not parse " + path + ": " + exception.Message;
             config = new WeftConfig();
             return false;
@@ -61,4 +69,9 @@ public static class WeftConfigLoader
         TryLoad(WeftPaths.ResolveConfigPath(), out WeftConfig config, out error);
         return config;
     }
+
+    private static string? NullMember(WeftConfig config) =>
+        config.Leader is null ? "leader"
+        : config.Theme is null ? "theme"
+        : null;
 }

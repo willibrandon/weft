@@ -12,9 +12,30 @@ internal sealed partial class SessionRegistry
     /// Lifts a block out of the tiled layout to float above it.
     /// </summary>
     /// <param name="block">The block.</param>
-    /// <param name="bounds">The bounds, or null to center a block over most of the area.</param>
+    /// <param name="x">The left column, or null for the default.</param>
+    /// <param name="y">The top row, or null for the default.</param>
+    /// <param name="width">The width, or null for the default.</param>
+    /// <param name="height">The height, or null for the default.</param>
     /// <param name="cancellationToken">Cancels resizes.</param>
     /// <returns>A task that completes when blocks have been resized.</returns>
+    internal Task FloatBlockAsync(Block block, int? x, int? y, int? width, int? height, CancellationToken cancellationToken)
+    {
+        LayoutRect defaults;
+        lock (_gate)
+        {
+            defaults = DefaultFloatBounds(block.Tab.Session);
+        }
+
+        return FloatBlockAsync(block, new LayoutRect(x ?? defaults.X, y ?? defaults.Y, width ?? defaults.Width, height ?? defaults.Height), cancellationToken);
+    }
+
+    /// <summary>
+    /// Floats a block at the given bounds, or at the default centered rectangle when null.
+    /// </summary>
+    /// <param name="block">The block.</param>
+    /// <param name="bounds">The bounds, clamped to the session, or null for the default.</param>
+    /// <param name="cancellationToken">Cancels the resize.</param>
+    /// <returns>A task that completes when the block floats.</returns>
     internal async Task FloatBlockAsync(Block block, LayoutRect? bounds, CancellationToken cancellationToken)
     {
         List<PendingResize> resizes;

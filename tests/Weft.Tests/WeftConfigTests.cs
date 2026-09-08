@@ -70,5 +70,20 @@ public sealed class WeftConfigTests
         {
             File.Delete(malformed);
         }
+
+        // Valid JSON that nulls a member the code relies on must fall back rather than throw later.
+        string nulled = missing + ".null";
+        File.WriteAllText(nulled, "{ \"bindings\": null }");
+        try
+        {
+            Assert.IsFalse(WeftConfigLoader.TryLoad(nulled, out WeftConfig fallback, out string? error));
+            Assert.IsNotNull(error);
+            Assert.Contains("null", error);
+            Assert.IsNotNull(fallback.Bindings);
+        }
+        finally
+        {
+            File.Delete(nulled);
+        }
     }
 }

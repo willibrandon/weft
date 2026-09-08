@@ -31,6 +31,23 @@ public sealed class KeyChordTests
     }
 
     /// <summary>
+    /// Verifies two parses of the same text compare equal, so configured overrides replace defaults.
+    /// </summary>
+    [TestMethod]
+    public void EqualChordsCompareByStrokes()
+    {
+        Assert.IsTrue(KeyChord.TryParse("ctrl+b", null, out KeyChord leader));
+        Assert.IsTrue(KeyChord.TryParse("leader x", leader, out KeyChord first));
+        Assert.IsTrue(KeyChord.TryParse("leader  x", leader, out KeyChord second));
+        Assert.IsTrue(KeyChord.TryParse("leader shift+x", leader, out KeyChord shifted));
+
+        Assert.AreEqual(first, second);
+        Assert.AreEqual(first.GetHashCode(), second.GetHashCode());
+        Assert.AreNotEqual(first, shifted);
+        Assert.Contains(second, new HashSet<KeyChord> { first });
+    }
+
+    /// <summary>
     /// Verifies unknown keys, stray modifiers, and leader without a leader chord are rejected.
     /// </summary>
     /// <param name="text">The chord text.</param>

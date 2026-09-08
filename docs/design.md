@@ -305,6 +305,11 @@ Rules:
   connections. Long waits (`block.wait`, `events.subscribe`) do not block other connections.
 - Protocol version is bumped only for incompatible changes; additive fields are always allowed.
 
+Parameter objects with defaults use settable members rather than init-only ones. The .NET 10
+System.Text.Json source generator treats init-only members as constructor parameters, so a
+request that omits such a field would arrive with null or zero where the default was documented;
+required members keep init, since they must be present anyway.
+
 ### 6.1 Methods
 
 | Method | Purpose |

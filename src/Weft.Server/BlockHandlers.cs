@@ -100,8 +100,7 @@ internal static class BlockHandlers
             async (context, parameters, cancellationToken) =>
             {
                 Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
-                LayoutRect? bounds = parameters is { X: { } x, Y: { } y, Width: { } width, Height: { } height } ? new LayoutRect(x, y, width, height) : null;
-                await context.Registry.FloatBlockAsync(block, bounds, cancellationToken).ConfigureAwait(false);
+                await context.Registry.FloatBlockAsync(block, parameters.X, parameters.Y, parameters.Width, parameters.Height, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToLayoutInfo(block.Tab);
             });
 

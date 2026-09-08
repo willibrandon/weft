@@ -22,5 +22,5 @@ public sealed class LayoutResizeParams
     /// <summary>
     /// Gets the number of cells.
     /// </summary>
-    public int Amount { get; init; } = 1;
+    public int Amount { get; set; } = 1;
 }

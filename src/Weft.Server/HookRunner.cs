@@ -88,6 +88,7 @@ internal sealed class HookRunner : IDisposable
             else if (name.StartsWith("tab.", StringComparison.Ordinal))
             {
                 TabInfo tab = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.TabEventData).Tab;
+                environment["WEFT_SESSION"] = tab.SessionName;
                 environment["WEFT_SESSION_ID"] = tab.Session;
                 environment["WEFT_TAB"] = tab.Id;
                 environment["WEFT_TITLE"] = tab.Name;
@@ -95,6 +96,7 @@ internal sealed class HookRunner : IDisposable
             else if (name.StartsWith("block.", StringComparison.Ordinal))
             {
                 BlockInfo block = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block;
+                environment["WEFT_SESSION"] = block.SessionName;
                 environment["WEFT_SESSION_ID"] = block.Session;
                 environment["WEFT_TAB"] = block.Tab;
                 environment["WEFT_BLOCK"] = block.Id;

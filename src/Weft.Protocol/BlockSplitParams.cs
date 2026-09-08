@@ -42,5 +42,5 @@ public sealed class BlockSplitParams
     /// <summary>
     /// Gets whether the new block becomes active.
     /// </summary>
-    public bool Focus { get; init; } = true;
+    public bool Focus { get; set; } = true;
 }

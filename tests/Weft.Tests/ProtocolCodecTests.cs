@@ -12,6 +12,19 @@ namespace Weft.Tests;
 public sealed class ProtocolCodecTests
 {
     /// <summary>
+    /// Verifies a request that omits a defaulted field still carries the documented default after decoding.
+    /// </summary>
+    [TestMethod]
+    public void OmittedFieldsKeepTheirDefaults()
+    {
+        BlockWaitParams wait = ProtocolCodec.FromElement(JsonDocument.Parse("{}").RootElement, ProtocolJsonContext.Default.BlockWaitParams);
+        Assert.AreEqual(30_000, wait.TimeoutMs);
+
+        BlockKillParams kill = ProtocolCodec.FromElement(JsonDocument.Parse("{}").RootElement, ProtocolJsonContext.Default.BlockKillParams);
+        Assert.AreEqual(15, kill.Signal);
+    }
+
+    /// <summary>
     /// Verifies a request, a response, and an event written by one side are read intact by the other.
     /// </summary>
     /// <returns>A task representing the test.</returns>

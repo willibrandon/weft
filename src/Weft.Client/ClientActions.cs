@@ -93,6 +93,21 @@ internal static class ClientActions
     internal const string SendLeader = "send-leader";
 
     /// <summary>
+    /// The prefix of the actions that select a tab by number, tab.1 through tab.9.
+    /// </summary>
+    internal const string TabPrefix = "tab.";
+
+    /// <summary>
+    /// Gets the one-based tab number an action selects, or null when the action is not a numbered tab action.
+    /// </summary>
+    /// <param name="action">The action id.</param>
+    /// <returns>The tab number, or null.</returns>
+    internal static int? TabNumber(string action) =>
+        action.Length == TabPrefix.Length + 1 && action.StartsWith(TabPrefix, StringComparison.Ordinal) && action[^1] is >= '1' and <= '9'
+            ? action[^1] - '0'
+            : null;
+
+    /// <summary>
     /// Gets the default chord for every action, in palette order.
     /// </summary>
     internal static IReadOnlyList<(string Action, string Chord, string Description)> Defaults { get; } =
@@ -125,7 +140,16 @@ internal static class ClientActions
         (SessionRename, "leader shift+s", "Rename session"),
         (TabPick, "leader w", "Pick tab or block"),
         (Lock, "leader g", "Lock: pass every key through"),
-        (SendLeader, "leader ctrl+b", "Send the leader key")
+        (SendLeader, "leader leader", "Send the leader key"),
+        (TabPrefix + "1", "leader 1", "Tab 1"),
+        (TabPrefix + "2", "leader 2", "Tab 2"),
+        (TabPrefix + "3", "leader 3", "Tab 3"),
+        (TabPrefix + "4", "leader 4", "Tab 4"),
+        (TabPrefix + "5", "leader 5", "Tab 5"),
+        (TabPrefix + "6", "leader 6", "Tab 6"),
+        (TabPrefix + "7", "leader 7", "Tab 7"),
+        (TabPrefix + "8", "leader 8", "Tab 8"),
+        (TabPrefix + "9", "leader 9", "Tab 9")
     ];
 
     /// <summary>

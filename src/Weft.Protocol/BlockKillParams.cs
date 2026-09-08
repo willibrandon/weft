@@ -13,5 +13,5 @@ public sealed class BlockKillParams
     /// <summary>
     /// Gets the signal number; defaults to SIGTERM.
     /// </summary>
-    public int Signal { get; init; } = 15;
+    public int Signal { get; set; } = 15;
 }

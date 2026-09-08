@@ -23,15 +23,15 @@ public sealed class BlockRunParams
     /// <summary>
     /// Gets how long to wait for exit before returning with the block still running.
     /// </summary>
-    public int TimeoutMs { get; init; } = 600_000;
+    public int TimeoutMs { get; set; } = 600_000;
 
     /// <summary>
     /// Gets the maximum bytes of output returned, split between head and tail.
     /// </summary>
-    public int OutputBytesCap { get; init; } = 65_536;
+    public int OutputBytesCap { get; set; } = 65_536;
 
     /// <summary>
     /// Gets whether to close the block after it exits.
     /// </summary>
-    public bool Close { get; init; } = true;
+    public bool Close { get; set; } = true;
 }

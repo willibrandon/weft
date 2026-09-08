@@ -13,5 +13,5 @@ public sealed class WaitChannelParams
     /// <summary>
     /// Gets the timeout in milliseconds for wait.for.
     /// </summary>
-    public int TimeoutMs { get; init; } = 30_000;
+    public int TimeoutMs { get; set; } = 30_000;
 }

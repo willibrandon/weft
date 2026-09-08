@@ -19,6 +19,8 @@ public sealed class AttachApp
     private readonly BindingTable _bindings;
     private readonly Dictionary<string, BlockView> _views = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
+    // Session names are trimmed by the server, so an entry that starts with a space can never collide with one.
+    private const string NewSessionEntry = " + new session";
     private ControlClient? _control;
     private RootContext? _root;
     private SessionMirror? _mirror;
@@ -330,11 +332,16 @@ public sealed class AttachApp
             Hex1bWidget tiled = RenderLayout(z, mirror, layout);
             bool fits = layout.Width <= availableWidth && layout.Height <= availableHeight;
             List<Hex1bWidget> layers = [z.Align(fits ? Alignment.Center : Alignment.TopLeft, tiled).Fill()];
+
+            // Floating blocks keep their server coordinates relative to the session, so when the session is
+            // centered in a larger viewport they move with it. A zoomed block already fills the session.
+            int offsetX = fits ? (availableWidth - layout.Width) / 2 : 0;
+            int offsetY = fits ? (availableHeight - layout.Height) / 2 : 0;
             foreach (BlockPlacement placement in layout.Floating)
             {
-                if (mirror.FindBlock(placement.Id) is { } block)
+                if (!string.Equals(placement.Id, layout.Zoomed, StringComparison.Ordinal) && mirror.FindBlock(placement.Id) is { } block)
                 {
-                    layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X, placement.Y));
+                    layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X + offsetX, placement.Y + offsetY));
                 }
             }
 
@@ -623,6 +630,9 @@ public sealed class AttachApp
             case ClientActions.SendLeader:
                 SendLeaderKey();
                 break;
+            case var numbered when ClientActions.TabNumber(numbered) is { } number:
+                SelectTabNumber(mirror, number);
+                break;
             default:
                 break;
         }
@@ -675,7 +685,7 @@ public sealed class AttachApp
         Fire(async client =>
         {
             SessionListResult result = await client.ListSessionsAsync(CancellationToken.None).ConfigureAwait(false);
-            List<string> names = [.. result.Sessions.Select(session => session.Name), "+ new session"];
+            List<string> names = [.. result.Sessions.Select(session => session.Name), NewSessionEntry];
             popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
             [
                 b.SelectionPrompt(names).Prompt("session").MaxVisibleItems(12).OnSelected(name =>
@@ -686,7 +696,7 @@ public sealed class AttachApp
                         return;
                     }
 
-                    SwitchTarget = name.StartsWith('+') ? string.Empty : name;
+                    SwitchTarget = string.Equals(name, NewSessionEntry, StringComparison.Ordinal) ? string.Empty : name;
                     ExitMessage = null;
                     _app?.RequestStop();
                 })
@@ -762,9 +772,32 @@ public sealed class AttachApp
     private void SendLeaderKey()
     {
         BlockView? view = ViewFor(FocusedBlockId());
-        if (view is not null && KeyMap.ToKeyEvent(_bindings.Leader.Steps[0]) is { } keyEvent)
+        if (view is null)
         {
-            _ = view.Handle.SendEventAsync(keyEvent);
+            return;
+        }
+
+        // A multi-stroke leader is sent stroke by stroke, in order, on one queue.
+        _ = SendStrokesAsync(view, _bindings.Leader.Steps);
+    }
+
+    private static async Task SendStrokesAsync(BlockView view, IReadOnlyList<KeyStroke> strokes)
+    {
+        foreach (KeyStroke stroke in strokes)
+        {
+            if (KeyMap.ToKeyEvent(stroke) is { } keyEvent)
+            {
+                await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private void SelectTabNumber(SessionMirror mirror, int number)
+    {
+        IReadOnlyList<TabInfo> tabs = mirror.Tabs;
+        if (number >= 1 && number <= tabs.Count)
+        {
+            Fire(client => client.SelectTabAsync(tabs[number - 1].Id, CancellationToken.None));
         }
     }
 

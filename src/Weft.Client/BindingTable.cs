@@ -44,6 +44,13 @@ internal sealed class BindingTable
         var table = new BindingTable(leader);
         foreach ((string action, string chord, _) in ClientActions.Defaults)
         {
+            if (string.Equals(action, ClientActions.SendLeader, StringComparison.Ordinal))
+            {
+                // Sending the leader is always the leader pressed twice, whatever the leader is configured to be.
+                table._bindings.Add((new KeyChord([.. leader.Steps, .. leader.Steps]), action));
+                continue;
+            }
+
             table.Add(chord, action);
         }
 
@@ -60,7 +67,7 @@ internal sealed class BindingTable
                 continue;
             }
 
-            table._bindings.RemoveAll(existing => existing.Chord == chord);
+            table._bindings.RemoveAll(existing => existing.Chord.Equals(chord));
             if (string.Equals(action, "none", StringComparison.OrdinalIgnoreCase))
             {
                 continue;

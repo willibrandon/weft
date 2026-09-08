@@ -175,4 +175,23 @@ public sealed record KeyChord(IReadOnlyList<KeyStroke> Steps)
     /// </summary>
     /// <returns>The text.</returns>
     public override string ToString() => string.Join(' ', Steps);
+
+    /// <summary>
+    /// Compares chords by their strokes, since two parses of the same text produce different lists.
+    /// </summary>
+    /// <param name="other">The other chord.</param>
+    /// <returns>True when both chords have the same strokes in the same order.</returns>
+    public bool Equals(KeyChord? other) => other is not null && Steps.SequenceEqual(other.Steps);
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (KeyStroke stroke in Steps)
+        {
+            hash.Add(stroke);
+        }
+
+        return hash.ToHashCode();
+    }
 }
