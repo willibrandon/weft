@@ -351,7 +351,11 @@ internal sealed partial class SessionRegistry
                     Args = block.Arguments,
                     Cwd = block.Cwd,
                     Title = block.PinnedTitle,
-                    Floating = block.Floating
+                    Floating = block.Floating,
+                    X = block.FloatingBounds.X,
+                    Y = block.FloatingBounds.Y,
+                    Width = block.FloatingBounds.Width,
+                    Height = block.FloatingBounds.Height
                 }).ToList()
             });
         }

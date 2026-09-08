@@ -5,7 +5,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Phase 1 is usable end to end: attach UI, CLI, on-demand server, persistence. Next: headless client tests, then phase 2 UX.
+- Phase 2 UX landing: configuration, hooks, floating blocks, palette, prompts, pickers, lock, paste. Next: sync input, mouse resize, CI hardening, MCP.
 
 ## Phase 0: Research and scaffolding
 
@@ -33,20 +33,20 @@ Living tracker for the weft build. Check items off as they land; keep the
 ## Phase 2: Multiplexer UX
 
 - [x] Layout tree: splits, resize, zoom, presets, even/main layouts
-- [ ] Floating blocks
+- [x] Floating blocks (server methods, persistence, client rendering; keyboard move pending)
 - [x] Status bar and block titles (activity indicators pending)
-- [x] Leader-key keybinding model (modes and repeat pending)
-- [ ] Command palette
-- [ ] Native scrollback, selection, search, copy
+- [x] Leader-key keybinding model with configurable chords and a lock mode (repeat pending)
+- [x] Command palette, rename prompts, session and tab pickers
+- [x] Native scrollback, selection, and copy through the terminal widget; paste from the server buffer (search pending)
 - [ ] Mouse: focus, resize, select, scroll
-- [ ] Themes and configuration file
+- [x] Themes and configuration file
 
 ## Phase 3: Composable control surface
 
 - [x] CLI: every UI action addressable from the command line
 - [x] Event streaming with sequence numbers and replay ring
 - [x] Run-and-await, capture, wait-for-pattern, send-keys, named wait channels
-- [ ] Hooks
+- [x] Hooks (configuration driven; protocol methods pending)
 - [ ] MCP server for agents
 
 ## Phase 4: Sharing and operations

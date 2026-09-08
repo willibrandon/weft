@@ -35,11 +35,23 @@ internal static class ServerCommand
                 }
 
                 string state = parseResult.GetValue(stateDirectory) is { Length: > 0 } explicitState ? Path.GetFullPath(explicitState) : WeftPaths.ResolveStateDirectory();
+                WeftConfig config = WeftConfigLoader.LoadDefault(out string? configError);
+                if (configError is not null)
+                {
+                    await Console.Error.WriteLineAsync("weft: " + configError).ConfigureAwait(false);
+                }
+
                 var server = new WeftServer(new WeftServerOptions
                 {
                     RuntimeDirectory = context.RuntimeDirectory,
                     StateDirectory = state,
-                    DefaultShell = parseResult.GetValue(shell)
+                    DefaultShell = parseResult.GetValue(shell) ?? config.Shell,
+                    FrameSize = config.Frames ? 1 : 0,
+                    Scrollback = Math.Max(0, config.Scrollback),
+                    DefaultWidth = Math.Clamp(config.DefaultWidth, 20, 1000),
+                    DefaultHeight = Math.Clamp(config.DefaultHeight, 5, 500),
+                    DefaultSizePolicy = config.SizePolicy,
+                    Hooks = config.Hooks
                 });
                 await using (server.ConfigureAwait(false))
                 {

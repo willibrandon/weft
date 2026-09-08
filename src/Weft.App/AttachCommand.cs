@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Weft.Client;
+using Weft.Core;
 
 namespace Weft.App;
 
@@ -55,19 +56,41 @@ internal static class AttachCommand
             }
 
             _ = probe;
-            var app = new AttachApp(new AttachOptions
+            WeftConfig config = WeftConfigLoader.LoadDefault(out string? configError);
+            if (configError is not null)
             {
-                SocketPath = context.SocketPath,
-                Target = string.IsNullOrEmpty(target) ? null : target,
-                ReadOnly = parseResult.GetValue(ReadOnly)
-            });
-            await app.RunAsync(cancellationToken).ConfigureAwait(false);
-            if (app.ExitMessage is { } message)
-            {
-                await Console.Error.WriteLineAsync("weft: " + message).ConfigureAwait(false);
+                await Console.Error.WriteLineAsync("weft: " + configError).ConfigureAwait(false);
             }
 
-            return 0;
+            string? current = string.IsNullOrEmpty(target) ? null : target;
+            while (true)
+            {
+                var app = new AttachApp(new AttachOptions
+                {
+                    SocketPath = context.SocketPath,
+                    Target = current,
+                    ReadOnly = parseResult.GetValue(ReadOnly),
+                    Config = config
+                });
+                await app.RunAsync(cancellationToken).ConfigureAwait(false);
+                if (app.ExitMessage is { } message)
+                {
+                    await Console.Error.WriteLineAsync("weft: " + message).ConfigureAwait(false);
+                }
+
+                if (app.SwitchTarget is not { } next)
+                {
+                    return 0;
+                }
+
+                current = next.Length == 0 ? null : next;
+                if (current is null)
+                {
+                    ControlClient client = await context.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                    Protocol.SessionInfo created = await client.CreateSessionAsync(new Protocol.SessionCreateParams(), cancellationToken).ConfigureAwait(false);
+                    current = created.Name;
+                }
+            }
         }
     }
 }

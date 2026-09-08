@@ -196,6 +196,30 @@ public static class ControlClientExtensions
     public static Task<EmptyResult> SwapAsync(this ControlClient client, BlockSwapParams parameters, CancellationToken cancellationToken) =>
         InvokeAsync(client, ProtocolMethods.BlockSwap, parameters, ProtocolJsonContext.Default.BlockSwapParams, ProtocolJsonContext.Default.EmptyResult, cancellationToken);
 
+    /// <summary>Calls block.float.</summary>
+    /// <param name="client">The client.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result.</returns>
+    public static Task<LayoutInfo> FloatAsync(this ControlClient client, BlockFloatParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(client, ProtocolMethods.BlockFloat, parameters, ProtocolJsonContext.Default.BlockFloatParams, ProtocolJsonContext.Default.LayoutInfo, cancellationToken);
+
+    /// <summary>Calls block.tile.</summary>
+    /// <param name="client">The client.</param>
+    /// <param name="target">The target.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result.</returns>
+    public static Task<LayoutInfo> TileAsync(this ControlClient client, string? target, CancellationToken cancellationToken) =>
+        InvokeAsync(client, ProtocolMethods.BlockTile, new TargetParams { Target = target }, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.LayoutInfo, cancellationToken);
+
+    /// <summary>Calls block.move.</summary>
+    /// <param name="client">The client.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result.</returns>
+    public static Task<LayoutInfo> MoveAsync(this ControlClient client, BlockMoveParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(client, ProtocolMethods.BlockMove, parameters, ProtocolJsonContext.Default.BlockMoveParams, ProtocolJsonContext.Default.LayoutInfo, cancellationToken);
+
     /// <summary>Calls block.sendKeys.</summary>
     /// <param name="client">The client.</param>
     /// <param name="parameters">The parameters.</param>
