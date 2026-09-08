@@ -363,6 +363,7 @@ internal sealed partial class SessionRegistry
                 NamePinned = tab.NamePinned,
                 Layout = tab.Layout.Serialize(),
                 ActiveBlock = tab.Active?.Id.Value,
+                Synchronized = tab.Synchronized,
                 Blocks = tab.Blocks.Select(block => new StoredBlock
                 {
                     Id = block.Id.Value,
@@ -374,7 +375,8 @@ internal sealed partial class SessionRegistry
                     X = block.FloatingBounds.X,
                     Y = block.FloatingBounds.Y,
                     Width = block.FloatingBounds.Width,
-                    Height = block.FloatingBounds.Height
+                    Height = block.FloatingBounds.Height,
+                    ExcludedFromSync = block.ExcludedFromSync
                 }).ToList()
             });
         }

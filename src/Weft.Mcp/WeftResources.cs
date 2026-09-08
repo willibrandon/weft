@@ -25,7 +25,8 @@ public sealed class WeftResources(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             BlockCaptureResult capture = await client.CaptureAsync(new BlockCaptureParams { Target = id }, cancellationToken).ConfigureAwait(false);
             return string.Join('\n', capture.Lines);
         }
@@ -45,7 +46,8 @@ public sealed class WeftResources(WeftBridge bridge)
     {
         try
         {
-            ControlClient client = await bridge.ClientAsync(cancellationToken).ConfigureAwait(false);
+            using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = lease.Client;
             SessionListResult result = await client.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
             return string.Join('\n', result.Sessions.Select(session => string.Create(CultureInfo.InvariantCulture, $"{session.Name} ({session.Id}): {session.Tabs} tabs, {session.Blocks} blocks")));
         }

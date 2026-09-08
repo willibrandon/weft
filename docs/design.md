@@ -420,10 +420,13 @@ and tail with an omission marker and total byte counts; captures carry revisions
 pattern-based with rate limits; exited blocks keep their exit code until closed.
 
 The MCP server is built on the official C# SDK: tools and resources are attribute-marked
-static methods on `[McpServerToolType]` and `[McpServerResourceType]` classes with
-`[Description]` text that becomes the schema agents read, registered through the hosting
-builder with `WithStdioServerTransport`. It talks to the server through one shared control
-client that reconnects on demand, so an agent can start `weft mcp` before the server is up.
+instance methods on `[McpServerToolType]` and `[McpServerResourceType]` classes whose
+constructor takes the bridge from dependency injection, with `[Description]` text that becomes
+the schema agents read, registered through the hosting builder with `WithStdioServerTransport`.
+Each call leases its own control connection from the bridge, because the server answers one
+request at a time per connection, so a long `wait_for` cannot block a `capture` beside it. The
+bridge connects through the same connect-or-start path as the CLI, so it also brings the server
+back if it went away while the agent kept `weft mcp` running.
 Tests drive it with the SDK client over in-memory pipes against a real server. Optional tool
 parameters carry default values because the SDK treats any parameter without one as required.
 The SDK's own log goes to standard error, the channel the protocol reserves for a stdio server,

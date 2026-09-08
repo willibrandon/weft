@@ -155,7 +155,7 @@ internal sealed partial class SessionRegistry
         lock (_gate)
         {
             _nextTab++;
-            tab = new Tab(new TabId(_nextTab), session, stored.Name, LayoutOptionsFor()) { NamePinned = stored.NamePinned };
+            tab = new Tab(new TabId(_nextTab), session, stored.Name, LayoutOptionsFor()) { NamePinned = stored.NamePinned, Synchronized = stored.Synchronized };
             session.Tabs.Add(tab);
             session.ActiveTab ??= tab;
         }
@@ -168,6 +168,7 @@ internal sealed partial class SessionRegistry
             {
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null, keepOnExit: false, cancellationToken).ConfigureAwait(false);
                 block.PinnedTitle = storedBlock.Title;
+                block.ExcludedFromSync = storedBlock.ExcludedFromSync;
                 restored[storedBlock.Id] = block;
                 first ??= block;
             }
@@ -185,6 +186,7 @@ internal sealed partial class SessionRegistry
             {
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null && restored.Count == 0, keepOnExit: false, cancellationToken).ConfigureAwait(false);
                 block.PinnedTitle = storedBlock.Title;
+                block.ExcludedFromSync = storedBlock.ExcludedFromSync;
                 await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), cancellationToken).ConfigureAwait(false);
                 restored[storedBlock.Id] = block;
             }

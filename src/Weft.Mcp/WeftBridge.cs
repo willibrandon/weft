@@ -1,71 +1,79 @@
+using System.Collections.Concurrent;
 using Weft.Client;
 
 namespace Weft.Mcp;
 
 /// <summary>
-/// The control connection shared by every tool invocation of one MCP server.
+/// Hands out control connections to tool calls, one per call in flight, opening them on demand.
 /// </summary>
+/// <remarks>
+/// The server answers one request at a time per connection, so a shared connection would let a long
+/// wait block every other tool. Each call leases its own connection and returns it afterwards. The
+/// connect delegate is the same connect-or-start path the CLI uses, so a server that went away while
+/// the agent kept the MCP process alive is started again on the next call.
+/// </remarks>
 public sealed class WeftBridge : IAsyncDisposable
 {
-    private readonly string _socketPath;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private ControlClient? _client;
+    private readonly Func<CancellationToken, Task<ControlClient>> _connect;
+    private readonly ConcurrentBag<ControlClient> _idle = [];
 
     /// <summary>
-    /// Initializes a bridge for a control socket.
+    /// Creates a bridge that opens connections through the given delegate.
     /// </summary>
-    /// <param name="socketPath">The control socket path.</param>
-    public WeftBridge(string socketPath)
+    /// <param name="connect">Opens a control connection, starting the server first when it is not running.</param>
+    public WeftBridge(Func<CancellationToken, Task<ControlClient>> connect)
     {
-        ArgumentException.ThrowIfNullOrEmpty(socketPath);
-        _socketPath = socketPath;
+        ArgumentNullException.ThrowIfNull(connect);
+        _connect = connect;
     }
 
     /// <summary>
-    /// Gets the control socket path.
+    /// Leases a connection for one call, reusing an idle one when it is still open.
     /// </summary>
-    public string SocketPath => _socketPath;
+    /// <param name="cancellationToken">Cancels connecting.</param>
+    /// <returns>The lease; dispose it to return the connection.</returns>
+    public async Task<ControlLease> LeaseAsync(CancellationToken cancellationToken) =>
+        new ControlLease(this, await AcquireAsync(cancellationToken).ConfigureAwait(false));
 
     /// <summary>
-    /// Gets a connected client, reconnecting after a dropped connection.
+    /// Disposes every idle connection.
     /// </summary>
-    /// <param name="cancellationToken">Cancels the connection.</param>
-    /// <returns>The client.</returns>
-    public async Task<ControlClient> ClientAsync(CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_client is { } existing && !existing.Closed.IsCompleted)
-            {
-                return existing;
-            }
-
-            if (_client is { } stale)
-            {
-                await stale.DisposeAsync().ConfigureAwait(false);
-            }
-
-            _client = await ControlClient.ConnectAsync(_socketPath, cancellationToken).ConfigureAwait(false);
-            return _client;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>
-    /// Closes the connection.
-    /// </summary>
-    /// <returns>A task that completes when closed.</returns>
+    /// <returns>A task that completes when the pool is empty.</returns>
     public async ValueTask DisposeAsync()
     {
-        if (_client is { } client)
+        while (_idle.TryTake(out ControlClient? client))
         {
             await client.DisposeAsync().ConfigureAwait(false);
         }
+    }
 
-        _gate.Dispose();
+    /// <summary>
+    /// Takes a connection back; a closed one is dropped instead of pooled.
+    /// </summary>
+    /// <param name="client">The connection a lease is returning.</param>
+    internal void Return(ControlClient client)
+    {
+        if (client.Closed.IsCompleted)
+        {
+            _ = client.DisposeAsync().AsTask();
+            return;
+        }
+
+        _idle.Add(client);
+    }
+
+    private async Task<ControlClient> AcquireAsync(CancellationToken cancellationToken)
+    {
+        while (_idle.TryTake(out ControlClient? idle))
+        {
+            if (!idle.Closed.IsCompleted)
+            {
+                return idle;
+            }
+
+            await idle.DisposeAsync().ConfigureAwait(false);
+        }
+
+        return await _connect(cancellationToken).ConfigureAwait(false);
     }
 }

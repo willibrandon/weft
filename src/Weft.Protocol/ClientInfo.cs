@@ -16,6 +16,11 @@ public sealed class ClientInfo
     public required string Session { get; init; }
 
     /// <summary>
+    /// The name of the session the client is attached to, empty when an older server omitted it.
+    /// </summary>
+    public string SessionName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets the client's name, such as its host or terminal.
     /// </summary>
     public required string Name { get; init; }

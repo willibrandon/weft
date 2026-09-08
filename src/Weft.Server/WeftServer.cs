@@ -83,17 +83,21 @@ public sealed class WeftServer : IAsyncDisposable
         StartedAt = DateTimeOffset.Now;
         using CancellationTokenRegistration registration = cancellationToken.Register(RequestShutdown);
         var listener = new ControlListener(SocketPath, this, _dispatcher);
-        using HookRunner? hooks = Options.Hooks.Count > 0 ? new HookRunner(Events, Options.Hooks) : null;
-        try
+        // The runner is disposed after the final events below have been published, so hooks for them still run.
+        var hooks = new HookRunner(Events, Options.Hooks);
+        await using (hooks.ConfigureAwait(false))
         {
-            await listener.RunAsync(_stopping.Token).ConfigureAwait(false);
-        }
-        finally
-        {
-            Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
-            await Registry.CloseAllAsync(CancellationToken.None).ConfigureAwait(false);
-            _stopped.TrySetResult();
-            ServerLog.Info("Server stopped.");
+            try
+            {
+                await listener.RunAsync(_stopping.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
+                await Registry.CloseAllAsync(CancellationToken.None).ConfigureAwait(false);
+                _stopped.TrySetResult();
+                ServerLog.Info("Server stopped.");
+            }
         }
     }
 

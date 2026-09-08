@@ -1,6 +1,7 @@
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using System.IO.Pipelines;
+using Weft.Client;
 using Weft.Mcp;
 
 namespace Weft.Tests;
@@ -36,7 +37,7 @@ public sealed class McpServerTests
             var clientToServer = new Pipe();
             var serverToClient = new Pipe();
             using var serverStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            Task server = WeftMcpServer.RunStreamsAsync(fixture.SocketPath, "test", clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream(), verbose: false, serverStop.Token);
+            Task server = WeftMcpServer.RunStreamsAsync(token => ControlClient.ConnectAsync(fixture.SocketPath, token), "test", clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream(), verbose: false, serverStop.Token);
             McpClient client = await McpClient.CreateAsync(new StreamClientTransport(clientToServer.Writer.AsStream(), serverToClient.Reader.AsStream()), cancellationToken: cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
@@ -65,9 +66,13 @@ public sealed class McpServerTests
             }
 
             await serverStop.CancelAsync().ConfigureAwait(false);
-            while (!server.IsCompleted)
+            try
             {
-                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+                await server.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                ClientLog.Debug("The MCP server stopped on request.");
             }
         }
     }
