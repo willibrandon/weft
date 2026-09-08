@@ -41,6 +41,17 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
   still pass through a real transport or file boundary.
 - The installed `hex1b` tool may be used to drive the built executable end to end.
 
+## Pull requests and writing
+
+- `main` is protected. Every change lands through a pull request from a branch.
+- Assign pull requests to `willibrandon`. Read the existing labels before choosing; apply
+  one or two. A new label needs a color and a description.
+- Write commit messages, pull request titles, and pull request bodies as plain prose. No
+  headers, no bullet or numbered lists, no em dashes, and no phrasing that reads as machine
+  generated.
+- Issues follow the same rules as pull requests: assigned, labeled, written as plain prose.
+- The tone everywhere is concise and subtly educational. Never overdo it.
+
 ## Reference material
 
 - Reference repositories for hex1b, sibling projects, other multiplexers, and agent

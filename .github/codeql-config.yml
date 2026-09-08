@@ -1,0 +1,4 @@
+name: weft CodeQL configuration
+
+paths-ignore:
+  - artifacts/**
