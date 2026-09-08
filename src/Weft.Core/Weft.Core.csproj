@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Core</AssemblyName>
+    <RootNamespace>Weft.Core</RootNamespace>
+    <Description>Session, layout, identifier, target, and configuration model for weft.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Tests" />
+  </ItemGroup>
+</Project>

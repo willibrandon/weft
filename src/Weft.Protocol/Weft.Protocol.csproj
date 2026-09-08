@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Protocol</AssemblyName>
+    <RootNamespace>Weft.Protocol</RootNamespace>
+    <Description>Control protocol contracts, serialization, and codec for weft.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Weft.Core/Weft.Core.csproj" />
+  </ItemGroup>
+</Project>

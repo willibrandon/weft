@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Server</AssemblyName>
+    <RootNamespace>Weft.Server</RootNamespace>
+    <Description>Session server for weft: block hosting, control listener, and persistence.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Hex1b" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Weft.Core/Weft.Core.csproj" />
+    <ProjectReference Include="../Weft.Protocol/Weft.Protocol.csproj" />
+  </ItemGroup>
+</Project>

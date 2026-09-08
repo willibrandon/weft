@@ -1,0 +1,6 @@
+<Project>
+  <Import Project="../Directory.Build.props" />
+  <PropertyGroup>
+    <MSTestAnalysisMode>All</MSTestAnalysisMode>
+  </PropertyGroup>
+</Project>

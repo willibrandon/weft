@@ -1,0 +1,62 @@
+using System.Text.Json.Serialization;
+
+namespace Weft.Protocol;
+
+/// <summary>
+/// Source-generated serialization for every control protocol type.
+/// </summary>
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    WriteIndented = false)]
+[JsonSerializable(typeof(ProtocolMessage))]
+[JsonSerializable(typeof(ProtocolError))]
+[JsonSerializable(typeof(HelloData))]
+[JsonSerializable(typeof(ServerInfoResult))]
+[JsonSerializable(typeof(SessionInfo))]
+[JsonSerializable(typeof(TabInfo))]
+[JsonSerializable(typeof(BlockInfo))]
+[JsonSerializable(typeof(ClientInfo))]
+[JsonSerializable(typeof(BlockPlacement))]
+[JsonSerializable(typeof(LayoutInfo))]
+[JsonSerializable(typeof(TargetParams))]
+[JsonSerializable(typeof(SessionCreateParams))]
+[JsonSerializable(typeof(SessionRenameParams))]
+[JsonSerializable(typeof(SessionAttachParams))]
+[JsonSerializable(typeof(SessionAttachResult))]
+[JsonSerializable(typeof(ClientParams))]
+[JsonSerializable(typeof(SessionSetSizeParams))]
+[JsonSerializable(typeof(SessionListResult))]
+[JsonSerializable(typeof(TabCreateParams))]
+[JsonSerializable(typeof(TabRenameParams))]
+[JsonSerializable(typeof(TabListResult))]
+[JsonSerializable(typeof(BlockSplitParams))]
+[JsonSerializable(typeof(BlockCloseParams))]
+[JsonSerializable(typeof(BlockKillParams))]
+[JsonSerializable(typeof(BlockRenameParams))]
+[JsonSerializable(typeof(BlockFocusParams))]
+[JsonSerializable(typeof(BlockZoomParams))]
+[JsonSerializable(typeof(BlockSwapParams))]
+[JsonSerializable(typeof(BlockSendKeysParams))]
+[JsonSerializable(typeof(BlockTextParams))]
+[JsonSerializable(typeof(BlockCaptureParams))]
+[JsonSerializable(typeof(BlockCaptureResult))]
+[JsonSerializable(typeof(BlockWaitParams))]
+[JsonSerializable(typeof(BlockWaitResult))]
+[JsonSerializable(typeof(BlockRunParams))]
+[JsonSerializable(typeof(BlockRunResult))]
+[JsonSerializable(typeof(BlockListResult))]
+[JsonSerializable(typeof(LayoutApplyParams))]
+[JsonSerializable(typeof(LayoutPresetParams))]
+[JsonSerializable(typeof(LayoutResizeParams))]
+[JsonSerializable(typeof(EventsSubscribeParams))]
+[JsonSerializable(typeof(PasteBuffer))]
+[JsonSerializable(typeof(WaitChannelParams))]
+[JsonSerializable(typeof(SessionEventData))]
+[JsonSerializable(typeof(TabEventData))]
+[JsonSerializable(typeof(BlockEventData))]
+[JsonSerializable(typeof(LayoutEventData))]
+[JsonSerializable(typeof(ClientEventData))]
+[JsonSerializable(typeof(SubscriberPausedData))]
+[JsonSerializable(typeof(EmptyResult))]
+public sealed partial class ProtocolJsonContext : JsonSerializerContext;

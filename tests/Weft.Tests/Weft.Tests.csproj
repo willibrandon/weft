@@ -1,0 +1,20 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Tests</AssemblyName>
+    <RootNamespace>Weft.Tests</RootNamespace>
+    <Description>Real behavior tests for weft.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Hex1b" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Weft.Core/Weft.Core.csproj" />
+    <ProjectReference Include="../../src/Weft.Protocol/Weft.Protocol.csproj" />
+    <ProjectReference Include="../../src/Weft.Server/Weft.Server.csproj" />
+    <ProjectReference Include="../../src/Weft.Client/Weft.Client.csproj" />
+    <ProjectReference Include="../../src/Weft.App/Weft.App.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

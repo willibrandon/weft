@@ -1,0 +1,93 @@
+<Project>
+  <PropertyGroup Condition="'$(IsAotCompatible)' == 'true'">
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+
+  <Target Name="_WeftGenerateTestingPlatformConfiguration"
+          BeforeTargets="AssignTargetPaths"
+          Condition="'$(IsTestingPlatformApplication)' == 'true' and '$(TargetFramework)' != ''">
+    <PropertyGroup>
+      <WeftTestResultsDirectory>$([MSBuild]::NormalizePath('$(ArtifactsPath)', 'test-results'))</WeftTestResultsDirectory>
+      <WeftTestResultsDirectory>$(WeftTestResultsDirectory.Replace('\', '/'))</WeftTestResultsDirectory>
+      <WeftTestingPlatformConfigurationFile>$([MSBuild]::NormalizePath('$(IntermediateOutputPath)', 'weft.testconfig.json'))</WeftTestingPlatformConfigurationFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <_WeftTestingPlatformConfigurationLine Include="{" />
+      <_WeftTestingPlatformConfigurationLine Include="  &quot;platformOptions&quot;: {" />
+      <_WeftTestingPlatformConfigurationLine Include="    &quot;resultDirectory&quot;: &quot;$(WeftTestResultsDirectory)&quot;" />
+      <_WeftTestingPlatformConfigurationLine Include="  }" />
+      <_WeftTestingPlatformConfigurationLine Include="}" />
+    </ItemGroup>
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(WeftTestingPlatformConfigurationFile)'))" />
+    <WriteLinesToFile File="$(WeftTestingPlatformConfigurationFile)"
+                      Lines="@(_WeftTestingPlatformConfigurationLine)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <None Include="$(WeftTestingPlatformConfigurationFile)"
+            TargetPath="$(AssemblyName).testconfig.json"
+            CopyToOutputDirectory="PreserveNewest" />
+      <FileWrites Include="$(WeftTestingPlatformConfigurationFile)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <WeftSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.cs"
+                             Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+    <WeftSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.props"
+                             Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+    <WeftSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.targets"
+                             Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+    <WeftSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/.editorconfig"
+                             Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+    <WeftSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/.globalconfig"
+                             Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+    <WeftGlobalSuppressionsFile Include="$(MSBuildThisFileDirectory)**/GlobalSuppressions.cs"
+                                Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+    <WeftSkippedTestScanFile Include="$(MSBuildThisFileDirectory)tests/**/*.cs"
+                             Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**;$(MSBuildThisFileDirectory)**/node_modules/**;$(MSBuildThisFileDirectory)artifacts/**" />
+  </ItemGroup>
+
+  <Target Name="WeftNormalizeSdkBaselineNoWarn" BeforeTargets="WeftValidateWarningPolicy">
+    <CreateProperty Value="$([System.String]::Empty)"
+                    Condition="'$(NoWarn)' == '1701;1702' or
+                               '$(NoWarn)' == '1701;1702;IL2121'">
+      <Output TaskParameter="Value" PropertyName="NoWarn" />
+    </CreateProperty>
+  </Target>
+
+  <Target Name="WeftValidateWarningPolicy" BeforeTargets="CoreCompile">
+    <Error Condition="'$(TreatWarningsAsErrors)' != 'true'"
+           Text="weft requires TreatWarningsAsErrors=true in every project." />
+    <Error Condition="'$(MSBuildTreatWarningsAsErrors)' != 'true'"
+           Text="weft requires MSBuildTreatWarningsAsErrors=true in every project." />
+    <Error Condition="'$(NoWarn)' != ''"
+           Text="weft forbids evaluated NoWarn values. Current value: $(NoWarn)" />
+    <Error Condition="'$(WarningsNotAsErrors)' != ''"
+           Text="weft forbids evaluated WarningsNotAsErrors values. Current value: $(WarningsNotAsErrors)" />
+    <Error Condition="'@(WeftGlobalSuppressionsFile)' != ''"
+           Text="weft forbids GlobalSuppressions.cs files: @(WeftGlobalSuppressionsFile)" />
+  </Target>
+
+  <Target Name="WeftScanForSuppressionEscapeHatches" BeforeTargets="CoreCompile">
+    <Error Condition="Exists('%(WeftSuppressionScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(WeftSuppressionScanFile.FullPath)')), '(#pragma\s+warning\s+disable)|(\[\s*(Unconditional)?Suppress[M]essage\b)|(&lt;\s*No[W]arn\b)|(&lt;\s*Warnings[N]otAsErrors\b)|(&lt;\s*Disabled[W]arnings\b)|(#nullable\s+disable)|(dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent))|(dotnet_diagnostic\.(IDE0001|IDE0005|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+)|(dotnet_analyzer_diagnostic\.category-(Design|Documentation|Globalization|Interoperability|Maintainability|Naming|Performance|Reliability|Security|Usage)\.severity\s*=\s*(?!error\b)[^\s#;]+)'))"
+           Text="weft forbids warning and nullability suppression escape hatches in %(WeftSuppressionScanFile.Identity)." />
+  </Target>
+
+  <Target Name="WeftScanForSkippedTests"
+          BeforeTargets="CoreCompile"
+          Condition="'@(WeftSkippedTestScanFile)' != ''">
+    <Error Condition="Exists('%(WeftSkippedTestScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(WeftSkippedTestScanFile.FullPath)')), '\[\s*(?:[A-Za-z_][A-Za-z0-9_.]*\.)?I[g]nore(?:Attribute)?\b'))"
+           Text="weft forbids skipped tests in %(WeftSkippedTestScanFile.Identity)." />
+  </Target>
+
+  <Target Name="WeftValidateProject" BeforeTargets="CoreCompile">
+    <Error Condition="'$(TargetFramework)' != 'net10.0'"
+           Text="weft projects must target net10.0." />
+    <Error Condition="'$(Nullable)' != 'enable'"
+           Text="Nullable reference types must remain enabled." />
+  </Target>
+</Project>
