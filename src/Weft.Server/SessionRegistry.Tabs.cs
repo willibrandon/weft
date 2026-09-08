@@ -187,7 +187,7 @@ internal sealed partial class SessionRegistry
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null && restored.Count == 0, keepOnExit: false, cancellationToken).ConfigureAwait(false);
                 block.PinnedTitle = storedBlock.Title;
                 block.ExcludedFromSync = storedBlock.ExcludedFromSync;
-                await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), cancellationToken).ConfigureAwait(false);
+                await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), announce: false, cancellationToken).ConfigureAwait(false);
                 restored[storedBlock.Id] = block;
             }
             catch (ProtocolException exception)
