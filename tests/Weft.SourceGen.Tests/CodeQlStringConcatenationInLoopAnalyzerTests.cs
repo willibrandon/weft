@@ -227,6 +227,37 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
         Assert.ContainsSingle(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a field assignment computed from the field's old value is not accepted as a reset.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsAccumulationAfterDependentReset()
+    {
+        const string Source = """
+            internal sealed class Note
+            {
+                private string _text = string.Empty;
+
+                internal void Append(string[] items)
+                {
+                    foreach (string item in items)
+                    {
+                        _text = Normalize(_text);
+                        _text += item;
+                    }
+                }
+
+                internal string Text => _text;
+
+                private static string Normalize(string text) => text.Trim();
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.ContainsSingle(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
 }

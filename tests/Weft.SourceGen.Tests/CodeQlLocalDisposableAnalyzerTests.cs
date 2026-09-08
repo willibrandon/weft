@@ -712,6 +712,186 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.IsTrue(diagnostics.All(diagnostic => diagnostic.Id == CodeQlLocalDisposableAnalyzer.DiagnosticId));
     }
 
+    /// <summary>
+    /// Verifies a disposable that is neither disposed nor handed off before the block ends is reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLocalStillOwnedAtBlockExit()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static int Read(string path)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    stream.ReadByte();
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a disposable passed to another call may have changed hands and is not reported at block exit.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsLocalPassedOn()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Keep(string path, List<FileStream> owner)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    owner.Add(stream);
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies a conditional disposal call counts as cleanup.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsConditionalDisposalCall()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    stream?.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies catch-only cleanup does not end ownership, so later fallible work before a return is reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleWorkAfterCatchOnlyCleanup()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static FileStream Open(string path)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    try
+                    {
+                        Work();
+                    }
+                    catch
+                    {
+                        stream.Dispose();
+                        throw;
+                    }
+
+                    Work();
+                    return stream;
+                }
+
+                private static void Work()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies catch-only cleanup followed directly by the ownership return is accepted.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsCatchOnlyCleanupFollowedByReturn()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static FileStream Open(string path)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    try
+                    {
+                        Work();
+                    }
+                    catch
+                    {
+                        stream.Dispose();
+                        throw;
+                    }
+
+                    return stream;
+                }
+
+                private static void Work()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies catch-only cleanup with no disposal on the normal path is reported as a leak.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsCatchOnlyCleanupWithoutNormalDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    try
+                    {
+                        stream.ReadByte();
+                    }
+                    catch
+                    {
+                        stream.Dispose();
+                        throw;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         string sourcePath = Path.Join(Path.GetTempPath(), $"weft-disposable-local-{Guid.NewGuid():N}.cs");
@@ -960,6 +1140,38 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
 
         Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
         Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a local from an ordinary call is not treated as an owned resource at block exit.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsLookupResultLeftUndisposed()
+    {
+        const string Source = """
+            using System.IO;
+            internal sealed class Cache
+            {
+                private readonly FileStream _stream;
+
+                internal Cache(FileStream stream)
+                {
+                    _stream = stream;
+                }
+
+                internal long Length()
+                {
+                    FileStream stream = Current();
+                    return stream.Length;
+                }
+
+                private FileStream Current() => _stream;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
     }
 
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(

@@ -94,13 +94,14 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
 
         return condition.Parent switch
         {
+            // The whole guarded branch is scanned; a possible mutation before the read stops the search.
             IfStatementSyntax branch when branch.Condition == condition => negated
-                ? branch.Else is { } alternative ? FirstStatement(alternative.Statement)
+                ? branch.Else is { } alternative ? alternative.Statement
                     : Exits(branch.Statement) ? NextStatement(branch) : null
-                : FirstStatement(branch.Statement),
+                : branch.Statement,
             WhileStatementSyntax loop when loop.Condition == condition => negated
                 ? loop.Statement.DescendantNodesAndSelf().OfType<BreakStatementSyntax>().Any() ? null : NextStatement(loop)
-                : FirstStatement(loop.Statement),
+                : loop.Statement,
             ConditionalExpressionSyntax choice when choice.Condition == condition =>
                 negated ? choice.WhenFalse : choice.WhenTrue,
             _ => null

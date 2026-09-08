@@ -963,6 +963,58 @@ public sealed class RepositoryConventionAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a public operator without documentation is reported like any other public member.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsUndocumentedOperator()
+    {
+        const string Source = """
+            /// <summary>
+            /// Represents an amount.
+            /// </summary>
+            public readonly struct Amount
+            {
+                public static Amount operator +(Amount left, Amount right) => left;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(RepositoryConventionAnalyzer.XmlDocumentationDiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a documented conversion operator is accepted and its accessors are not asked for documentation.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsDocumentedConversion()
+    {
+        const string Source = """
+            /// <summary>
+            /// Represents an amount.
+            /// </summary>
+            public readonly struct Amount
+            {
+                /// <summary>
+                /// Gets the value.
+                /// </summary>
+                public int Value { get; }
+
+                /// <summary>
+                /// Converts an amount to its value.
+                /// </summary>
+                /// <param name="amount">The amount.</param>
+                public static implicit operator int(Amount amount) => amount.Value;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(
         string source,
         OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)

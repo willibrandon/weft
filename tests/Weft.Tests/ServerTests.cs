@@ -219,10 +219,11 @@ public sealed class ServerTests
     {
         CancellationToken cancellationToken = TestContext.CancellationToken;
         var first = ServerFixture.Start();
-        string root = first.Root;
+        string root;
         string layoutBefore;
         await using (first.ConfigureAwait(false))
         {
+            root = first.Root;
             await first.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
             ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))

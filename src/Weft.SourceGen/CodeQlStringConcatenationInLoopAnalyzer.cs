@@ -134,8 +134,9 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
                 return false;
             }
 
+            IOperation target = assignment is IAssignmentOperation appended ? appended.Target : assignment;
             if (statement is IExpressionStatementOperation { Operation: ISimpleAssignmentOperation reset } &&
-                SameStorage(reset.Target, assignment is IAssignmentOperation appended ? appended.Target : assignment))
+                SameStorage(reset.Target, target) && !DependsOn(reset.Value, target))
             {
                 return true;
             }
@@ -143,6 +144,10 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
 
         return false;
     }
+
+    // A reset computed from the old value, such as a normalization, still carries it into the append.
+    private static bool DependsOn(IOperation value, IOperation target) =>
+        value.DescendantsAndSelf().Any(operation => SameStorage(operation, target));
 
     private static ISymbol? GetVariable(IOperation operation) => operation switch
     {

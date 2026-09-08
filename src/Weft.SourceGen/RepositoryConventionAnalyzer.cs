@@ -241,7 +241,11 @@ public sealed class RepositoryConventionAnalyzer : DiagnosticAnalyzer
 
     private static bool RequiresDocumentation(ISymbol symbol)
     {
-        if (symbol is IMethodSymbol { MethodKind: not MethodKind.Ordinary and not MethodKind.Constructor })
+        // Accessors and compiler-driven kinds are documented through their owner; operators and conversions are not.
+        if (symbol is IMethodSymbol
+            {
+                MethodKind: not (MethodKind.Ordinary or MethodKind.Constructor or MethodKind.UserDefinedOperator or MethodKind.Conversion)
+            })
         {
             return false;
         }

@@ -173,6 +173,63 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
         }
         """;
 
+    /// <summary>
+    /// Verifies a guarded lookup later in the branch is reported when nothing before it can change the dictionary.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLookupLaterInGuardedBranch()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+            internal static class Lookup
+            {
+                internal static int Get(Dictionary<string, int> values, string key)
+                {
+                    if (values.ContainsKey(key))
+                    {
+                        int offset = 1;
+                        return values[key] + offset;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlInefficientContainsKeyAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies a lookup after a call that may change the dictionary is not reported.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsLookupAfterPossibleMutation()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+            internal static class Lookup
+            {
+                internal static int Get(Dictionary<string, int> values, string key)
+                {
+                    if (values.ContainsKey(key))
+                    {
+                        values.Remove(key);
+                        return values[key];
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) =>
         CodeQlFileCompilation.AnalyzeAsync(source, new CodeQlInefficientContainsKeyAnalyzer(), testContext.CancellationToken);
 }

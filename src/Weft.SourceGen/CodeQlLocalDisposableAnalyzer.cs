@@ -62,7 +62,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             if (variable.Initializer?.Value is not { } initializer || !CreatesResource(initializer) ||
                 context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is not
                     ILocalSymbol local ||
-                !(DisposableLocalOwnership.HasUnprotectedTransfer(
+                !(DisposableLocalOwnership.MayLeak(
                     local, variable, declaration, block, context) ||
                     initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
                     HasConfiguredLibraryDisposal(local, block, context)))
