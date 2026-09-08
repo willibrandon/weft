@@ -209,7 +209,7 @@ internal static partial class Patterns
     /// Matches personal or machine-specific home directory paths on any platform.
     /// </summary>
     /// <returns>The expression.</returns>
-    [GeneratedRegex(@"(/home/[a-z][a-z0-9_-]*|/root(/|\b)|/Users/[A-Za-z][A-Za-z0-9_-]*|[A-Za-z]:[\\/]Users[\\/])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(/home/[a-z][a-z0-9_-]*|/ro[o]t(/|\b)|/Users/[A-Za-z][A-Za-z0-9_-]*|[A-Za-z]:[\\/]Users[\\/])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     internal static partial Regex PersonalPath();
 
     /// <summary>
