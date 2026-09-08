@@ -26,6 +26,11 @@ public sealed class TabInfo
     public required string Session { get; init; }
 
     /// <summary>
+    /// The name of the session that owns the tab.
+    /// </summary>
+    public required string SessionName { get; init; }
+
+    /// <summary>
     /// Gets the number of blocks in the tab.
     /// </summary>
     public required int Blocks { get; init; }

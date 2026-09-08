@@ -29,6 +29,11 @@ public sealed class BlockInfo
     public required string Session { get; init; }
 
     /// <summary>
+    /// The name of the session that owns the block.
+    /// </summary>
+    public required string SessionName { get; init; }
+
+    /// <summary>
     /// Gets the title, from the terminal or pinned by the user.
     /// </summary>
     public required string Title { get; init; }

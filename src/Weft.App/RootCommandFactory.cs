@@ -39,6 +39,9 @@ internal static class RootCommandFactory
         root.Subcommands.Add(BlockCommands.CreateClose());
         root.Subcommands.Add(BlockCommands.CreateKill());
         root.Subcommands.Add(BlockCommands.CreateRename());
+        root.Subcommands.Add(BlockCommands.CreateFloat());
+        root.Subcommands.Add(BlockCommands.CreateTile());
+        root.Subcommands.Add(BlockCommands.CreateMove());
         root.Subcommands.Add(LayoutCommands.CreateLayout());
         root.Subcommands.Add(LayoutCommands.CreateResize());
         root.Subcommands.Add(EventCommands.CreateEvents());

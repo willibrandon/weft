@@ -28,5 +28,5 @@ public sealed class BlockWaitParams
     /// <summary>
     /// Gets the timeout in milliseconds.
     /// </summary>
-    public int TimeoutMs { get; init; } = 30_000;
+    public int TimeoutMs { get; set; } = 30_000;
 }

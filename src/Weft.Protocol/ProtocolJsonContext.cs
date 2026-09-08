@@ -37,6 +37,8 @@ namespace Weft.Protocol;
 [JsonSerializable(typeof(BlockFocusParams))]
 [JsonSerializable(typeof(BlockZoomParams))]
 [JsonSerializable(typeof(BlockSwapParams))]
+[JsonSerializable(typeof(BlockFloatParams))]
+[JsonSerializable(typeof(BlockMoveParams))]
 [JsonSerializable(typeof(BlockSendKeysParams))]
 [JsonSerializable(typeof(BlockTextParams))]
 [JsonSerializable(typeof(BlockCaptureParams))]

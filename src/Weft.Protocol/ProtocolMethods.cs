@@ -77,6 +77,15 @@ public static class ProtocolMethods
     /// <summary>Swaps two blocks' positions.</summary>
     public const string BlockSwap = "block.swap";
 
+    /// <summary>Lifts a block out of the tiled layout to float above it.</summary>
+    public const string BlockFloat = "block.float";
+
+    /// <summary>Returns a floating block to the tiled layout.</summary>
+    public const string BlockTile = "block.tile";
+
+    /// <summary>Moves or resizes a floating block.</summary>
+    public const string BlockMove = "block.move";
+
     /// <summary>Sends named keys and text to a block.</summary>
     public const string BlockSendKeys = "block.sendKeys";
 

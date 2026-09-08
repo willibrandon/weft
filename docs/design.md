@@ -305,6 +305,11 @@ Rules:
   connections. Long waits (`block.wait`, `events.subscribe`) do not block other connections.
 - Protocol version is bumped only for incompatible changes; additive fields are always allowed.
 
+Parameter objects with defaults use settable members rather than init-only ones. The .NET 10
+System.Text.Json source generator treats init-only members as constructor parameters, so a
+request that omits such a field would arrive with null or zero where the default was documented;
+required members keep init, since they must be present anyway.
+
 ### 6.1 Methods
 
 | Method | Purpose |
@@ -355,8 +360,8 @@ weft can address itself without arguments.
 
 ## 8. Configuration
 
-`~/.config/weft/config.json` (JSON with comments and trailing commas allowed), read at
-server start and client start, reloadable with `weft reload`.
+`~/.config/weft/config.json` (JSON with comments and trailing commas allowed), read by the
+server at start and by the client at attach. `WEFT_CONFIG` overrides the path.
 
 ```json
 {
@@ -366,13 +371,21 @@ server start and client start, reloadable with `weft reload`.
   "scrollback": 10000,
   "shell": null,
   "theme": "default",
-  "bindings": { "leader h": "block.focus --left", "alt+enter": "block.zoom" },
-  "hooks": { "block.exited": "notify-send weft \"block {block} exited {exitCode}\"" }
+  "defaultWidth": 120,
+  "defaultHeight": 36,
+  "bindings": { "leader h": "focus.left", "alt+enter": "block.zoom", "leader x": "none" },
+  "hooks": { "block.exited": "notify-send weft \"$WEFT_TITLE exited $WEFT_EXIT_CODE\"" }
 }
 ```
 
-Key syntax: modifiers `ctrl`, `alt`, `shift` joined with `+`, key names as Hex1b names in
-lower case, chords separated by spaces, `leader` as a token.
+Chord syntax: modifiers `ctrl`, `alt`, `shift` joined with `+`, key names in lower case,
+strokes separated by spaces, `leader` as a token. A capital letter means shift. Binding values
+are action ids from the palette (`detach`, `tab.new`, `split.right`, `focus.left`,
+`block.zoom`, `block.float`, `layout.next`, `session.pick`, `lock`, `palette`, and so on);
+`none` unbinds a default. Hooks name an event from section 6.2 and run a shell command with
+the event described in `WEFT_EVENT`, `WEFT_SESSION`, `WEFT_TAB`, `WEFT_BLOCK`, `WEFT_TITLE`,
+`WEFT_STATE`, `WEFT_COMMAND`, and `WEFT_EXIT_CODE`. Themes are `default`, `ocean`,
+`high-contrast`, and `sunset`.
 
 ## 9. Agent surface
 

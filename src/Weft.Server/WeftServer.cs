@@ -83,6 +83,7 @@ public sealed class WeftServer : IAsyncDisposable
         StartedAt = DateTimeOffset.Now;
         using CancellationTokenRegistration registration = cancellationToken.Register(RequestShutdown);
         var listener = new ControlListener(SocketPath, this, _dispatcher);
+        using HookRunner? hooks = Options.Hooks.Count > 0 ? new HookRunner(Events, Options.Hooks) : null;
         try
         {
             await listener.RunAsync(_stopping.Token).ConfigureAwait(false);

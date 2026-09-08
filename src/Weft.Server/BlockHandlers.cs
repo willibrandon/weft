@@ -96,6 +96,30 @@ internal static class BlockHandlers
                 return EmptyResult.Instance;
             });
 
+        dispatcher.Register(ProtocolMethods.BlockFloat, ProtocolJsonContext.Default.BlockFloatParams, ProtocolJsonContext.Default.LayoutInfo,
+            async (context, parameters, cancellationToken) =>
+            {
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
+                await context.Registry.FloatBlockAsync(block, parameters.X, parameters.Y, parameters.Width, parameters.Height, cancellationToken).ConfigureAwait(false);
+                return context.Registry.ToLayoutInfo(block.Tab);
+            });
+
+        dispatcher.Register(ProtocolMethods.BlockTile, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.LayoutInfo,
+            async (context, parameters, cancellationToken) =>
+            {
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
+                await context.Registry.TileBlockAsync(block, cancellationToken).ConfigureAwait(false);
+                return context.Registry.ToLayoutInfo(block.Tab);
+            });
+
+        dispatcher.Register(ProtocolMethods.BlockMove, ProtocolJsonContext.Default.BlockMoveParams, ProtocolJsonContext.Default.LayoutInfo,
+            async (context, parameters, cancellationToken) =>
+            {
+                Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
+                await context.Registry.MoveBlockAsync(block, parameters, cancellationToken).ConfigureAwait(false);
+                return context.Registry.ToLayoutInfo(block.Tab);
+            });
+
         dispatcher.Register(ProtocolMethods.BlockSendKeys, ProtocolJsonContext.Default.BlockSendKeysParams, ProtocolJsonContext.Default.EmptyResult,
             async (context, parameters, cancellationToken) =>
             {

@@ -308,6 +308,87 @@ internal static class BlockCommands
         return command;
     }
 
+    /// <summary>Creates the float command.</summary>
+    /// <returns>The command.</returns>
+    internal static Command CreateFloat()
+    {
+        var command = new Command("float", "Lift a block out of the tiled layout.");
+        Argument<string?> target = CommonOptions.OptionalTarget("Block to float.");
+        var x = new Option<int?>("-x") { Description = "Leftmost column." };
+        var y = new Option<int?>("-y") { Description = "Topmost row." };
+        var width = new Option<int?>("--width", "-w") { Description = "Width including frame." };
+        var height = new Option<int?>("--height", "-h") { Description = "Height including frame." };
+        command.Arguments.Add(target);
+        command.Options.Add(x);
+        command.Options.Add(y);
+        command.Options.Add(width);
+        command.Options.Add(height);
+        command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
+        {
+            LayoutInfo layout = await client.FloatAsync(new BlockFloatParams
+            {
+                Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)),
+                X = parseResult.GetValue(x),
+                Y = parseResult.GetValue(y),
+                Width = parseResult.GetValue(width),
+                Height = parseResult.GetValue(height)
+            }, cancellationToken).ConfigureAwait(false);
+            context.Write(layout, ProtocolJsonContext.Default.LayoutInfo, value => value.Floating.Select(p => p.Id + "  " + p.X.ToString(CultureInfo.InvariantCulture) + "," + p.Y.ToString(CultureInfo.InvariantCulture) + "  " + p.Width.ToString(CultureInfo.InvariantCulture) + "x" + p.Height.ToString(CultureInfo.InvariantCulture)));
+        }, cancellationToken));
+        return command;
+    }
+
+    /// <summary>Creates the tile command.</summary>
+    /// <returns>The command.</returns>
+    internal static Command CreateTile()
+    {
+        var command = new Command("tile", "Return a floating block to the tiled layout.");
+        Argument<string?> target = CommonOptions.OptionalTarget("Block to tile.");
+        command.Arguments.Add(target);
+        command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
+        {
+            LayoutInfo layout = await client.TileAsync(CommonOptions.EffectiveTarget(parseResult.GetValue(target)), cancellationToken).ConfigureAwait(false);
+            context.Write(layout, ProtocolJsonContext.Default.LayoutInfo, value => [value.Serialized]);
+        }, cancellationToken));
+        return command;
+    }
+
+    /// <summary>Creates the move command.</summary>
+    /// <returns>The command.</returns>
+    internal static Command CreateMove()
+    {
+        var command = new Command("move", "Move or resize a floating block.");
+        Argument<string?> target = CommonOptions.OptionalTarget("Floating block.");
+        var x = new Option<int?>("-x") { Description = "Leftmost column." };
+        var y = new Option<int?>("-y") { Description = "Topmost row." };
+        var width = new Option<int?>("--width", "-w") { Description = "Width including frame." };
+        var height = new Option<int?>("--height", "-h") { Description = "Height including frame." };
+        var dx = new Option<int>("--dx") { Description = "Columns to move by." };
+        var dy = new Option<int>("--dy") { Description = "Rows to move by." };
+        command.Arguments.Add(target);
+        command.Options.Add(x);
+        command.Options.Add(y);
+        command.Options.Add(width);
+        command.Options.Add(height);
+        command.Options.Add(dx);
+        command.Options.Add(dy);
+        command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
+        {
+            LayoutInfo layout = await client.MoveAsync(new BlockMoveParams
+            {
+                Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)),
+                X = parseResult.GetValue(x),
+                Y = parseResult.GetValue(y),
+                Width = parseResult.GetValue(width),
+                Height = parseResult.GetValue(height),
+                DeltaX = parseResult.GetValue(dx),
+                DeltaY = parseResult.GetValue(dy)
+            }, cancellationToken).ConfigureAwait(false);
+            context.Write(layout, ProtocolJsonContext.Default.LayoutInfo, value => value.Floating.Select(p => p.Id + "  " + p.X.ToString(CultureInfo.InvariantCulture) + "," + p.Y.ToString(CultureInfo.InvariantCulture) + "  " + p.Width.ToString(CultureInfo.InvariantCulture) + "x" + p.Height.ToString(CultureInfo.InvariantCulture)));
+        }, cancellationToken));
+        return command;
+    }
+
     /// <summary>
     /// Creates a direction option accepting left, right, up, or down.
     /// </summary>

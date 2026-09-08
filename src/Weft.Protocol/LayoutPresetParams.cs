@@ -22,5 +22,5 @@ public sealed class LayoutPresetParams
     /// <summary>
     /// Gets the main block's share for the main presets.
     /// </summary>
-    public int MainPercent { get; init; } = 50;
+    public int MainPercent { get; set; } = 50;
 }

@@ -1,3 +1,5 @@
+using Weft.Core;
+
 namespace Weft.Client;
 
 /// <summary>
@@ -24,6 +26,11 @@ public sealed class AttachOptions
     /// Gets the display name reported to the server.
     /// </summary>
     public string Name { get; init; } = Environment.MachineName;
+
+    /// <summary>
+    /// Gets the configuration; defaults when null.
+    /// </summary>
+    public WeftConfig Config { get; init; } = new();
 
     /// <summary>
     /// Gets a fixed headless viewport for tests; null renders to the real console.

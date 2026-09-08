@@ -34,4 +34,24 @@ public sealed class StoredBlock
     /// Gets whether the block floats.
     /// </summary>
     public bool Floating { get; init; }
+
+    /// <summary>
+    /// Gets the floating column.
+    /// </summary>
+    public int X { get; init; }
+
+    /// <summary>
+    /// Gets the floating row.
+    /// </summary>
+    public int Y { get; init; }
+
+    /// <summary>
+    /// Gets the floating width.
+    /// </summary>
+    public int Width { get; init; }
+
+    /// <summary>
+    /// Gets the floating height.
+    /// </summary>
+    public int Height { get; init; }
 }

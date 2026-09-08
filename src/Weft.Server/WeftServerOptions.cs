@@ -1,3 +1,5 @@
+using Weft.Core;
+
 namespace Weft.Server;
 
 /// <summary>
@@ -48,10 +50,15 @@ public sealed class WeftServerOptions
     /// <summary>
     /// Gets the size policy for new sessions.
     /// </summary>
-    public Weft.Core.SizePolicy DefaultSizePolicy { get; init; }
+    public SizePolicy DefaultSizePolicy { get; init; }
 
     /// <summary>
     /// Gets the server version string reported to clients.
     /// </summary>
     public string Version { get; init; } = "0.1.0";
+
+    /// <summary>
+    /// Gets hooks: event name to a shell command run with the event in environment variables.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Hooks { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }

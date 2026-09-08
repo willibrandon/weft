@@ -16,14 +16,18 @@ public sealed class AttachApp
     private static readonly Hex1bColor s_panel = Hex1bColor.FromRgb(24, 24, 28);
     private static readonly Hex1bColor s_terminal = Hex1bColor.FromRgb(0, 0, 0);
     private readonly AttachOptions _options;
+    private readonly BindingTable _bindings;
     private readonly Dictionary<string, BlockView> _views = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
+    // Session names are trimmed by the server, so an entry that starts with a space can never collide with one.
+    private const string NewSessionEntry = " + new session";
     private ControlClient? _control;
+    private RootContext? _root;
     private SessionMirror? _mirror;
     private Hex1bApp? _app;
     private CancellationTokenSource? _stopping;
     private string? _status;
-    private bool _help;
+    private bool _locked;
     private int _reportedWidth;
     private int _reportedHeight;
 
@@ -35,12 +39,32 @@ public sealed class AttachApp
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
+        _bindings = BindingTable.Build(options.Config);
+        if (_bindings.Warnings.Count > 0)
+        {
+            _status = _bindings.Warnings[0];
+        }
     }
 
     /// <summary>
     /// Gets a message explaining why the client stopped, if it stopped on its own.
     /// </summary>
     public string? ExitMessage { get; private set; }
+
+    /// <summary>
+    /// Gets the session the user asked to switch to, when the client stopped for a switch.
+    /// </summary>
+    public string? SwitchTarget { get; private set; }
+
+    /// <summary>
+    /// Gets the latest error message from a failed action, for display.
+    /// </summary>
+    public string? Status => _status;
+
+    /// <summary>
+    /// Gets the outer terminal once running, for automation in tests.
+    /// </summary>
+    internal Hex1bTerminal? Terminal { get; private set; }
 
     /// <summary>
     /// Attaches, runs until detached, and cleans up.
@@ -109,16 +133,20 @@ public sealed class AttachApp
         }
     }
 
-    /// <summary>
-    /// Gets the outer terminal once running, for automation in tests.
-    /// </summary>
-    internal Hex1bTerminal? Terminal { get; private set; }
+    private static Hex1bTheme ThemeFor(string name) => name.ToUpperInvariant() switch
+    {
+        "OCEAN" => Hex1bThemes.Ocean,
+        "HIGH-CONTRAST" or "HIGHCONTRAST" => Hex1bThemes.HighContrast,
+        "SUNSET" => Hex1bThemes.Sunset,
+        _ => Hex1bThemes.Default
+    };
 
     private async Task RunTerminalAsync(CancellationToken cancellationToken)
     {
+        Hex1bTheme theme = ThemeFor(_options.Config.Theme);
         Hex1bTerminalBuilder builder = Hex1bTerminal.CreateBuilder()
             .WithMouse()
-            .WithHex1bApp(_ => { }, app =>
+            .WithHex1bApp(options => options.Theme = theme, app =>
             {
                 _app = app;
                 return Render;
@@ -204,7 +232,9 @@ public sealed class AttachApp
                 return;
             }
 
-            _views[block.Id] = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => _app?.Invalidate());
+            var view = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => _app?.Invalidate());
+            view.Handle.TextCopied += text => Fire(client => client.SetPasteAsync(text, CancellationToken.None));
+            _views[block.Id] = view;
         }
     }
 
@@ -246,14 +276,22 @@ public sealed class AttachApp
         }
     }
 
-    private void FocusView(string id)
+    private BlockView? ViewFor(string? id)
     {
-        BlockView? view;
-        lock (_gate)
+        if (id is null)
         {
-            _views.TryGetValue(id, out view);
+            return null;
         }
 
+        lock (_gate)
+        {
+            return _views.GetValueOrDefault(id);
+        }
+    }
+
+    private void FocusView(string id)
+    {
+        BlockView? view = ViewFor(id);
         if (view is not null)
         {
             _app?.RequestFocus(node => node is TerminalNode terminal && terminal.Handle == view.Handle);
@@ -262,18 +300,16 @@ public sealed class AttachApp
 
     private string? FocusedBlockId()
     {
-        if (_app?.FocusedNode is not TerminalNode terminal)
+        if (_app?.FocusedNode is TerminalNode terminal)
         {
-            return _mirror?.ActiveTab?.ActiveBlock;
-        }
-
-        lock (_gate)
-        {
-            foreach (BlockView view in _views.Values)
+            lock (_gate)
             {
-                if (view.Handle == terminal.Handle)
+                foreach (BlockView view in _views.Values)
                 {
-                    return view.Id;
+                    if (view.Handle == terminal.Handle)
+                    {
+                        return view.Id;
+                    }
                 }
             }
         }
@@ -284,26 +320,36 @@ public sealed class AttachApp
     private Hex1bWidget Render(RootContext ctx)
     {
         SessionMirror mirror = _mirror!;
+        _root = ctx;
         (int width, int height) = HostSize.Read(_options.Headless);
         int availableWidth = Math.Max(1, width);
         int availableHeight = Math.Max(1, height - 1);
         ReportSize(availableWidth, availableHeight);
 
         LayoutInfo layout = mirror.Layout;
-        Hex1bWidget body;
-        if (_help)
+        ZStackWidget content = ctx.ZStack(z =>
         {
-            body = RenderHelp(ctx);
-        }
-        else
-        {
-            Hex1bWidget tree = RenderLayout(ctx, mirror, layout);
+            Hex1bWidget tiled = RenderLayout(z, mirror, layout);
             bool fits = layout.Width <= availableWidth && layout.Height <= availableHeight;
-            body = ctx.Align(fits ? Alignment.Center : Alignment.TopLeft, tree).Fill();
-        }
+            List<Hex1bWidget> layers = [z.Align(fits ? Alignment.Center : Alignment.TopLeft, tiled).Fill()];
 
-        Hex1bWidget content = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [body, RenderInfoBar(v, mirror, layout, _status)]));
-        return content.InputBindings(bindings => RegisterBindings(bindings, mirror));
+            // Floating blocks keep their server coordinates relative to the session, so when the session is
+            // centered in a larger viewport they move with it. A zoomed block already fills the session.
+            int offsetX = fits ? (availableWidth - layout.Width) / 2 : 0;
+            int offsetY = fits ? (availableHeight - layout.Height) / 2 : 0;
+            foreach (BlockPlacement placement in layout.Floating)
+            {
+                if (!string.Equals(placement.Id, layout.Zoomed, StringComparison.Ordinal) && mirror.FindBlock(placement.Id) is { } block)
+                {
+                    layers.Add(z.Float(RenderBlock(z, block, placement.Width, placement.Height, layout.FrameSize > 0, mirror)).Absolute(placement.X + offsetX, placement.Y + offsetY));
+                }
+            }
+
+            return [.. layers];
+        });
+
+        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, _bindings)]));
+        return body.InputBindings(bindings => RegisterBindings(bindings, mirror));
     }
 
     private Hex1bWidget RenderLayout<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
@@ -316,7 +362,7 @@ public sealed class AttachApp
 
         if (!LayoutSerializer.TryParse(layout.Serialized, out LayoutCell? root) || root is null)
         {
-            return ctx.Center(ctx.Text("(no blocks)")).FixedWidth(layout.Width).FixedHeight(layout.Height);
+            return ctx.Center(ctx.Text(layout.Floating.Count > 0 ? string.Empty : "(no blocks)")).FixedWidth(layout.Width).FixedHeight(layout.Height);
         }
 
         return RenderCell(ctx, root, layout, mirror);
@@ -376,12 +422,7 @@ public sealed class AttachApp
     private Hex1bWidget RenderBlock<TParent>(WidgetContext<TParent> ctx, BlockInfo block, int width, int height, bool framed, SessionMirror mirror)
         where TParent : Hex1bWidget
     {
-        BlockView? view;
-        lock (_gate)
-        {
-            _views.TryGetValue(block.Id, out view);
-        }
-
+        BlockView? view = ViewFor(block.Id);
         int innerWidth = Math.Max(1, framed ? width - 2 : width);
         int innerHeight = Math.Max(1, framed ? height - 2 : height);
         Hex1bWidget inner;
@@ -402,102 +443,303 @@ public sealed class AttachApp
 
         bool active = string.Equals(mirror.ActiveTab?.ActiveBlock, block.Id, StringComparison.Ordinal);
         string marker = block.State == BlockState.Exited ? " [exited " + (block.ExitCode ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture) + "]" : string.Empty;
-        string title = " " + (active ? "● " : string.Empty) + block.Title + marker + " ";
+        string title = " " + (active ? "● " : string.Empty) + block.Title + marker + (block.Floating ? " ◈" : string.Empty) + " ";
         return ctx.Border(inner).Title(title).FixedWidth(width).FixedHeight(height);
     }
 
-    private static AlignWidget RenderHelp<TParent>(WidgetContext<TParent> ctx)
-        where TParent : Hex1bWidget
-    {
-        string[] lines =
-        [
-            "  Ctrl+B is the leader. Press it, then:",
-            string.Empty,
-            "  d        detach                 c        new tab",
-            "  n / p    next / previous tab    1..9     select tab",
-            "  v        split right            -        split below",
-            "  x        close block            z        zoom block",
-            "  h j k l  focus by direction     H J K L  resize by five",
-            "  arrows   focus by direction     Space    next layout preset",
-            "  Ctrl+B   send Ctrl+B            ?        toggle this help",
-            string.Empty,
-            "  Shift+PageUp scrolls a block. Mouse clicks focus, wheel scrolls.",
-        ];
-        return ctx.Center(ctx.Border(b => [b.VStack(v => [.. lines.Select(line => (Hex1bWidget)v.Text(line))])]).Title(" weft "));
-    }
-
-    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status)
+    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, BindingTable bindings)
         where TParent : Hex1bWidget
     {
         IReadOnlyList<TabInfo> tabs = mirror.Tabs;
         string tabText = string.Join("  ", tabs.Select(tab =>
             (tab.Active ? "[" : string.Empty) + tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + tab.Name + (tab.Active ? "]" : string.Empty)));
         string size = layout.Width.ToString(System.Globalization.CultureInfo.InvariantCulture) + "×" + layout.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string hint = locked ? bindings.ChordFor(ClientActions.Lock) + " unlock" : bindings.ChordFor(ClientActions.Palette) + " help";
         return ctx.InfoBar(s =>
         [
             s.Section(" " + mirror.Session.Name + " "),
             s.Section(tabText),
             s.Spacer(),
-            s.Section(status ?? string.Empty),
+            s.Section(locked ? "LOCKED" : status ?? string.Empty),
             s.Section(size),
-            s.Section("Ctrl+B ?"),
-            s.Section("help")
+            s.Section(hint)
         ]).Divider(" ");
     }
 
     private void RegisterBindings(InputBindingsBuilder bindings, SessionMirror mirror)
     {
-        Leader(bindings, Hex1bKey.D).Action(_ => Detach(), "Detach");
-        Leader(bindings, Hex1bKey.C).Action(_ => Fire(client => client.CreateTabAsync(new TabCreateParams { Target = mirror.Session.Id }, CancellationToken.None)), "New tab");
-        Leader(bindings, Hex1bKey.N).Action(_ => SelectTabRelative(mirror, 1), "Next tab");
-        Leader(bindings, Hex1bKey.P).Action(_ => SelectTabRelative(mirror, -1), "Previous tab");
-        Hex1bKey[] digits = [Hex1bKey.D1, Hex1bKey.D2, Hex1bKey.D3, Hex1bKey.D4, Hex1bKey.D5, Hex1bKey.D6, Hex1bKey.D7, Hex1bKey.D8, Hex1bKey.D9];
-        for (int i = 0; i < digits.Length; i++)
+        foreach ((KeyChord chord, string action) in _bindings.Bindings)
         {
-            int index = i + 1;
-            Leader(bindings, digits[i]).Action(_ => SelectTabIndex(mirror, index), "Select tab");
-        }
+            if (_locked && !string.Equals(action, ClientActions.Lock, StringComparison.Ordinal))
+            {
+                continue;
+            }
 
-        Leader(bindings, Hex1bKey.V).Action(_ => Split(SplitOrientation.LeftRight), "Split right");
-        Leader(bindings, Hex1bKey.OemMinus).Action(_ => Split(SplitOrientation.TopBottom), "Split below");
-        Leader(bindings, Hex1bKey.X).Action(_ => WithFocused(id => Fire(client => client.CloseBlockAsync(id, CancellationToken.None))), "Close block");
-        Leader(bindings, Hex1bKey.Z).Action(_ => WithFocused(id => Fire(client => client.ZoomAsync(new BlockZoomParams { Target = id }, CancellationToken.None))), "Zoom block");
-        Leader(bindings, Hex1bKey.Spacebar).Action(_ => Fire(client => client.PresetAsync(new LayoutPresetParams { Target = mirror.Session.Id }, CancellationToken.None)), "Next layout");
-        Leader(bindings, Hex1bKey.OemQuestion).Action(_ =>
-        {
-            _help = !_help;
-            _app?.Invalidate();
-        }, "Help");
-        bindings.Ctrl().Key(Hex1bKey.B).Then().Ctrl().Key(Hex1bKey.B).OverridesCapture().Action(_ => SendLeaderKey(), "Send Ctrl+B");
+            KeyStepBuilder? step = BuildSteps(bindings, chord);
+            if (step is null)
+            {
+                continue;
+            }
 
-        (Hex1bKey Key, LayoutDirection Direction)[] moves =
-        [
-            (Hex1bKey.H, LayoutDirection.Left), (Hex1bKey.J, LayoutDirection.Down), (Hex1bKey.K, LayoutDirection.Up), (Hex1bKey.L, LayoutDirection.Right),
-            (Hex1bKey.LeftArrow, LayoutDirection.Left), (Hex1bKey.DownArrow, LayoutDirection.Down), (Hex1bKey.UpArrow, LayoutDirection.Up), (Hex1bKey.RightArrow, LayoutDirection.Right)
-        ];
-        foreach ((Hex1bKey key, LayoutDirection direction) in moves)
-        {
-            Leader(bindings, key).Action(_ => FocusDirection(direction), "Focus " + direction.ToString().ToUpperInvariant());
-        }
-
-        (Hex1bKey Key, LayoutDirection Direction)[] resizes =
-        [
-            (Hex1bKey.H, LayoutDirection.Left), (Hex1bKey.J, LayoutDirection.Down), (Hex1bKey.K, LayoutDirection.Up), (Hex1bKey.L, LayoutDirection.Right)
-        ];
-        foreach ((Hex1bKey key, LayoutDirection direction) in resizes)
-        {
-            bindings.Ctrl().Key(Hex1bKey.B).Then().Shift().Key(key).OverridesCapture()
-                .Action(_ => WithFocused(id => Fire(client => client.ResizeAsync(new LayoutResizeParams { Target = id, Direction = direction, Amount = 5 }, CancellationToken.None))), "Resize " + direction.ToString().ToUpperInvariant());
+            string captured = action;
+            step.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
         }
     }
 
-    private static KeyStepBuilder Leader(InputBindingsBuilder bindings, Hex1bKey key) =>
-        bindings.Ctrl().Key(Hex1bKey.B).Then().Key(key).OverridesCapture();
-
-    private void Detach()
+    private static KeyStepBuilder? BuildSteps(InputBindingsBuilder bindings, KeyChord chord)
     {
-        ExitMessage = null;
-        _app?.RequestStop();
+        KeyStepBuilder? builder = null;
+        foreach (KeyStroke stroke in chord.Steps)
+        {
+            if (KeyMap.ToHex1bKey(stroke.Key) is not { } key)
+            {
+                return null;
+            }
+
+            KeyStepBuilder step = builder is null ? bindings.Key(key) : builder.Then().Key(key);
+            if (stroke.Modifiers.HasFlag(KeyModifiers.Control))
+            {
+                step = step.Ctrl();
+            }
+
+            if (stroke.Modifiers.HasFlag(KeyModifiers.Alt))
+            {
+                step = step.Alt();
+            }
+
+            if (stroke.Modifiers.HasFlag(KeyModifiers.Shift))
+            {
+                step = step.Shift();
+            }
+
+            builder = step;
+        }
+
+        return builder;
+    }
+
+    private void Execute(string action, InputBindingActionContext context, SessionMirror mirror)
+    {
+        switch (action)
+        {
+            case ClientActions.Detach:
+                ExitMessage = null;
+                _app?.RequestStop();
+                break;
+            case ClientActions.TabNew:
+                Fire(client => client.CreateTabAsync(new TabCreateParams { Target = mirror.Session.Id }, CancellationToken.None));
+                break;
+            case ClientActions.TabNext:
+                SelectTabRelative(mirror, 1);
+                break;
+            case ClientActions.TabPrevious:
+                SelectTabRelative(mirror, -1);
+                break;
+            case ClientActions.TabClose:
+                if (mirror.ActiveTab is { } closing)
+                {
+                    Fire(client => client.CloseTabAsync(closing.Id, CancellationToken.None));
+                }
+
+                break;
+            case ClientActions.TabRename:
+                if (mirror.ActiveTab is { } renaming)
+                {
+                    Prompt(context, "Tab name", renaming.Name, name => Fire(client => client.RenameTabAsync(new TabRenameParams { Target = renaming.Id, Name = name }, CancellationToken.None)));
+                }
+
+                break;
+            case ClientActions.SplitRight:
+                Split(SplitOrientation.LeftRight);
+                break;
+            case ClientActions.SplitDown:
+                Split(SplitOrientation.TopBottom);
+                break;
+            case ClientActions.BlockClose:
+                WithFocused(id => Fire(client => client.CloseBlockAsync(id, CancellationToken.None)));
+                break;
+            case ClientActions.BlockZoom:
+                WithFocused(id => Fire(client => client.ZoomAsync(new BlockZoomParams { Target = id }, CancellationToken.None)));
+                break;
+            case ClientActions.BlockFloat:
+                WithFocused(id =>
+                {
+                    bool floating = mirror.FindBlock(id)?.Floating ?? false;
+                    Fire(client => floating
+                        ? client.TileAsync(id, CancellationToken.None)
+                        : client.FloatAsync(new BlockFloatParams { Target = id }, CancellationToken.None));
+                });
+                break;
+            case ClientActions.BlockRename:
+                WithFocused(id => Prompt(context, "Block title", mirror.FindBlock(id)?.Title ?? string.Empty, title => Fire(client => client.RenameBlockAsync(new BlockRenameParams { Target = id, Title = title }, CancellationToken.None))));
+                break;
+            case ClientActions.CopyMode:
+                ViewFor(FocusedBlockId())?.Handle.EnterCopyMode();
+                _app?.Invalidate();
+                break;
+            case ClientActions.Paste:
+                WithFocused(id => Fire(async client =>
+                {
+                    PasteBuffer buffer = await client.GetPasteAsync(CancellationToken.None).ConfigureAwait(false);
+                    return await client.PasteAsync(new BlockTextParams { Target = id, Text = buffer.Text }, CancellationToken.None).ConfigureAwait(false);
+                }));
+                break;
+            case ClientActions.FocusLeft:
+                FocusDirection(LayoutDirection.Left);
+                break;
+            case ClientActions.FocusRight:
+                FocusDirection(LayoutDirection.Right);
+                break;
+            case ClientActions.FocusUp:
+                FocusDirection(LayoutDirection.Up);
+                break;
+            case ClientActions.FocusDown:
+                FocusDirection(LayoutDirection.Down);
+                break;
+            case ClientActions.ResizeLeft:
+                Resize(LayoutDirection.Left);
+                break;
+            case ClientActions.ResizeRight:
+                Resize(LayoutDirection.Right);
+                break;
+            case ClientActions.ResizeUp:
+                Resize(LayoutDirection.Up);
+                break;
+            case ClientActions.ResizeDown:
+                Resize(LayoutDirection.Down);
+                break;
+            case ClientActions.LayoutNext:
+                Fire(client => client.PresetAsync(new LayoutPresetParams { Target = mirror.Session.Id }, CancellationToken.None));
+                break;
+            case ClientActions.SessionPick:
+                PickSession(context, mirror);
+                break;
+            case ClientActions.SessionRename:
+                Prompt(context, "Session name", mirror.Session.Name, name => Fire(client => client.RenameSessionAsync(new SessionRenameParams { Target = mirror.Session.Id, Name = name }, CancellationToken.None)));
+                break;
+            case ClientActions.TabPick:
+                PickTabOrBlock(context, mirror);
+                break;
+            case ClientActions.Lock:
+                _locked = !_locked;
+                _app?.Invalidate();
+                break;
+            case ClientActions.Palette:
+                ShowPalette(context, mirror);
+                break;
+            case ClientActions.SendLeader:
+                SendLeaderKey();
+                break;
+            case var numbered when ClientActions.TabNumber(numbered) is { } number:
+                SelectTabNumber(mirror, number);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void Prompt(InputBindingActionContext context, string label, string initial, Action<string> onSubmit)
+    {
+        PopupStack popups = context.Popups;
+        RootContext ctx = _root!;
+        popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+        [
+            b.VStack(v =>
+            [
+                v.Text(" " + label + " "),
+                v.TextBox(initial).OnSubmit(e =>
+                {
+                    popups.Pop();
+                    onSubmit(e.Text);
+                }).FixedWidth(40),
+                v.Text(" Enter to apply, Escape to cancel ")
+            ])
+        ]).Title(" weft ")), popups));
+    }
+
+    private static Hex1bWidget Dismissable(Hex1bWidget content, PopupStack popups) =>
+        content.InputBindings(bindings => bindings.Key(Hex1bKey.Escape).Action(_ => popups.Pop(), "Dismiss"));
+
+    private void ShowPalette(InputBindingActionContext context, SessionMirror mirror)
+    {
+        PopupStack popups = context.Popups;
+        RootContext ctx = _root!;
+        List<PaletteEntry> entries = [.. ClientActions.Defaults.Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))];
+        popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+        [
+            b.SelectionPrompt(entries)
+                .Prompt("weft")
+                .MaxVisibleItems(16)
+                .OnSelected(entry =>
+                {
+                    popups.Pop();
+                    Execute(entry.Action, context, mirror);
+                })
+        ]).Title(" commands ")), popups));
+    }
+
+    private void PickSession(InputBindingActionContext context, SessionMirror mirror)
+    {
+        PopupStack popups = context.Popups;
+        RootContext ctx = _root!;
+        Fire(async client =>
+        {
+            SessionListResult result = await client.ListSessionsAsync(CancellationToken.None).ConfigureAwait(false);
+            List<string> names = [.. result.Sessions.Select(session => session.Name), NewSessionEntry];
+            popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+            [
+                b.SelectionPrompt(names).Prompt("session").MaxVisibleItems(12).OnSelected(name =>
+                {
+                    popups.Pop();
+                    if (string.Equals(name, mirror.Session.Name, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    SwitchTarget = string.Equals(name, NewSessionEntry, StringComparison.Ordinal) ? string.Empty : name;
+                    ExitMessage = null;
+                    _app?.RequestStop();
+                })
+            ]).Title(" sessions ")), popups));
+            _app?.Invalidate();
+            return result;
+        });
+    }
+
+    private void PickTabOrBlock(InputBindingActionContext context, SessionMirror mirror)
+    {
+        PopupStack popups = context.Popups;
+        List<(string Label, string Tab, string? Block)> items = [];
+        foreach (TabInfo tab in mirror.Tabs)
+        {
+            items.Add((tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ": " + tab.Name, tab.Id, null));
+            foreach (BlockInfo block in mirror.Blocks.Where(block => string.Equals(block.Tab, tab.Id, StringComparison.Ordinal)).OrderBy(block => block.Index))
+            {
+                items.Add(("    " + block.Id + "  " + block.Title, tab.Id, block.Id));
+            }
+        }
+
+        List<string> labels = [.. items.Select(item => item.Label)];
+        RootContext ctx = _root!;
+        popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+        [
+            b.SelectionPrompt(labels).Prompt("go to").MaxVisibleItems(16).OnSelected(label =>
+            {
+                popups.Pop();
+                (string _, string tab, string? block) = items.First(item => string.Equals(item.Label, label, StringComparison.Ordinal));
+                Fire(async client =>
+                {
+                    await client.SelectTabAsync(tab, CancellationToken.None).ConfigureAwait(false);
+                    if (block is not null)
+                    {
+                        BlockInfo focused = await client.FocusAsync(new BlockFocusParams { Target = block }, CancellationToken.None).ConfigureAwait(false);
+                        FocusView(focused.Id);
+                    }
+
+                    return EmptyResult.Instance;
+                });
+            })
+        ]).Title(" tabs and blocks ")), popups));
     }
 
     private void SelectTabRelative(SessionMirror mirror, int delta)
@@ -513,18 +755,11 @@ public sealed class AttachApp
         Fire(client => client.SelectTabAsync(tabs[next].Id, CancellationToken.None));
     }
 
-    private void SelectTabIndex(SessionMirror mirror, int index)
-    {
-        IReadOnlyList<TabInfo> tabs = mirror.Tabs;
-        TabInfo? tab = tabs.FirstOrDefault(candidate => candidate.Index == index);
-        if (tab is not null)
-        {
-            Fire(client => client.SelectTabAsync(tab.Id, CancellationToken.None));
-        }
-    }
-
     private void Split(SplitOrientation orientation) =>
         WithFocused(id => Fire(client => client.SplitAsync(new BlockSplitParams { Target = id, Orientation = orientation }, CancellationToken.None)));
+
+    private void Resize(LayoutDirection direction) =>
+        WithFocused(id => Fire(client => client.ResizeAsync(new LayoutResizeParams { Target = id, Direction = direction, Amount = 5 }, CancellationToken.None)));
 
     private void FocusDirection(LayoutDirection direction) =>
         WithFocused(id => Fire(async client =>
@@ -536,19 +771,33 @@ public sealed class AttachApp
 
     private void SendLeaderKey()
     {
-        string? id = FocusedBlockId();
-        BlockView? view = null;
-        if (id is not null)
+        BlockView? view = ViewFor(FocusedBlockId());
+        if (view is null)
         {
-            lock (_gate)
-            {
-                _views.TryGetValue(id, out view);
-            }
+            return;
         }
 
-        if (view is not null)
+        // A multi-stroke leader is sent stroke by stroke, in order, on one queue.
+        _ = SendStrokesAsync(view, _bindings.Leader.Steps);
+    }
+
+    private static async Task SendStrokesAsync(BlockView view, IReadOnlyList<KeyStroke> strokes)
+    {
+        foreach (KeyStroke stroke in strokes)
         {
-            _ = view.Handle.SendEventAsync(new Hex1bKeyEvent(Hex1bKey.B, '\x02', Hex1bModifiers.Control));
+            if (KeyMap.ToKeyEvent(stroke) is { } keyEvent)
+            {
+                await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private void SelectTabNumber(SessionMirror mirror, int number)
+    {
+        IReadOnlyList<TabInfo> tabs = mirror.Tabs;
+        if (number >= 1 && number <= tabs.Count)
+        {
+            Fire(client => client.SelectTabAsync(tabs[number - 1].Id, CancellationToken.None));
         }
     }
 
@@ -562,12 +811,10 @@ public sealed class AttachApp
 
     private void Fire<T>(Func<ControlClient, Task<T>> call)
     {
-        if (_control is not { } control)
+        if (_control is { } control)
         {
-            return;
+            _ = FireAsync(control, call);
         }
-
-        _ = FireAsync(control, call);
     }
 
     private async Task FireAsync<T>(ControlClient control, Func<ControlClient, Task<T>> call)
@@ -602,9 +849,4 @@ public sealed class AttachApp
             Fire(client => client.SetSizeAsync(new SessionSetSizeParams { Client = mirror.Client.Id, Width = width, Height = height }, CancellationToken.None));
         }
     }
-
-    /// <summary>
-    /// Gets the latest error message from a failed action, for display.
-    /// </summary>
-    public string? Status => _status;
 }
