@@ -48,14 +48,9 @@ internal static class DisposableLocalOwnership
 
             bool priorRisk = mayThrow;
             mayThrow |= MayThrow(statement, context);
-            if (ReturnsLocal(statement, local, context) || TransfersLocal(statement, local, context))
+            if (EndsWithTransfer(statement, local, mayThrow, context))
             {
-                // A transfer nested under a condition covers only some paths, so the scan continues
-                // for the others unless the risk already accumulated makes the transfer unsafe.
-                if (mayThrow || statement is ReturnStatementSyntax or ExpressionStatementSyntax)
-                {
-                    return mayThrow;
-                }
+                return mayThrow;
             }
 
             if (statement is ExpressionStatementSyntax && DisposesLocal(statement, local, context))
@@ -67,6 +62,16 @@ internal static class DisposableLocalOwnership
 
         return false;
     }
+
+    // A transfer nested under a condition covers only some paths, so the scan continues for the
+    // others unless the risk already accumulated makes the transfer unsafe on its own.
+    private static bool EndsWithTransfer(
+        StatementSyntax statement,
+        ILocalSymbol local,
+        bool mayThrow,
+        SyntaxNodeAnalysisContext context) =>
+        (ReturnsLocal(statement, local, context) || TransfersLocal(statement, local, context)) &&
+        (mayThrow || statement is ReturnStatementSyntax or ExpressionStatementSyntax);
 
     private static bool IsDisposableContract(ITypeSymbol type) =>
         type.ToDisplayString() is "System.IDisposable" or "System.IAsyncDisposable";
