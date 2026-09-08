@@ -39,49 +39,57 @@ internal static class BlockWaiter
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Math.Max(1, parameters.TimeoutMs));
-        while (true)
+        try
         {
-            BlockHost? host = block.Host;
-
-            // Subscribe before looking, so output applied between the capture and the wait still wakes the loop.
-            Task? outputChanged = host?.OutputChanged.WaitAsync(timeout.Token);
-            Task stateChanged = block.StateChanged.WaitAsync(timeout.Token);
-            long revision = block.Revision;
-            if (block.State is BlockState.Exited or BlockState.Closed && parameters.Exit)
+            while (true)
             {
-                return new BlockWaitResult { Outcome = WaitOutcome.Exit, Revision = revision, ExitCode = block.ExitCode };
-            }
+                BlockHost? host = block.Host;
 
-            if (sinceRevision is { } since && revision > since)
-            {
-                return new BlockWaitResult { Outcome = WaitOutcome.Changed, Revision = revision, ExitCode = block.ExitCode };
-            }
-
-            if (regex is not null && host is not null)
-            {
-                BlockCapture capture = host.Capture(0, CaptureFormat.Text);
-                foreach (string line in capture.Lines)
+                // Subscribe before looking, so output applied between the capture and the wait still wakes the loop.
+                Task? outputChanged = host?.OutputChanged.WaitAsync(timeout.Token);
+                Task stateChanged = block.StateChanged.WaitAsync(timeout.Token);
+                long revision = block.Revision;
+                if (block.State is BlockState.Exited or BlockState.Closed && parameters.Exit)
                 {
-                    Match match = regex.Match(line);
-                    if (match.Success)
+                    return new BlockWaitResult { Outcome = WaitOutcome.Exit, Revision = revision, ExitCode = block.ExitCode };
+                }
+
+                if (sinceRevision is { } since && revision > since)
+                {
+                    return new BlockWaitResult { Outcome = WaitOutcome.Changed, Revision = revision, ExitCode = block.ExitCode };
+                }
+
+                if (regex is not null && host is not null)
+                {
+                    BlockCapture capture = host.Capture(0, CaptureFormat.Text);
+                    foreach (string line in capture.Lines)
                     {
-                        return new BlockWaitResult { Outcome = WaitOutcome.Pattern, Revision = capture.Revision, Match = match.Value, Line = line, ExitCode = block.ExitCode };
+                        Match match = regex.Match(line);
+                        if (match.Success)
+                        {
+                            return new BlockWaitResult { Outcome = WaitOutcome.Pattern, Revision = capture.Revision, Match = match.Value, Line = line, ExitCode = block.ExitCode };
+                        }
                     }
                 }
-            }
 
-            if (host is null)
-            {
-                return new BlockWaitResult { Outcome = WaitOutcome.Exit, Revision = revision, ExitCode = block.ExitCode };
-            }
+                if (host is null)
+                {
+                    return new BlockWaitResult { Outcome = WaitOutcome.Exit, Revision = revision, ExitCode = block.ExitCode };
+                }
 
-            await Task.WhenAny(outputChanged!, stateChanged).ConfigureAwait(false);
+                await Task.WhenAny(outputChanged!, stateChanged).ConfigureAwait(false);
 
-            if (timeout.IsCancellationRequested)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return new BlockWaitResult { Outcome = WaitOutcome.Timeout, Revision = block.Revision, ExitCode = block.ExitCode };
+                if (timeout.IsCancellationRequested)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return new BlockWaitResult { Outcome = WaitOutcome.Timeout, Revision = block.Revision, ExitCode = block.ExitCode };
+                }
             }
+        }
+        finally
+        {
+            // Cancelling releases the signal subscriptions taken for the last look, so an early return leaves nothing behind.
+            await timeout.CancelAsync().ConfigureAwait(false);
         }
     }
 }

@@ -56,6 +56,10 @@ internal sealed partial class SessionRegistry
             }
 
             tab.Active = block;
+            if (!tab.NamePinned)
+            {
+                tab.Name = block.DisplayTitle;
+            }
             resizes = RelayoutUnsafe(tab);
         }
 
@@ -101,6 +105,10 @@ internal sealed partial class SessionRegistry
             }
 
             tab.Active = block;
+            if (!tab.NamePinned)
+            {
+                tab.Name = block.DisplayTitle;
+            }
             resizes = RelayoutUnsafe(tab);
         }
 

@@ -26,9 +26,9 @@ public sealed class TabInfo
     public required string Session { get; init; }
 
     /// <summary>
-    /// The name of the session that owns the tab.
+    /// The name of the session that owns the tab, empty when an older server omitted it.
     /// </summary>
-    public required string SessionName { get; init; }
+    public string SessionName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets the number of blocks in the tab.

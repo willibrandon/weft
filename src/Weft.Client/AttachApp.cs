@@ -201,6 +201,12 @@ public sealed class AttachApp
                     continue;
                 }
 
+                if (message.Event is ProtocolEvents.SessionResized or ProtocolEvents.ClientAttached)
+                {
+                    // Another client may have become the size authority; the next input here must reclaim it at once.
+                    Volatile.Write(ref _lastActivation, 0);
+                }
+
                 (BlockInfo Block, bool Created)? change = mirror.Apply(message);
                 if (change is { } affected)
                 {
@@ -707,7 +713,11 @@ public sealed class AttachApp
             return;
         }
 
-        Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
+        if (!_options.ReadOnly)
+        {
+            Fire(client => client.ActivateAsync(mirror.Client.Id, CancellationToken.None));
+        }
+
         switch (action)
         {
             case ClientActions.Detach:
@@ -816,6 +826,14 @@ public sealed class AttachApp
                 PickTabOrBlock(context, mirror);
                 break;
             case ClientActions.Lock:
+                if (!_locked && string.IsNullOrEmpty(_bindings.ChordFor(ClientActions.Lock)))
+                {
+                    // Without a chord to unlock, locking would strand the client.
+                    _status = "lock has no key bound";
+                    _app?.Invalidate();
+                    break;
+                }
+
                 _locked = !_locked;
                 _app?.Invalidate();
                 break;
@@ -863,6 +881,7 @@ public sealed class AttachApp
         [
             .. ClientActions.Defaults
                 .Where(item => !_options.ReadOnly || ClientActions.IsReadOnlySafe(item.Action))
+                .Where(item => !string.Equals(item.Action, ClientActions.Lock, StringComparison.Ordinal) || !string.IsNullOrEmpty(_bindings.ChordFor(ClientActions.Lock)))
                 .Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))
         ];
         popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
@@ -885,7 +904,13 @@ public sealed class AttachApp
         Fire(async client =>
         {
             SessionListResult result = await client.ListSessionsAsync(CancellationToken.None).ConfigureAwait(false);
-            List<string> names = [.. result.Sessions.Select(session => session.Name), NewSessionEntry];
+            // A read-only viewer may switch between sessions but never create one.
+            List<string> names = [.. result.Sessions.Select(session => session.Name)];
+            if (!_options.ReadOnly)
+            {
+                names.Add(NewSessionEntry);
+            }
+
             popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
             [
                 b.SelectionPrompt(names).Prompt("session").MaxVisibleItems(12).OnSelected(name =>

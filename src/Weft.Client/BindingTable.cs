@@ -146,6 +146,11 @@ internal sealed class BindingTable
 
     private static string Pretty(KeyStroke stroke)
     {
+        if (stroke.Key == "/" && stroke.Modifiers.HasFlag(KeyModifiers.Shift))
+        {
+            return Prefix(stroke.Modifiers & ~KeyModifiers.Shift) + "?";
+        }
+
         string key = stroke.Key.Length == 1 ? stroke.Key.ToUpperInvariant() : char.ToUpperInvariant(stroke.Key[0]) + stroke.Key[1..];
         return Prefix(stroke.Modifiers) + key;
     }
