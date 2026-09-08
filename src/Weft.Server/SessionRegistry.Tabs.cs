@@ -167,8 +167,7 @@ internal sealed partial class SessionRegistry
             try
             {
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null, keepOnExit: false, cancellationToken).ConfigureAwait(false);
-                block.PinnedTitle = storedBlock.Title;
-                block.ExcludedFromSync = storedBlock.ExcludedFromSync;
+                ApplyStoredState(block, storedBlock);
                 restored[storedBlock.Id] = block;
                 first ??= block;
             }
@@ -185,8 +184,7 @@ internal sealed partial class SessionRegistry
             try
             {
                 Block block = await StartBlockAsync(tab, first, SplitOrientation.TopBottom, null, false, [storedBlock.Command, .. storedBlock.Args], storedBlock.Cwd, focus: first is null && restored.Count == 0, keepOnExit: false, cancellationToken).ConfigureAwait(false);
-                block.PinnedTitle = storedBlock.Title;
-                block.ExcludedFromSync = storedBlock.ExcludedFromSync;
+                ApplyStoredState(block, storedBlock);
                 await FloatBlockAsync(block, new LayoutRect(storedBlock.X, storedBlock.Y, storedBlock.Width, storedBlock.Height), announce: false, cancellationToken).ConfigureAwait(false);
                 restored[storedBlock.Id] = block;
             }
@@ -239,6 +237,18 @@ internal sealed partial class SessionRegistry
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         _events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+    }
+
+    // The block was announced as created before its stored title and sync exclusion were applied, so a
+    // correcting change event follows when either differs from what the announcement carried.
+    private void ApplyStoredState(Block block, StoredBlock stored)
+    {
+        block.PinnedTitle = stored.Title;
+        block.ExcludedFromSync = stored.ExcludedFromSync;
+        if (!string.IsNullOrEmpty(stored.Title) || stored.ExcludedFromSync)
+        {
+            _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        }
     }
 
     private static void CollectStoredLeaves(LayoutCell cell, Dictionary<int, Block> restored, List<BlockId> order)
