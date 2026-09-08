@@ -8,12 +8,19 @@ namespace Weft.Mcp;
 /// </summary>
 /// <remarks>
 /// The server answers one request at a time per connection, so a shared connection would let a long
-/// wait block every other tool. Each call leases its own connection and returns it afterwards. The
-/// connect delegate is the same connect-or-start path the CLI uses, so a server that went away while
-/// the agent kept the MCP process alive is started again on the next call.
+/// wait block every other tool. Each call leases its own connection and returns it afterwards. A
+/// bounded number of idle connections is kept for reuse; the rest of a burst is closed on return so
+/// a long-lived process does not hold its peak concurrency open forever. The connect delegate is the
+/// same connect-or-start path the CLI uses, so a server that went away while the agent kept the MCP
+/// process alive is started again on the next call.
 /// </remarks>
 public sealed class WeftBridge : IAsyncDisposable
 {
+    /// <summary>
+    /// The most idle connections kept for reuse; a connection returned beyond this is closed instead.
+    /// </summary>
+    internal const int IdleCapacity = 4;
+
     private readonly Func<CancellationToken, Task<ControlClient>> _connect;
     private readonly ConcurrentBag<ControlClient> _idle = [];
 
@@ -48,13 +55,13 @@ public sealed class WeftBridge : IAsyncDisposable
     }
 
     /// <summary>
-    /// Takes a connection back; a closed one, or one whose call was abandoned, is dropped instead of pooled.
+    /// Takes a connection back; one that closed, was abandoned, or exceeds the idle capacity is dropped.
     /// </summary>
     /// <param name="client">The connection a lease is returning.</param>
     /// <param name="reusable">Whether the call finished, so no request is still running on the connection.</param>
     internal void Return(ControlClient client, bool reusable)
     {
-        if (!reusable || client.Closed.IsCompleted)
+        if (!reusable || client.Closed.IsCompleted || _idle.Count >= IdleCapacity)
         {
             _ = client.DisposeAsync().AsTask();
             return;

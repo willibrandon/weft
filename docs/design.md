@@ -425,8 +425,10 @@ constructor takes the bridge from dependency injection, with `[Description]` tex
 the schema agents read, registered through the hosting builder with `WithStdioServerTransport`.
 Each call leases its own control connection from the bridge, because the server answers one
 request at a time per connection, so a long `wait_for` cannot block a `capture` beside it. The
-bridge connects through the same connect-or-start path as the CLI, so it also brings the server
-back if it went away while the agent kept `weft mcp` running.
+bridge keeps a few idle connections for reuse and closes the rest of a burst on return, so a
+long-lived `weft mcp` does not hold its peak concurrency open. It connects through the same
+connect-or-start path as the CLI, so it also brings the server back if it went away while the
+agent kept `weft mcp` running.
 Tests drive it with the SDK client over in-memory pipes against a real server. Optional tool
 parameters carry default values because the SDK treats any parameter without one as required.
 The SDK's own log goes to standard error, the channel the protocol reserves for a stdio server,
