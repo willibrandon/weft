@@ -334,6 +334,11 @@ public sealed class ServerTests
 
                 Assert.DoesNotContain(ProtocolEvents.TabRenamed, names);
                 Assert.Contains(info => info.Floating, changed);
+
+                // The last change per block carries the final state: one active block, the tiled one that was focused before the stop.
+                var latest = changed.GroupBy(info => info.Id).ToDictionary(group => group.Key, group => group.Last());
+                BlockInfo active = Assert.ContainsSingle(latest.Values.Where(info => info.Active));
+                Assert.IsFalse(active.Floating);
             }
         }
     }

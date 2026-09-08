@@ -236,19 +236,22 @@ internal sealed partial class SessionRegistry
         }
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
-        _events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
-    }
 
-    // The block was announced as created before its stored title and sync exclusion were applied, so a
-    // correcting change event follows when either differs from what the announcement carried.
-    private void ApplyStoredState(Block block, StoredBlock stored)
-    {
-        block.PinnedTitle = stored.Title;
-        block.ExcludedFromSync = stored.ExcludedFromSync;
-        if (!string.IsNullOrEmpty(stored.Title) || stored.ExcludedFromSync)
+        // Every restored block was announced as created before its stored title, sync exclusion, floating
+        // state, and the tab's active block were applied, so a change event carries the final state of each.
+        foreach (Block block in restored.Values)
         {
             _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         }
+
+        _events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+    }
+
+    // The final state of every restored block is announced once the tab is complete.
+    private static void ApplyStoredState(Block block, StoredBlock stored)
+    {
+        block.PinnedTitle = stored.Title;
+        block.ExcludedFromSync = stored.ExcludedFromSync;
     }
 
     private static void CollectStoredLeaves(LayoutCell cell, Dictionary<int, Block> restored, List<BlockId> order)
