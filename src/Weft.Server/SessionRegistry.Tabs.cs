@@ -228,6 +228,12 @@ internal sealed partial class SessionRegistry
                 tab.Active = active;
             }
 
+            // Floating the stored blocks renamed an unpinned tab after each one; the restored active block wins.
+            if (!tab.NamePinned && tab.Active is { } restoredActive)
+            {
+                tab.Name = restoredActive.DisplayTitle;
+            }
+
             resizes.AddRange(RelayoutUnsafe(tab));
         }
 
