@@ -52,11 +52,14 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context)
     {
         var declaration = (LocalDeclarationStatementSyntax)context.Node;
+        // A declaration sits in a block or directly in a switch section; both are statement sequences.
         if (!declaration.UsingKeyword.IsKind(SyntaxKind.None) ||
-            declaration.Parent is not BlockSyntax block)
+            declaration.Parent is not (BlockSyntax or SwitchSectionSyntax))
         {
             return;
         }
+
+        SyntaxNode block = declaration.Parent;
 
         foreach (VariableDeclaratorSyntax variable in declaration.Declaration.Variables)
         {
@@ -90,9 +93,10 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
     private static IEnumerable<ExpressionStatementSyntax> FindResourceAssignments(
         ILocalSymbol local,
         LocalDeclarationStatementSyntax declaration,
-        BlockSyntax block,
+        SyntaxNode block,
         SyntaxNodeAnalysisContext context) =>
-        block.Statements
+        block.ChildNodes()
+            .OfType<StatementSyntax>()
             .SkipWhile(candidate => candidate != declaration)
             .Skip(1)
             .SelectMany(static statement => statement.DescendantNodesAndSelf(
@@ -101,7 +105,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             .Where(statement => IsResourceAssignment(statement, local, context));
 
     private static bool LeaksFromAssignment(ILocalSymbol local, ExpressionStatementSyntax handoff, SyntaxNodeAnalysisContext context) =>
-        handoff.Parent is BlockSyntax scope &&
+        handoff.Parent is (BlockSyntax or SwitchSectionSyntax) and { } scope &&
         DisposableLocalOwnership.MayLeak(local, ((AssignmentExpressionSyntax)handoff.Expression).Right, handoff, priorRisk: false, scope, context);
 
     private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
@@ -120,7 +124,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
 
     private static bool HasConfiguredLibraryDisposal(
         ILocalSymbol local,
-        BlockSyntax block,
+        SyntaxNode block,
         SyntaxNodeAnalysisContext context)
     {
         if (!local.Type.DeclaringSyntaxReferences.IsEmpty ||

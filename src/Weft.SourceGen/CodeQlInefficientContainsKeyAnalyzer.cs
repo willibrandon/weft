@@ -141,11 +141,9 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
         return expression;
     }
 
-    private static StatementSyntax? FirstStatement(StatementSyntax statement) =>
-        statement is BlockSyntax block ? block.Statements.FirstOrDefault() : statement;
-
+    // A branch exits when its last statement does, whatever runs before it.
     private static bool Exits(StatementSyntax statement) =>
-        FirstStatement(statement) is ReturnStatementSyntax or ThrowStatementSyntax;
+        (statement is BlockSyntax block ? block.Statements.LastOrDefault() : statement) is ReturnStatementSyntax or ThrowStatementSyntax;
 
     private static IReadOnlyList<SyntaxNode> FollowingStatements(StatementSyntax statement) =>
         statement.Parent is BlockSyntax block

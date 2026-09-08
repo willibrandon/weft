@@ -292,6 +292,39 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
         Assert.AreEqual(CodeQlInefficientContainsKeyAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
+    /// <summary>
+    /// Verifies an inverted guard whose branch does work before exiting still guards the statements after it.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLookupAfterExitingGuardWithPreliminaryWork()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+            internal static class Lookup
+            {
+                internal static int Get(Dictionary<string, int> values, string key)
+                {
+                    if (!values.ContainsKey(key))
+                    {
+                        LogMissing();
+                        return 0;
+                    }
+
+                    return values[key];
+                }
+
+                private static void LogMissing()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlInefficientContainsKeyAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) =>
         CodeQlFileCompilation.AnalyzeAsync(source, new CodeQlInefficientContainsKeyAnalyzer(), testContext.CancellationToken);
 }

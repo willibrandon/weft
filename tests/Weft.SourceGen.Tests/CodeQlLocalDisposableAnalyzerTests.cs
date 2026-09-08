@@ -1612,6 +1612,108 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
         Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
+    /// <summary>
+    /// Verifies a disposable declared directly in a switch section is analyzed.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsLocalDeclaredInSwitchSection()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(int mode)
+                {
+                    switch (mode)
+                    {
+                        case 0:
+                            var stream = new MemoryStream();
+                            stream.ReadByte();
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Verifies fallible work that runs only after the disposal on every branch is not counted as risk.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsFallibleWorkAfterDisposalOnEveryBranch()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path, bool condition)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (condition)
+                    {
+                        stream.Dispose();
+                        Prepare();
+                    }
+                    else
+                    {
+                        stream.Dispose();
+                    }
+                }
+
+                private static void Prepare()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Verifies fallible work before the disposal on one branch is still reported.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleWorkBeforeDisposalOnOneBranch()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path, bool condition)
+                {
+                    FileStream stream = File.OpenRead(path);
+                    if (condition)
+                    {
+                        Prepare();
+                        stream.Dispose();
+                    }
+                    else
+                    {
+                        stream.Dispose();
+                    }
+                }
+
+                private static void Prepare()
+                {
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }
