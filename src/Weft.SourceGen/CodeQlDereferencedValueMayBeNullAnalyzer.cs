@@ -175,7 +175,28 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzer : DiagnosticAnalyze
             .OfType<IfStatementSyntax>()
             .Any(statement =>
                 statement.Statement.Span.Contains(suppression.Span) &&
-                ImpliesNotNull(statement.Condition, local, context));
+                ImpliesNotNull(statement.Condition, local, context) &&
+                !WrittenBeforeSuppression(statement.Statement, suppression, local, context));
+
+    private static bool WrittenBeforeSuppression(
+        StatementSyntax guarded,
+        PostfixUnaryExpressionSyntax suppression,
+        ILocalSymbol local,
+        SyntaxNodeAnalysisContext context)
+    {
+        // A write to the local anywhere in the guarded region up to the suppression voids the guard's proof.
+        StatementSyntax first = guarded;
+        StatementSyntax last = guarded;
+        if (guarded is BlockSyntax block && block.Statements.Count > 0)
+        {
+            first = block.Statements[0];
+            last = block.Statements.LastOrDefault(statement => statement.Span.Start <= suppression.Span.Start) ?? first;
+        }
+
+        DataFlowAnalysis? flow = context.SemanticModel.AnalyzeDataFlow(first, last);
+        return flow is null || !flow.Succeeded ||
+            flow.WrittenInside.Any(written => SymbolEqualityComparer.Default.Equals(written, local));
+    }
 
     private static bool ImpliesNotNull(ExpressionSyntax condition, ILocalSymbol local, SyntaxNodeAnalysisContext context)
     {

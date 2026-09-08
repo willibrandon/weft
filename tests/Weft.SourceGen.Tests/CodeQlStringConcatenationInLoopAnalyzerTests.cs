@@ -172,6 +172,32 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies the same field on another instance is not treated as accumulation into the target.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsFieldCopiedFromAnotherInstance()
+    {
+        const string Source = """
+            internal sealed class Note
+            {
+                internal string Text = string.Empty;
+
+                internal static void Copy(Note target, Note source, string[] items)
+                {
+                    foreach (string item in items)
+                    {
+                        target.Text = source.Text + item;
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
 }

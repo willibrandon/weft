@@ -46,7 +46,7 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
         var assignment = (IAssignmentOperation)context.Operation;
         if (assignment.Target.Type?.SpecialType != SpecialType.System_String ||
             GetVariable(assignment.Target) is not ISymbol variable ||
-            !IsConcatenation(assignment, variable) ||
+            !IsConcatenation(assignment) ||
             !SurvivesLoop(assignment, variable))
         {
             return;
@@ -55,23 +55,50 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(s_rule, assignment.Syntax.GetLocation(), variable.Name));
     }
 
-    private static bool IsConcatenation(IAssignmentOperation assignment, ISymbol variable) =>
+    private static bool IsConcatenation(IAssignmentOperation assignment) =>
         assignment is ICompoundAssignmentOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } ||
         assignment is ISimpleAssignmentOperation &&
         assignment.Value is IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, Type.SpecialType: SpecialType.System_String } addition &&
-        (ContainsVariable(addition.LeftOperand, variable) || ContainsVariable(addition.RightOperand, variable));
+        (ContainsStorage(addition.LeftOperand, assignment.Target) || ContainsStorage(addition.RightOperand, assignment.Target));
 
-    private static bool ContainsVariable(IOperation operand, ISymbol variable)
+    private static bool ContainsStorage(IOperation operand, IOperation target)
     {
         while (operand is IConversionOperation { OperatorMethod: null } conversion)
         {
             operand = conversion.Operand;
         }
 
-        return SymbolEqualityComparer.Default.Equals(GetVariable(operand), variable) ||
+        return SameStorage(operand, target) ||
             operand is IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, Type.SpecialType: SpecialType.System_String } addition &&
-            (ContainsVariable(addition.LeftOperand, variable) || ContainsVariable(addition.RightOperand, variable));
+            (ContainsStorage(addition.LeftOperand, target) || ContainsStorage(addition.RightOperand, target));
     }
+
+    private static bool SameStorage(IOperation left, IOperation right)
+    {
+        // The same field on a different instance is different storage, so the receivers must match as well.
+        while (left is IConversionOperation { OperatorMethod: null } l)
+        {
+            left = l.Operand;
+        }
+
+        while (right is IConversionOperation { OperatorMethod: null } r)
+        {
+            right = r.Operand;
+        }
+
+        return (left, right) switch
+        {
+            (ILocalReferenceOperation a, ILocalReferenceOperation b) => SymbolEqualityComparer.Default.Equals(a.Local, b.Local),
+            (IParameterReferenceOperation a, IParameterReferenceOperation b) => SymbolEqualityComparer.Default.Equals(a.Parameter, b.Parameter),
+            (IFieldReferenceOperation a, IFieldReferenceOperation b) =>
+                SymbolEqualityComparer.Default.Equals(a.Field, b.Field) && SameReceiver(a.Instance, b.Instance),
+            _ => false
+        };
+    }
+
+    private static bool SameReceiver(IOperation? left, IOperation? right) =>
+        (left is null or IInstanceReferenceOperation) && (right is null or IInstanceReferenceOperation) ||
+        left is not null && right is not null && SameStorage(left, right);
 
     private static bool FlowsIntoBody(IOperation assignment, ILoopOperation loop, ISymbol variable)
     {

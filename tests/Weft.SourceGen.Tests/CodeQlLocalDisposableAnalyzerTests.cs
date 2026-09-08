@@ -709,4 +709,46 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
             File.Delete(sourcePath);
         }
     }
+    /// <summary>
+    /// Verifies a handler that disposes only under a condition does not count as exception cleanup.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsConditionalCleanupInHandler()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read(string path, bool cleanup)
+                {
+                    FileStream current = File.OpenRead(path);
+                    FileStream child = File.OpenRead(path);
+                    try
+                    {
+                        current.Dispose();
+                        current = child;
+                    }
+                    catch
+                    {
+                        if (cleanup)
+                        {
+                            child.Dispose();
+                        }
+
+                        throw;
+                    }
+
+                    current.Dispose();
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+        source, new CodeQlLocalDisposableAnalyzer(), testContext.CancellationToken);
 }

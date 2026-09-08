@@ -136,7 +136,7 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzer : DiagnosticAnalyzer
             assignment.Parent is not ExpressionStatementSyntax statement ||
             context.SemanticModel.GetSymbolInfo(
                 identifier,
-                context.CancellationToken).Symbol is not ILocalSymbol local ||
+                context.CancellationToken).Symbol is not ILocalSymbol { RefKind: RefKind.None } local ||
             !context.SemanticModel.GetConstantValue(
                 assignment.Right,
                 context.CancellationToken).HasValue)

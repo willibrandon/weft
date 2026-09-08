@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Weft.SourceGen;
@@ -78,7 +79,7 @@ internal static class DisposableLocalOwnership
         ILocalSymbol local,
         SyntaxNodeAnalysisContext context)
     {
-        if (statement.Finally is { } cleanup && DisposesLocal(cleanup.Block, local, context))
+        if (statement.Finally is { } cleanup && DisposesLocalOnEveryPath(cleanup.Block, local, context))
         {
             return true;
         }
@@ -88,7 +89,7 @@ internal static class DisposableLocalOwnership
             (clause.Declaration is null || context.SemanticModel.GetTypeInfo(
                 clause.Declaration.Type, context.CancellationToken).Type?.ToDisplayString() ==
                 "System.Exception") &&
-            DisposesLocal(clause.Block, local, context));
+            DisposesLocalOnEveryPath(clause.Block, local, context));
     }
 
     private static bool ReturnsLocal(
@@ -130,6 +131,40 @@ internal static class DisposableLocalOwnership
                     Expression: IdentifierNameSyntax receiver,
                     Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
                 } && IsLocal(receiver, local, context));
+
+    private static bool DisposesLocalOnEveryPath(
+        SyntaxNode scope,
+        ILocalSymbol local,
+        SyntaxNodeAnalysisContext context)
+    {
+        // Only a disposal that is a statement of the handler itself runs on every path through it;
+        // one nested under a condition or loop can be skipped.
+        IEnumerable<StatementSyntax> statements = scope switch
+        {
+            BlockSyntax block => block.Statements,
+            CatchClauseSyntax handler => handler.Block.Statements,
+            FinallyClauseSyntax handler => handler.Block.Statements,
+            StatementSyntax statement => [statement],
+            _ => []
+        };
+        return statements.Any(statement =>
+            statement is ExpressionStatementSyntax { Expression: var expression } &&
+            (expression is InvocationExpressionSyntax invocation &&
+                invocation.ArgumentList.Arguments.Count == 0 &&
+                invocation.Expression is MemberAccessExpressionSyntax
+                {
+                    Expression: IdentifierNameSyntax receiver,
+                    Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
+                } && IsLocal(receiver, local, context) ||
+             expression is AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } &&
+                awaited.ArgumentList.Arguments.Count == 0 &&
+                awaited.Expression is MemberAccessExpressionSyntax
+                {
+                    Expression: IdentifierNameSyntax awaitedReceiver,
+                    Name.Identifier.ValueText: "DisposeAsync"
+                } && IsLocal(awaitedReceiver, local, context)) ||
+            statement is UsingStatementSyntax { Expression: IdentifierNameSyntax scoped } && IsLocal(scoped, local, context));
+    }
 
     private static bool MayThrow(SyntaxNode scope, SyntaxNodeAnalysisContext context) =>
         scope.DescendantNodesAndSelf(DescendIntoExecution).Any(node =>

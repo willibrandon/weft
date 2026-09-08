@@ -340,6 +340,32 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies an assignment through a ref local is kept, since it writes the storage it aliases.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsAssignmentThroughRefLocal()
+    {
+        const string Source = """
+            internal sealed class Holder
+            {
+                private int _field = 1;
+
+                internal void Reset()
+                {
+                    ref int alias = ref _field;
+                    alias = 0;
+                }
+
+                internal int Field => _field;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessAssignmentToLocalAnalyzer(), CancellationToken.None);
 }

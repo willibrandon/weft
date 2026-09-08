@@ -255,6 +255,32 @@ public sealed class CodeQlUselessUpcastAnalyzerTests
         Assert.ContainsSingle(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a null cast that gives an implicitly typed local its type is kept.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsNullCastTypingVar()
+    {
+        const string Source = """
+            internal class Base
+            {
+            }
+
+            internal static class Slots
+            {
+                internal static object? Empty()
+                {
+                    var value = (Base?)null;
+                    return value;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessUpcastAnalyzer(), CancellationToken.None);
 }

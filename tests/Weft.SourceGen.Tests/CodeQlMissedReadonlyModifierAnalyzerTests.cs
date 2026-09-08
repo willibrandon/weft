@@ -152,6 +152,33 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzerTests(TestContext testCo
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a field of a struct-constrained type parameter mutated through an interface call is not reported.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsConstrainedStructFieldChangedThroughCall()
+    {
+        const string Source = """
+            internal interface IMutable
+            {
+                void Increment();
+            }
+
+            internal sealed class Holder<T> where T : struct, IMutable
+            {
+                private T _value;
+
+                internal void Bump() => _value.Increment();
+
+                internal T Value => _value;
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
 }

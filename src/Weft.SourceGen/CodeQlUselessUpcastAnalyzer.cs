@@ -168,6 +168,7 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
         if (!cast.Expression.IsKind(SyntaxKind.NullLiteralExpression) ||
             cast.Parent is not EqualsValueClauseSyntax equalsValue ||
             equalsValue.Parent is not VariableDeclaratorSyntax declarator ||
+            declarator.Parent is VariableDeclarationSyntax { Type.IsVar: true } ||
             context.SemanticModel.GetDeclaredSymbol(
                 declarator,
                 context.CancellationToken) is not ILocalSymbol local)

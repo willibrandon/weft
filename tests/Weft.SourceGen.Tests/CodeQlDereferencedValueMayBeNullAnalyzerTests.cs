@@ -67,6 +67,39 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzerTests(TestContext te
         Assert.IsEmpty(diagnostics);
     }
 
+    /// <summary>
+    /// Verifies a write to the local after the guard voids the guard.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsDereferenceAfterWriteInsideGuard()
+    {
+        const string Source = """
+            using System.Collections.Generic;
+
+            internal static class Lookup
+            {
+                internal static int Length(Dictionary<string, string> map, string key, bool reset)
+                {
+                    if (map.TryGetValue(key, out string? value) && value is not null)
+                    {
+                        if (reset)
+                        {
+                            value = null;
+                        }
+
+                        return value!.Length;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.ContainsSingle(diagnostics);
+    }
+
     private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlDereferencedValueMayBeNullAnalyzer(), testContext.CancellationToken);
 }

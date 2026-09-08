@@ -145,7 +145,8 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
 
     private static bool IsMutableStruct(ITypeSymbol type) =>
         type is INamedTypeSymbol { IsValueType: true, IsReadOnly: false, EnumUnderlyingType: null } &&
-        type.SpecialType == SpecialType.None;
+            type.SpecialType == SpecialType.None ||
+        type is ITypeParameterSymbol { HasValueTypeConstraint: true };
 
     private static bool IsInitializationWrite(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {
