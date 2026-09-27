@@ -54,4 +54,9 @@ public sealed class StoredBlock
     /// Gets the floating height.
     /// </summary>
     public int Height { get; init; }
+
+    /// <summary>
+    /// Whether the block stays out of its tab's synchronized input.
+    /// </summary>
+    public bool ExcludedFromSync { get; init; }
 }

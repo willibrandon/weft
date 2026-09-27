@@ -56,6 +56,7 @@ internal sealed partial class SessionRegistry
     {
         Id = client.Id,
         Session = client.Session.Id.ToString(),
+        SessionName = client.Session.Name,
         Name = client.Name,
         Width = client.Width,
         Height = client.Height,

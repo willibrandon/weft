@@ -20,6 +20,7 @@ public sealed class ControlClient : IAsyncDisposable
     private readonly Dictionary<long, TaskCompletionSource<ProtocolMessage>> _pending = [];
     private readonly Task _readLoop;
     private long _nextId;
+    private bool _transportFailed;
 
     private ControlClient(Socket socket, HelloData hello)
     {
@@ -45,6 +46,11 @@ public sealed class ControlClient : IAsyncDisposable
     /// Gets a task that completes when the connection is closed by either side.
     /// </summary>
     public Task Closed => _readLoop;
+
+    /// <summary>
+    /// Gets whether a request failed while writing to the control transport.
+    /// </summary>
+    public bool TransportFailed => Volatile.Read(ref _transportFailed);
 
     /// <summary>
     /// Connects to a control socket and reads the hello event.
@@ -118,7 +124,15 @@ public sealed class ControlClient : IAsyncDisposable
 
         try
         {
-            await _writer.WriteAsync(ProtocolCodec.Request(id, method, parameters, parameterInfo), cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _writer.WriteAsync(ProtocolCodec.Request(id, method, parameters, parameterInfo), cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                Volatile.Write(ref _transportFailed, true);
+                throw;
+            }
             ProtocolMessage response = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             if (response.Error is { } error)
             {

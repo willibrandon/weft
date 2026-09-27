@@ -1,6 +1,7 @@
 using Weft.Client;
 using Weft.Core;
 using Weft.Protocol;
+using Weft.Server;
 
 namespace Weft.Tests;
 
@@ -251,6 +252,150 @@ public sealed class ServerTests
                 Assert.HasCount(2, attached.Layout.Tiled);
                 Assert.AreEqual(24, attached.Layout.Tiled[0].Height + attached.Layout.Tiled[1].Height);
                 Assert.IsTrue(LayoutSerializer.TryParse(layoutBefore, out _));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies the runtime lock is free once a stop has completed, so a replacement server can start at once.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task StoppedServerHasReleasedItsLock()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            await fixture.StopKeepingStateAsync().ConfigureAwait(false);
+
+            using var replacement = ServerLock.TryAcquire(WeftPaths.LockFilePath(Path.Join(fixture.Root, "run")));
+
+            Assert.IsNotNull(replacement);
+        }
+
+        Directory.Delete(fixture.Root, recursive: true);
+    }
+
+    /// <summary>
+    /// Verifies restoring a tab with a floating block announces the finished tab once, without rename events for transient titles.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(90_000, CooperativeCancellation = true)]
+    public async Task RestoreAnnouncesFloatingBlocksOnlyWithTheTab()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var first = ServerFixture.Start();
+        string root;
+        await using (first.ConfigureAwait(false))
+        {
+            root = first.Root;
+            await first.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (client.ConfigureAwait(false))
+            {
+                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                BlockInfo anchor = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
+                BlockInfo floating = await client.SplitAsync(new BlockSplitParams { Target = anchor.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
+                await client.RenameBlockAsync(new BlockRenameParams { Target = floating.Id, Title = "float-me" }, cancellationToken).ConfigureAwait(false);
+                await client.FloatAsync(new BlockFloatParams { Target = floating.Id }, cancellationToken).ConfigureAwait(false);
+                await client.FocusAsync(new BlockFocusParams { Target = anchor.Id }, cancellationToken).ConfigureAwait(false);
+            }
+
+            await first.StopKeepingStateAsync().ConfigureAwait(false);
+        }
+
+        var second = ServerFixture.Resume(root);
+        await using (second.ConfigureAwait(false))
+        {
+            await second.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient resumed = await second.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (resumed.ConfigureAwait(false))
+            {
+                // The stored session is restored on first use, so a live subscription sees every event the restore publishes.
+                await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                SessionAttachResult attached = await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
+                Assert.HasCount(1, attached.Layout.Floating);
+
+                var names = new List<string>();
+                var changed = new List<BlockInfo>();
+                while (!names.Contains(ProtocolEvents.TabCreated, StringComparer.Ordinal))
+                {
+                    ProtocolMessage message = await resumed.Events.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    names.Add(message.Event ?? string.Empty);
+                    if (string.Equals(message.Event, ProtocolEvents.BlockChanged, StringComparison.Ordinal))
+                    {
+                        changed.Add(ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block);
+                    }
+                }
+
+                Assert.DoesNotContain(ProtocolEvents.TabRenamed, names);
+                Assert.Contains(info => info.Floating, changed);
+
+                // The last change per block carries the final state: one active block, the tiled one that was focused before the stop.
+                var latest = changed.GroupBy(info => info.Id).ToDictionary(group => group.Key, group => group.Last());
+                BlockInfo active = Assert.ContainsSingle(latest.Values.Where(info => info.Active));
+                Assert.IsFalse(active.Floating);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies a restored block's sync exclusion reaches event subscribers, since its creation is announced before the stored state is applied.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(90_000, CooperativeCancellation = true)]
+    public async Task RestoreAnnouncesStoredSyncExclusion()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var first = ServerFixture.Start();
+        string root;
+        await using (first.ConfigureAwait(false))
+        {
+            root = first.Root;
+            await first.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (client.ConfigureAwait(false))
+            {
+                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                BlockInfo anchor = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
+                BlockInfo excluded = await client.SplitAsync(new BlockSplitParams { Target = anchor.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
+                await client.SyncBlockAsync(new BlockSyncParams { Target = excluded.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
+            }
+
+            await first.StopKeepingStateAsync().ConfigureAwait(false);
+        }
+
+        var second = ServerFixture.Resume(root);
+        await using (second.ConfigureAwait(false))
+        {
+            await second.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient resumed = await second.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (resumed.ConfigureAwait(false))
+            {
+                await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
+
+                var changed = new List<BlockInfo>();
+                while (true)
+                {
+                    ProtocolMessage message = await resumed.Events.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    if (string.Equals(message.Event, ProtocolEvents.TabCreated, StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+
+                    if (string.Equals(message.Event, ProtocolEvents.BlockChanged, StringComparison.Ordinal))
+                    {
+                        changed.Add(ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block);
+                    }
+                }
+
+                Assert.Contains(info => info.ExcludedFromSync, changed);
             }
         }
     }

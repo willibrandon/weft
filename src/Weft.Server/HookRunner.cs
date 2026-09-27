@@ -7,10 +7,10 @@ namespace Weft.Server;
 /// <summary>
 /// Runs configured shell commands when events fire, passing the event through environment variables.
 /// </summary>
-internal sealed class HookRunner : IDisposable
+internal sealed class HookRunner : IAsyncDisposable
 {
     private readonly IReadOnlyDictionary<string, string> _hooks;
-    private readonly EventSubscription _subscription;
+    private readonly EventSubscription? _subscription;
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
 
@@ -22,6 +22,12 @@ internal sealed class HookRunner : IDisposable
     internal HookRunner(EventLog events, IReadOnlyDictionary<string, string> hooks)
     {
         _hooks = hooks;
+        if (hooks.Count == 0)
+        {
+            _pump = Task.CompletedTask;
+            return;
+        }
+
         _subscription = events.Subscribe(null);
         _pump = PumpAsync();
     }
@@ -29,10 +35,26 @@ internal sealed class HookRunner : IDisposable
     /// <summary>
     /// Stops running hooks.
     /// </summary>
-    public void Dispose()
+    /// <summary>
+    /// Stops accepting events, lets hooks for everything already published start, then releases the runner.
+    /// </summary>
+    /// <returns>A task that completes once queued hooks have been started or the drain gave up.</returns>
+    public async ValueTask DisposeAsync()
     {
-        _stopping.Cancel();
-        _subscription.Dispose();
+        // Completing the subscription ends the pump once it has drained what was published before, which
+        // includes server.stopping and the final lifecycle events. Only a stuck hook start is cut short.
+        _subscription?.Dispose();
+        using var drain = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            await _pump.WaitAsync(drain.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            ServerLog.Warn("Hooks were still starting when the server stopped; the rest were skipped.");
+        }
+
+        await _stopping.CancelAsync().ConfigureAwait(false);
         _stopping.Dispose();
     }
 
@@ -40,7 +62,7 @@ internal sealed class HookRunner : IDisposable
     {
         try
         {
-            await foreach (ProtocolMessage message in _subscription.Reader.ReadAllAsync(_stopping.Token).ConfigureAwait(false))
+            await foreach (ProtocolMessage message in _subscription!.Reader.ReadAllAsync(_stopping.Token).ConfigureAwait(false))
             {
                 if (message.Event is { } name && _hooks.TryGetValue(name, out string? command))
                 {
@@ -112,6 +134,7 @@ internal sealed class HookRunner : IDisposable
             else if (name.StartsWith("client.", StringComparison.Ordinal))
             {
                 ClientInfo client = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.ClientEventData).Client;
+                environment["WEFT_SESSION"] = client.SessionName;
                 environment["WEFT_SESSION_ID"] = client.Session;
                 environment["WEFT_CLIENT"] = client.Id;
             }

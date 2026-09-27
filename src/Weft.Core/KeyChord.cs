@@ -144,7 +144,13 @@ public sealed record KeyChord(IReadOnlyList<KeyStroke> Steps)
                 modifiers |= KeyModifiers.Shift;
                 key = char.ToLowerInvariant(character).ToString();
             }
-            else if (char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character is '-' or ',' or '.' or '/' or '?' or '=')
+            else if (character == '?')
+            {
+                // Terminals report ? as the slash key with Shift, so the chord matches what arrives.
+                modifiers |= KeyModifiers.Shift;
+                key = "/";
+            }
+            else if (char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character is '-' or ',' or '.' or '/' or '=')
             {
                 key = character.ToString();
             }
@@ -156,6 +162,12 @@ public sealed record KeyChord(IReadOnlyList<KeyStroke> Steps)
         else if (s_aliases.TryGetValue(key, out string? alias))
         {
             key = alias;
+            if (key == "?")
+            {
+                // The question alias is the same shifted slash as the literal.
+                modifiers |= KeyModifiers.Shift;
+                key = "/";
+            }
         }
         else if (key.Length is 2 or 3 && (key[0] is 'f' or 'F') && int.TryParse(key.AsSpan(1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int function) && function is >= 1 and <= 12)
         {

@@ -29,9 +29,9 @@ public sealed class BlockInfo
     public required string Session { get; init; }
 
     /// <summary>
-    /// The name of the session that owns the block.
+    /// The name of the session that owns the block, empty when an older server omitted it.
     /// </summary>
-    public required string SessionName { get; init; }
+    public string SessionName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets the title, from the terminal or pinned by the user.

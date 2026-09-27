@@ -72,6 +72,21 @@ public sealed class WeftServer : IAsyncDisposable
     /// <exception cref="InvalidOperationException">Another server holds the runtime directory.</exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        // The runtime lock is released when the locked run returns, before the stop is signalled, so a
+        // caller that awaited the stop can start a replacement server on the same directory at once.
+        try
+        {
+            await RunLockedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _stopped.TrySetResult();
+            ServerLog.Info("Server stopped.");
+        }
+    }
+
+    private async Task RunLockedAsync(CancellationToken cancellationToken)
+    {
         PrepareDirectories();
         using var serverLock = ServerLock.TryAcquire(WeftPaths.LockFilePath(Options.RuntimeDirectory));
         if (serverLock is null)
@@ -83,17 +98,20 @@ public sealed class WeftServer : IAsyncDisposable
         StartedAt = DateTimeOffset.Now;
         using CancellationTokenRegistration registration = cancellationToken.Register(RequestShutdown);
         var listener = new ControlListener(SocketPath, this, _dispatcher);
-        using HookRunner? hooks = Options.Hooks.Count > 0 ? new HookRunner(Events, Options.Hooks) : null;
-        try
+        // The runner is disposed after the final events below have been published, so hooks for them still run,
+        // and the server counts as stopped only once that drain is over.
+        var hooks = new HookRunner(Events, Options.Hooks);
+        await using (hooks.ConfigureAwait(false))
         {
-            await listener.RunAsync(_stopping.Token).ConfigureAwait(false);
-        }
-        finally
-        {
-            Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
-            await Registry.CloseAllAsync(CancellationToken.None).ConfigureAwait(false);
-            _stopped.TrySetResult();
-            ServerLog.Info("Server stopped.");
+            try
+            {
+                await listener.RunAsync(_stopping.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
+                await Registry.CloseAllAsync(CancellationToken.None).ConfigureAwait(false);
+            }
         }
     }
 

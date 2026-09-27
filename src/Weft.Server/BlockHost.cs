@@ -18,6 +18,7 @@ internal sealed class BlockHost : IAsyncDisposable
     private readonly LayoutAuthorityPeer _authority;
     private readonly TaskCompletionSource<int> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _authorityReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Exception? _startError;
     private Task<int>? _runTask;
     private Task? _listenTask;
@@ -142,6 +143,21 @@ internal sealed class BlockHost : IAsyncDisposable
         long started = Environment.TickCount64;
         _listenTask = ListenAsync(_stopping.Token);
         _runTask = _terminal.RunAsync(_stopping.Token);
+
+        // The layout authority attaches before the process starts. Otherwise a command that exits at once can
+        // finish before the authority's hello, and the block answers that hello with its exit instead.
+        try
+        {
+            await _authority.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or System.Net.Sockets.SocketException)
+        {
+            _authorityReady.TrySetCanceled(CancellationToken.None);
+            throw new InvalidOperationException("The block's layout authority could not attach: " + exception.Message, exception);
+        }
+
+        long authorityStarted = Environment.TickCount64;
+        _authorityReady.TrySetResult();
         while (!_started.Task.IsCompleted)
         {
             if (_runTask.IsCompleted)
@@ -157,9 +173,7 @@ internal sealed class BlockHost : IAsyncDisposable
             throw new InvalidOperationException("The block process could not be started: " + error.Message, error);
         }
 
-        long processStarted = Environment.TickCount64;
-        await _authority.StartAsync(cancellationToken).ConfigureAwait(false);
-        ServerLog.Debug(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Block on {Path.GetFileName(SocketPath)} started: process {processStarted - started} ms, authority {Environment.TickCount64 - processStarted} ms."));
+        ServerLog.Debug(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Block on {Path.GetFileName(SocketPath)} started: authority {authorityStarted - started} ms, process {Environment.TickCount64 - authorityStarted} ms."));
     }
 
     /// <summary>
@@ -280,6 +294,17 @@ internal sealed class BlockHost : IAsyncDisposable
 
     private async Task<int> RunProcessAsync(CancellationToken cancellationToken)
     {
+        try
+        {
+            await _authorityReady.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The authority never attached, so the process is not started; StartAsync reports the reason.
+            _started.TrySetResult();
+            return -1;
+        }
+
         try
         {
             await _process.StartAsync(cancellationToken).ConfigureAwait(false);
