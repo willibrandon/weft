@@ -51,6 +51,7 @@ internal static class ServerLauncher
     /// <exception cref="InvalidOperationException">The server could not be started.</exception>
     internal static async Task<ControlClient> ConnectOrStartAsync(string runtimeDirectory, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         string socketPath = WeftPaths.ControlSocketPath(runtimeDirectory);
         ControlClient? client = await TryConnectAsync(socketPath, cancellationToken).ConfigureAwait(false);
         if (client is not null)
@@ -58,6 +59,7 @@ internal static class ServerLauncher
             return client;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         Start(runtimeDirectory);
         long deadline = Environment.TickCount64 + 10_000;
         while (Environment.TickCount64 < deadline)

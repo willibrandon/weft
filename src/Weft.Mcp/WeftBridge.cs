@@ -84,6 +84,10 @@ public sealed class WeftBridge : IAsyncDisposable
             _disposed = true;
             idle = [.. _idle];
             _idle.Clear();
+            while (_waiting.TryDequeue(out TaskCompletionSource? turn))
+            {
+                turn.TrySetException(new ObjectDisposedException(nameof(WeftBridge)));
+            }
         }
 
         foreach (ControlClient client in idle)
@@ -99,7 +103,7 @@ public sealed class WeftBridge : IAsyncDisposable
     /// <param name="reusable">Whether the call finished, so no request is still running on the connection.</param>
     internal void Return(ControlClient client, bool reusable)
     {
-        if (reusable && !client.Closed.IsCompleted && TryKeepIdle(client))
+        if (reusable && !client.TransportFailed && !client.Closed.IsCompleted && TryKeepIdle(client))
         {
             return;
         }
@@ -109,6 +113,7 @@ public sealed class WeftBridge : IAsyncDisposable
 
     private async Task<ControlClient> AcquireAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         while (TryTakeIdle(out ControlClient? idle))
         {
             if (!idle.Closed.IsCompleted)
@@ -121,9 +126,15 @@ public sealed class WeftBridge : IAsyncDisposable
 
         // Opening runs one at a time: the first caller that finds the server gone starts it, and the
         // rest connect to the server it started instead of each starting one of their own.
-        await TakeTurnAsync().ConfigureAwait(false);
+        await TakeTurnAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             return await _connect(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -132,13 +143,14 @@ public sealed class WeftBridge : IAsyncDisposable
         }
     }
 
-    // A caller waits for its turn without cancellation: the wait is bounded by the connect in front of
-    // it, and a cancelled call then stops in its own connect.
-    private async Task TakeTurnAsync()
+    // Cancellation completes a queued turn, which PassTurn skips without losing the opener slot.
+    private async Task TakeTurnAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         TaskCompletionSource turn;
         lock (_gate)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (!_opening)
             {
                 _opening = true;
@@ -149,25 +161,24 @@ public sealed class WeftBridge : IAsyncDisposable
             _waiting.Enqueue(turn);
         }
 
+        using CancellationTokenRegistration registration = cancellationToken.Register(() => turn.TrySetCanceled(cancellationToken));
         await turn.Task.ConfigureAwait(false);
     }
 
     private void PassTurn()
     {
-        TaskCompletionSource? next = null;
         lock (_gate)
         {
-            if (_waiting.Count > 0)
+            while (_waiting.TryDequeue(out TaskCompletionSource? next))
             {
-                next = _waiting.Dequeue();
+                if (next.TrySetResult())
+                {
+                    return;
+                }
             }
-            else
-            {
-                _opening = false;
-            }
-        }
 
-        next?.SetResult();
+            _opening = false;
+        }
     }
 
     // The capacity check and the add happen under one lock, so concurrent returns cannot all see room.

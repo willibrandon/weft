@@ -180,4 +180,124 @@ public sealed class WeftBridgeTests
             Assert.AreEqual(1, peak);
         }
     }
+
+    /// <summary>
+    /// Verifies cancellation removes a queued opener and lets the next caller connect.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task CancelledQueuedLeaseDoesNotOpenAConnection()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            int opens = 0;
+            var bridge = new WeftBridge(async token =>
+            {
+                if (Interlocked.Increment(ref opens) == 1)
+                {
+                    entered.SetResult();
+                    await release.Task.WaitAsync(token).ConfigureAwait(false);
+                }
+
+                return await fixture.ConnectAsync(token).ConfigureAwait(false);
+            });
+            await using (bridge.ConfigureAwait(false))
+            {
+                Task<ControlLease> first = bridge.LeaseAsync(cancellationToken);
+                await entered.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                using var queuedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                Task<ControlLease> cancelled = bridge.LeaseAsync(queuedCancellation.Token);
+                Task<ControlLease> next = bridge.LeaseAsync(cancellationToken);
+
+                await queuedCancellation.CancelAsync().ConfigureAwait(false);
+                await Assert.ThrowsAsync<OperationCanceledException>(() => cancelled.WaitAsync(cancellationToken)).ConfigureAwait(false);
+                release.SetResult();
+
+                ControlLease[] leases = await Task.WhenAll(first, next).ConfigureAwait(false);
+                Assert.AreEqual(2, opens);
+                foreach (ControlLease lease in leases)
+                {
+                    lease.Dispose();
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies disposal fails queued openers without connecting them.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task DisposalFailsQueuedLeaseWithoutOpeningAConnection()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            int opens = 0;
+            var bridge = new WeftBridge(async token =>
+            {
+                Interlocked.Increment(ref opens);
+                entered.SetResult();
+                await release.Task.WaitAsync(token).ConfigureAwait(false);
+                return await fixture.ConnectAsync(token).ConfigureAwait(false);
+            });
+            await using (bridge.ConfigureAwait(false))
+            {
+                Task<ControlLease> first = bridge.LeaseAsync(cancellationToken);
+                await entered.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                Task<ControlLease> queued = bridge.LeaseAsync(cancellationToken);
+
+                await bridge.DisposeAsync().ConfigureAwait(false);
+                await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => queued.WaitAsync(cancellationToken)).ConfigureAwait(false);
+                release.SetResult();
+                await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => first.WaitAsync(cancellationToken)).ConfigureAwait(false);
+                Assert.AreEqual(1, opens);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies a failed request write prevents a still-open connection from returning to the pool.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task FailedRequestWriteDiscardsTheLease()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            var bridge = new WeftBridge(token => fixture.ConnectAsync(token));
+            await using (bridge.ConfigureAwait(false))
+            {
+                ControlLease first = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+                ControlClient client = first.Client;
+                using var cancelledWrite = new CancellationTokenSource();
+                await cancelledWrite.CancelAsync().ConfigureAwait(false);
+
+                await Assert.ThrowsAsync<OperationCanceledException>(() => client.ListSessionsAsync(cancelledWrite.Token)).ConfigureAwait(false);
+                Assert.IsTrue(client.TransportFailed);
+                Assert.IsFalse(client.Closed.IsCompleted);
+
+                first.Dispose();
+                ControlLease next = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
+                Assert.AreNotSame(client, next.Client);
+                next.Dispose();
+                await client.Closed.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
 }

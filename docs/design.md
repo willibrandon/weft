@@ -430,6 +430,9 @@ long-lived `weft mcp` does not hold its peak concurrency open. It connects throu
 connect-or-start path as the CLI, so it also brings the server back if it went away while the
 agent kept `weft mcp` running. Connections are opened one at a time, so a burst of calls that
 finds the server gone starts it once rather than once per call.
+Queued calls leave the opener queue when cancelled or when the bridge is disposed. A failed
+request write marks its connection unusable immediately, so returning that lease cannot pass
+the broken connection to another call while the read loop is still winding down.
 Tests drive it with the SDK client over in-memory pipes against a real server. Optional tool
 parameters carry default values because the SDK treats any parameter without one as required.
 The SDK's own log goes to standard error, the channel the protocol reserves for a stdio server,
