@@ -24,11 +24,13 @@
     <Project Path="src/Weft.Mcp/Weft.Mcp.csproj" />
     <Project Path="src/Weft.Protocol/Weft.Protocol.csproj" />
     <Project Path="src/Weft.Server/Weft.Server.csproj" />
+    <Project Path="src/Weft.SourceGen/Weft.SourceGen.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Weft.Benchmarks/Weft.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Weft.SourceGen.Tests/Weft.SourceGen.Tests.csproj" />
     <Project Path="tests/Weft.Tests/Weft.Tests.csproj" />
   </Folder>
 </Solution>

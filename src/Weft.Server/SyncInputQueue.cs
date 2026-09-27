@@ -44,7 +44,16 @@ internal sealed class SyncInputQueue : IDisposable
     private SyncInputTarget Track(BlockHost host)
     {
         var target = new SyncInputTarget(host);
-        _targets[host] = target;
+        try
+        {
+            _targets[host] = target;
+        }
+        catch
+        {
+            target.Dispose();
+            throw;
+        }
+
         return target;
     }
 

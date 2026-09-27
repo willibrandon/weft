@@ -9,6 +9,10 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
 - Put exactly one class, interface, enum, record, struct, or delegate in each C# file.
 - Document every public or internal type and member with triple-slash XML documentation.
 - Write every XML `<summary>` as exactly three lines: opening tag, text, closing tag.
+- `src/Weft.SourceGen` compiles into every project as an analyzer. It enforces the
+  conventions above and mirrors the CodeQL queries the repository runs in CI, so a
+  finding fails the local build. Fix the code rather than the rule; if a rule is
+  wrong, fix the rule and add a test in `tests/Weft.SourceGen.Tests`.
 - Follow the dotnet/runtime C# coding style: Allman braces, four-space indentation,
   `_camelCase` instance fields, `s_camelCase` static fields, PascalCase constants,
   explicit visibility, no `this.`, language keywords over BCL type names, and `var`

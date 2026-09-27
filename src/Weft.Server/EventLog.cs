@@ -66,30 +66,44 @@ internal sealed class EventLog
         lock (_gate)
         {
             var subscription = new EventSubscription(Unsubscribe);
-            if (since is { } last)
+            try
             {
-                long oldest = Math.Max(1, _seq - RingCapacity + 1);
-                if (last + 1 < oldest)
+                if (since is { } last)
                 {
-                    subscription.Offer(ProtocolCodec.Event(
-                        ProtocolEvents.SubscriberPaused,
-                        last,
-                        new SubscriberPausedData { Dropped = oldest - last - 1 },
-                        ProtocolJsonContext.Default.SubscriberPausedData));
-                    last = oldest - 1;
+                    Replay(subscription, last);
                 }
 
-                for (long seq = last + 1; seq <= _seq; seq++)
-                {
-                    if (_ring[seq % RingCapacity] is { } message)
-                    {
-                        subscription.Offer(message);
-                    }
-                }
+                _subscribers.Add(subscription);
+            }
+            catch
+            {
+                subscription.Dispose();
+                throw;
             }
 
-            _subscribers.Add(subscription);
             return subscription;
+        }
+    }
+
+    private void Replay(EventSubscription subscription, long last)
+    {
+        long oldest = Math.Max(1, _seq - RingCapacity + 1);
+        if (last + 1 < oldest)
+        {
+            subscription.Offer(ProtocolCodec.Event(
+                ProtocolEvents.SubscriberPaused,
+                last,
+                new SubscriberPausedData { Dropped = oldest - last - 1 },
+                ProtocolJsonContext.Default.SubscriberPausedData));
+            last = oldest - 1;
+        }
+
+        for (long seq = last + 1; seq <= _seq; seq++)
+        {
+            if (_ring[seq % RingCapacity] is { } message)
+            {
+                subscription.Offer(message);
+            }
         }
     }
 

@@ -185,7 +185,7 @@ public sealed class LayoutTree(LayoutOptions options)
             return true;
         }
 
-        SplitOrientation orientation = parent.Orientation!.Value;
+        SplitOrientation orientation = parent.Orientation ?? throw new LayoutException("A split cell always has an orientation.");
         int freed = cell.Size(orientation) + Options.Spacing;
         int index = parent.RemoveChild(cell);
         LayoutCell recipient = parent.Children[index > 0 ? index - 1 : 0];
@@ -327,9 +327,12 @@ public sealed class LayoutTree(LayoutOptions options)
         BlockId? best = null;
         int bestOverlap = 0;
         int bestStart = int.MaxValue;
-        foreach (LayoutCell leaf in Leaves().Where(leaf => leaf != origin && leaf.Block is not null))
+        foreach ((LayoutCell leaf, BlockId candidate) in Leaves()
+            .Where(leaf => leaf != origin)
+            .Select(leaf => (leaf, leaf.Block))
+            .Where(pair => pair.Block is not null)
+            .Select(pair => (pair.leaf, pair.Block!.Value)))
         {
-            BlockId candidate = leaf.Block!.Value;
             LayoutRect b = leaf.Bounds;
             bool adjacent = direction switch
             {
@@ -366,7 +369,11 @@ public sealed class LayoutTree(LayoutOptions options)
     /// <returns>The placements in layout order.</returns>
     public IReadOnlyList<BlockGeometry> ToGeometry()
     {
-        return Leaves().Where(leaf => leaf.Block is not null).Select(leaf => new BlockGeometry(leaf.Block!.Value, leaf.Bounds)).ToList();
+        return Leaves()
+            .Select(leaf => (leaf.Bounds, leaf.Block))
+            .Where(pair => pair.Block is not null)
+            .Select(pair => new BlockGeometry(pair.Block!.Value, pair.Bounds))
+            .ToList();
     }
 
     /// <summary>
@@ -540,7 +547,7 @@ public sealed class LayoutTree(LayoutOptions options)
 
     private void Spread(LayoutCell split)
     {
-        SplitOrientation orientation = split.Orientation!.Value;
+        SplitOrientation orientation = split.Orientation ?? throw new LayoutException("A split cell always has an orientation.");
         int count = split.Children.Count;
         int total = split.Size(orientation) - (count - 1) * Options.Spacing;
         int each = total / count;

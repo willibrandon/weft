@@ -52,12 +52,12 @@ foreach (string sarifPath in sarifPaths)
 
         foreach (JsonElement result in results.EnumerateArray())
         {
-            string ruleId = ReadString(result, "ruleId", "unknown-rule");
-            string level = ReadString(result, "level", "warning");
+            string ruleId = SarifRead.ReadString(result, "ruleId", "unknown-rule");
+            string level = SarifRead.ReadString(result, "level", "warning");
             string message = result.TryGetProperty("message", out JsonElement messageElement)
-                ? ReadString(messageElement, "text", "CodeQL finding")
+                ? SarifRead.ReadString(messageElement, "text", "CodeQL finding")
                 : "CodeQL finding";
-            findings.Add($"{level}: {ruleId}: {ReadLocation(result)}: {message}");
+            findings.Add($"{level}: {ruleId}: {SarifRead.ReadLocation(result)}: {message}");
         }
     }
 }
@@ -76,27 +76,45 @@ if (findings.Count != 0)
 await Console.Out.WriteLineAsync($"Verified {sarifPaths.Length} CodeQL SARIF file(s) with no findings.").ConfigureAwait(false);
 return 0;
 
-static string ReadString(JsonElement element, string name, string fallback) =>
-    element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
-        ? value.GetString() ?? fallback
-        : fallback;
-
-static string ReadLocation(JsonElement result)
+/// <summary>
+/// Reads the SARIF fields used by the CodeQL repository check.
+/// </summary>
+internal static class SarifRead
 {
-    if (!result.TryGetProperty("locations", out JsonElement locations) || locations.ValueKind != JsonValueKind.Array || locations.GetArrayLength() == 0)
-    {
-        return "unknown-location";
-    }
+    /// <summary>
+    /// Reads a string property or returns its fallback value.
+    /// </summary>
+    /// <param name="element">The object containing the property.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="fallback">The value to use when the property is absent.</param>
+    /// <returns>The property value or the fallback.</returns>
+    internal static string ReadString(JsonElement element, string name, string fallback) =>
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? fallback
+            : fallback;
 
-    JsonElement first = locations[0];
-    if (!first.TryGetProperty("physicalLocation", out JsonElement physical))
+    /// <summary>
+    /// Reads the first physical location of a SARIF result.
+    /// </summary>
+    /// <param name="result">The SARIF result.</param>
+    /// <returns>The location, or a placeholder when it is absent.</returns>
+    internal static string ReadLocation(JsonElement result)
     {
-        return "unknown-location";
-    }
+        if (!result.TryGetProperty("locations", out JsonElement locations) || locations.ValueKind != JsonValueKind.Array || locations.GetArrayLength() == 0)
+        {
+            return "unknown-location";
+        }
 
-    string uri = physical.TryGetProperty("artifactLocation", out JsonElement artifact) ? ReadString(artifact, "uri", "unknown-file") : "unknown-file";
-    int line = physical.TryGetProperty("region", out JsonElement region) && region.TryGetProperty("startLine", out JsonElement start) && start.ValueKind == JsonValueKind.Number
-        ? start.GetInt32()
-        : 0;
-    return line > 0 ? $"{uri}:{line}" : uri;
+        JsonElement first = locations[0];
+        if (!first.TryGetProperty("physicalLocation", out JsonElement physical))
+        {
+            return "unknown-location";
+        }
+
+        string uri = physical.TryGetProperty("artifactLocation", out JsonElement artifact) ? ReadString(artifact, "uri", "unknown-file") : "unknown-file";
+        int line = physical.TryGetProperty("region", out JsonElement region) && region.TryGetProperty("startLine", out JsonElement start) && start.ValueKind == JsonValueKind.Number
+            ? start.GetInt32()
+            : 0;
+        return line > 0 ? $"{uri}:{line}" : uri;
+    }
 }

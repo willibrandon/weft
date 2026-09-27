@@ -176,8 +176,9 @@ public sealed class LayoutTreeTests
         string text = tree.Serialize();
 
         Assert.IsTrue(LayoutSerializer.TryParse(text, out LayoutCell? parsed));
+        Assert.IsNotNull(parsed);
         var applied = new LayoutTree(LayoutOptions.Separated);
-        Assert.IsTrue(applied.TryApply(parsed!, [s_one, s_two, s_three], 80, 24));
+        Assert.IsTrue(applied.TryApply(parsed, [s_one, s_two, s_three], 80, 24));
 
         Assert.AreSequenceEqual(tree.ToGeometry(), applied.ToGeometry());
         Assert.IsFalse(LayoutSerializer.TryParse(text.Replace('0', '1'), out _), "a corrupted string must fail its checksum");
@@ -190,10 +191,11 @@ public sealed class LayoutTreeTests
     public void TryApplyRefusesMismatchedLeafCount()
     {
         Assert.IsTrue(LayoutSerializer.TryParse("020a,80x24,0,0{40x24,0,0,1,39x24,41,0,2}", out LayoutCell? parsed));
+        Assert.IsNotNull(parsed);
         var tree = new LayoutTree(LayoutOptions.Separated);
 
-        Assert.IsFalse(tree.TryApply(parsed!, [s_one, s_two, s_three], 80, 24));
-        Assert.IsTrue(tree.TryApply(parsed!, [s_two, s_three], 80, 24));
+        Assert.IsFalse(tree.TryApply(parsed, [s_one, s_two, s_three], 80, 24));
+        Assert.IsTrue(tree.TryApply(parsed, [s_two, s_three], 80, 24));
         Assert.AreSequenceEqual([s_two, s_three], tree.Blocks);
     }
 }

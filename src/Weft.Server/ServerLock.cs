@@ -22,11 +22,20 @@ internal sealed class ServerLock : IDisposable
         try
         {
             var stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            stream.SetLength(0);
-            byte[] pid = System.Text.Encoding.ASCII.GetBytes(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            stream.Write(pid);
-            stream.Flush();
-            return new ServerLock(stream);
+            try
+            {
+                stream.SetLength(0);
+                byte[] pid = System.Text.Encoding.ASCII.GetBytes(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                stream.Write(pid);
+                stream.Flush();
+                return new ServerLock(stream);
+            }
+            catch
+            {
+                // A failure after the file opened must not leave the handle open, or the lock looks taken.
+                stream.Dispose();
+                throw;
+            }
         }
         catch (IOException)
         {

@@ -491,6 +491,14 @@ capture serialization.
 
 ## 13. Testing
 
+The repository's own analyzers, in `Weft.SourceGen`, compile into every project. They enforce
+the conventions in `AGENTS.md` and mirror the CodeQL queries CI runs, so those findings fail
+the local build instead of costing a CI round trip. The file-based apps under `scripts/` are
+checked by the repository verifier because they do not load the analyzer. Ownership analysis
+counts a fallible lock expression before cleanup and follows cleanup inside checked blocks.
+Each analyzer rule has real Roslyn compilation tests in `Weft.SourceGen.Tests`.
+
+
 Real processes only. Test tiers:
 
 - **Model tests**: layout tree, geometry, targets, protocol codec, configuration parsing.
