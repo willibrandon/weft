@@ -105,7 +105,7 @@ static void VerifySources(string root, IReadOnlyList<string> tracked, ICollectio
     Regex typeDeclaration = Patterns.TypeDeclaration();
     foreach (string path in tracked)
     {
-        if (!path.EndsWith(".cs", StringComparison.Ordinal) || !(path.StartsWith("src/", StringComparison.Ordinal) || path.StartsWith("tests/", StringComparison.Ordinal) || path.StartsWith("benchmarks/", StringComparison.Ordinal)))
+        if (!path.EndsWith(".cs", StringComparison.Ordinal) || !(path.StartsWith("src/", StringComparison.Ordinal) || path.StartsWith("tests/", StringComparison.Ordinal) || path.StartsWith("benchmarks/", StringComparison.Ordinal) || path.StartsWith("scripts/", StringComparison.Ordinal)))
         {
             continue;
         }

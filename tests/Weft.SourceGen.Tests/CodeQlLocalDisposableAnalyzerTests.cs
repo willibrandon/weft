@@ -1530,6 +1530,91 @@ public sealed class CodeQlLocalDisposableAnalyzerTests(TestContext testContext)
     }
 
     /// <summary>
+    /// Reports a lock expression that can fail before its body disposes the resource.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleLockAcquisitionBeforeDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    MemoryStream stream = new MemoryStream();
+                    lock (GetGate())
+                    {
+                        stream.Dispose();
+                    }
+                }
+
+                private static object GetGate() => new object();
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
+    /// Accepts unconditional disposal inside a checked statement.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsDisposalInsideCheckedStatement()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    MemoryStream stream = new MemoryStream();
+                    checked
+                    {
+                        stream.Dispose();
+                    }
+                }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Assert.IsEmpty(diagnostics);
+    }
+
+    /// <summary>
+    /// Reports fallible work inside a checked statement before disposal.
+    /// </summary>
+    [TestMethod]
+    public async Task ReportsFallibleWorkInsideCheckedStatementBeforeDisposal()
+    {
+        const string Source = """
+            using System.IO;
+            internal static class Reader
+            {
+                internal static void Read()
+                {
+                    MemoryStream stream = new MemoryStream();
+                    checked
+                    {
+                        Prepare();
+                        stream.Dispose();
+                    }
+                }
+
+                private static void Prepare() { }
+            }
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
+
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual(CodeQlLocalDisposableAnalyzer.DiagnosticId, diagnostic.Id);
+    }
+
+    /// <summary>
     /// Verifies a resource assigned inside a branch is tracked from that assignment.
     /// </summary>
     [TestMethod]

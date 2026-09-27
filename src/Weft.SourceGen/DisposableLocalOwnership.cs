@@ -385,6 +385,7 @@ internal static class DisposableLocalOwnership
             ForEachStatementSyntax loop => HandsOff(loop.Expression, local, context),
             WhileStatementSyntax loop => HandsOff(loop.Condition, local, context),
             LockStatementSyntax guarded => EndsOwnership(guarded.Statement, breakLeaves, throwLeaves, local, context),
+            CheckedStatementSyntax region => EndsOwnership(region.Block, breakLeaves, throwLeaves, local, context),
             TryStatementSyntax attempt => EndsOwnership(attempt.Block, breakLeaves, throwLeaves, local, context) ||
                 attempt.Finally is { } cleanup && EndsOwnership(cleanup.Block, breakLeaves, throwLeaves, local, context),
             _ => false
@@ -496,7 +497,9 @@ internal static class DisposableLocalOwnership
             TryStatementSyntax attempt => attempt.Finally is { } cleanup && EndsOwnership(cleanup.Block, local, context)
                 ? RiskUntilOwnershipEnds(cleanup.Block, local, context)
                 : RiskUntilOwnershipEnds(attempt.Block, local, context),
-            LockStatementSyntax guarded => RiskUntilOwnershipEnds(guarded.Statement, local, context),
+            LockStatementSyntax guarded => MayThrow(guarded.Expression, local, context) ||
+                RiskUntilOwnershipEnds(guarded.Statement, local, context),
+            CheckedStatementSyntax region => RiskUntilOwnershipEnds(region.Block, local, context),
             ForEachStatementSyntax loop => MayThrow(loop.Expression, local, context),
             WhileStatementSyntax loop => MayThrow(loop.Condition, local, context),
             _ => MayThrow(statement, local, context)
