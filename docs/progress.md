@@ -79,3 +79,4 @@ Living tracker for the weft build. Check items off as they land; keep the
 | 2026-09-08 | Full suite with the pool minimum pinned to 3 workers on linux | 50 passed before and after the fix; on a fast machine the readers unblock often enough that starvation never set in, which is why the failure only showed on macOS and CI |
 | 2026-09-26 | Source generator review follow-up | lock acquisition is checked before cleanup, checked blocks count their disposal, and the repository verifier applies source conventions to file-based apps |
 | 2026-09-26 | MCP bridge review follow-up | queued openers cancel promptly, disposal fails queued calls, and failed request writes prevent connection reuse |
+| 2026-09-26 | Hex1b update sizing | version 0.171 raises the linux-x64 Native AOT binary from 18.5 MB to 20.3 MB; the compiler size report rises from 20.6 MB to 22.6 MB, so the documented budget is raised to 24 MB |
