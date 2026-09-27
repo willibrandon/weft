@@ -312,8 +312,12 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessAssignmentToLocalAnalyzer(), TestContext.CancellationToken);
+    }
+
     /// <summary>
     /// Verifies a using statement whose variable is only disposed is not reported.
     /// </summary>
@@ -367,6 +371,9 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
-    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessAssignmentToLocalAnalyzer(), CancellationToken.None);
+    }
 }

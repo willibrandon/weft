@@ -29,7 +29,7 @@ internal sealed class SyncInputQueue : IDisposable
             {
                 if (_targets.TryGetValue(host, out SyncInputTarget? found) && found.Dead)
                 {
-                    _targets.Remove(host);
+                    _ = _targets.Remove(host);
                     found.Dispose();
                     found = null;
                 }

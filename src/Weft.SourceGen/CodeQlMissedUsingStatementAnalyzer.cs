@@ -78,14 +78,9 @@ public sealed class CodeQlMissedUsingStatementAnalyzer : DiagnosticAnalyzer
     {
         INamedTypeSymbol? disposable = compilation.GetTypeByMetadataName("System.IDisposable");
         IMethodSymbol? dispose = disposable?.GetMembers("Dispose").OfType<IMethodSymbol>().SingleOrDefault();
-        if (dispose is null || method.IsStatic)
-        {
-            return false;
-        }
-
-        return SymbolEqualityComparer.Default.Equals(method.OriginalDefinition, dispose) ||
+        return dispose is not null && !method.IsStatic && (SymbolEqualityComparer.Default.Equals(method.OriginalDefinition, dispose) ||
             SymbolEqualityComparer.Default.Equals(method.OriginalDefinition,
-                method.ContainingType.FindImplementationForInterfaceMember(dispose)?.OriginalDefinition);
+                method.ContainingType.FindImplementationForInterfaceMember(dispose)?.OriginalDefinition));
     }
 
     private static bool IsInsideFinally(SyntaxNode node)

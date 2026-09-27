@@ -10,13 +10,22 @@ namespace Weft.Client;
 internal sealed class InputActivityFilter(Action touched) : IHex1bTerminalWorkloadFilter
 {
     /// <inheritdoc />
-    public ValueTask OnSessionStartAsync(int width, int height, DateTimeOffset timestamp, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnSessionStartAsync(int width, int height, DateTimeOffset timestamp, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
-    public ValueTask OnOutputAsync(IReadOnlyList<AnsiToken> tokens, TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnOutputAsync(IReadOnlyList<AnsiToken> tokens, TimeSpan elapsed, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
-    public ValueTask OnFrameCompleteAsync(TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnFrameCompleteAsync(TimeSpan elapsed, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
     public ValueTask OnInputAsync(IReadOnlyList<AnsiToken> tokens, TimeSpan elapsed, CancellationToken ct = default)
@@ -26,8 +35,14 @@ internal sealed class InputActivityFilter(Action touched) : IHex1bTerminalWorklo
     }
 
     /// <inheritdoc />
-    public ValueTask OnResizeAsync(int width, int height, TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnResizeAsync(int width, int height, TimeSpan elapsed, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
-    public ValueTask OnSessionEndAsync(TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnSessionEndAsync(TimeSpan elapsed, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 }

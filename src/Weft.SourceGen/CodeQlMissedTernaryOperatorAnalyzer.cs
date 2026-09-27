@@ -79,29 +79,22 @@ public sealed class CodeQlMissedTernaryOperatorAnalyzer : DiagnosticAnalyzer
         ReportAssignment(context, statement, local.Name);
     }
 
-    private static void ReportAssignment(SyntaxNodeAnalysisContext context, IfStatementSyntax statement, string name) =>
+    private static void ReportAssignment(SyntaxNodeAnalysisContext context, IfStatementSyntax statement, string name)
+    {
         context.ReportDiagnostic(Diagnostic.Create(s_rule, statement.GetLocation(), name));
+    }
 
     private static bool TryGetOnlyAssignment(
         StatementSyntax statement,
         out AssignmentExpressionSyntax assignment)
     {
-        ExpressionStatementSyntax? expression;
-        if (statement is ExpressionStatementSyntax direct)
-        {
-            expression = direct;
-        }
-        else if (statement is BlockSyntax block &&
+        ExpressionStatementSyntax? expression = statement is ExpressionStatementSyntax direct
+            ? direct
+            : statement is BlockSyntax block &&
             block.Statements.Count == 1 &&
-            block.Statements[0] is ExpressionStatementSyntax only)
-        {
-            expression = only;
-        }
-        else
-        {
-            expression = null;
-        }
-
+            block.Statements[0] is ExpressionStatementSyntax only
+                ? only
+                : null;
         assignment = expression?.Expression as AssignmentExpressionSyntax ?? null!;
         return assignment is not null &&
             assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);

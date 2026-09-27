@@ -23,8 +23,10 @@ internal sealed partial class SessionRegistry
     /// <param name="keepOnExit">Whether the block stays after its process exits.</param>
     /// <param name="cancellationToken">Cancels startup.</param>
     /// <returns>The new block.</returns>
-    internal Task<Block> SplitBlockAsync(Block target, SplitOrientation orientation, int? size, bool before, IReadOnlyList<string>? command, string? cwd, bool focus, bool keepOnExit, CancellationToken cancellationToken) =>
-        StartBlockAsync(target.Tab, target, orientation, size, before, command, cwd ?? target.Cwd, focus, keepOnExit, cancellationToken);
+    internal Task<Block> SplitBlockAsync(Block target, SplitOrientation orientation, int? size, bool before, IReadOnlyList<string>? command, string? cwd, bool focus, bool keepOnExit, CancellationToken cancellationToken)
+    {
+        return StartBlockAsync(target.Tab, target, orientation, size, before, command, cwd ?? target.Cwd, focus, keepOnExit, cancellationToken);
+    }
 
     /// <summary>
     /// Closes a block, stopping its process; closing the last block closes the tab.
@@ -49,7 +51,7 @@ internal sealed partial class SessionRegistry
                 tab.SyncInput.Remove(closedHost);
             }
 
-            tab.Layout.Remove(block.Id);
+            _ = tab.Layout.Remove(block.Id);
             if (tab.Zoomed == block)
             {
                 tab.Zoomed = null;
@@ -72,7 +74,7 @@ internal sealed partial class SessionRegistry
         }
 
         await StopBlockAsync(block, cancellationToken).ConfigureAwait(false);
-        _events.Publish(ProtocolEvents.BlockClosed, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockClosed, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         if (closeTab)
         {
             await CloseTabAsync(tab, cancellationToken).ConfigureAwait(false);
@@ -89,7 +91,7 @@ internal sealed partial class SessionRegistry
 
         if (active is not null)
         {
-            _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(active) }, ProtocolJsonContext.Default.BlockEventData);
+            _ = Events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(active) }, ProtocolJsonContext.Default.BlockEventData);
         }
     }
 
@@ -125,7 +127,7 @@ internal sealed partial class SessionRegistry
         }
 
         Persist(block.Tab.Session);
-        _events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     /// <summary>
@@ -145,7 +147,7 @@ internal sealed partial class SessionRegistry
             }
         }
 
-        _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     /// <summary>
@@ -174,7 +176,7 @@ internal sealed partial class SessionRegistry
         List<PendingResize> resizes;
         lock (_gate)
         {
-            bool target = zoom ?? block.Tab.Zoomed != block;
+            bool target = zoom ?? (block.Tab.Zoomed != block);
             block.Tab.Zoomed = target ? block : null;
             if (target)
             {
@@ -248,7 +250,7 @@ internal sealed partial class SessionRegistry
             tab.Synchronized = enabled ?? !tab.Synchronized;
         }
 
-        _events.Publish(ProtocolEvents.TabChanged, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        _ = Events.Publish(ProtocolEvents.TabChanged, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
         Persist(tab.Session);
     }
 
@@ -264,7 +266,7 @@ internal sealed partial class SessionRegistry
             block.ExcludedFromSync = excluded;
         }
 
-        _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         Persist(block.Tab.Session);
     }
 
@@ -330,7 +332,7 @@ internal sealed partial class SessionRegistry
             block.LastActivityPublished = now;
         }
 
-        _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     private async Task PublishTrailingActivityAsync(Block block)
@@ -347,7 +349,7 @@ internal sealed partial class SessionRegistry
             block.LastActivityPublished = Environment.TickCount64;
         }
 
-        _events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockOutput, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
     }
 
     /// <summary>
@@ -386,11 +388,15 @@ internal sealed partial class SessionRegistry
     /// <param name="history">The history lines to include.</param>
     /// <param name="format">The line format.</param>
     /// <returns>The capture.</returns>
-    internal static BlockCapture Capture(Block block, int history, CaptureFormat format) =>
-        RunningHost(block).Capture(history, format);
+    internal static BlockCapture Capture(Block block, int history, CaptureFormat format)
+    {
+        return RunningHost(block).Capture(history, format);
+    }
 
-    private static BlockHost RunningHost(Block block) =>
-        block.Host ?? throw new ProtocolException(ErrorCodes.Unavailable, "Block " + block.Id + " is not running.");
+    private static BlockHost RunningHost(Block block)
+    {
+        return block.Host ?? throw new ProtocolException(ErrorCodes.Unavailable, "Block " + block.Id + " is not running.");
+    }
 
     private async Task<Block> StartBlockAsync(
         Tab tab,
@@ -427,12 +433,12 @@ internal sealed partial class SessionRegistry
                 }
                 else if (target is not null && tab.Layout.Find(target.Id) is not null)
                 {
-                    tab.Layout.Split(target.Id, id, orientation, size, before);
+                    _ = tab.Layout.Split(target.Id, id, orientation, size, before);
                 }
                 else
                 {
                     BlockId anchor = tab.Layout.Blocks[^1];
-                    tab.Layout.Split(anchor, id, orientation, size, before);
+                    _ = tab.Layout.Split(anchor, id, orientation, size, before);
                 }
             }
             catch (LayoutException exception)
@@ -479,9 +485,9 @@ internal sealed partial class SessionRegistry
             lock (_gate)
             {
                 block.State = BlockState.Closed;
-                tab.Blocks.Remove(block);
+                _ = tab.Blocks.Remove(block);
                 tab.SyncInput.Remove(host);
-                tab.Layout.Remove(block.Id);
+                _ = tab.Layout.Remove(block.Id);
                 if (tab.Active == block)
                 {
                     tab.Active = tab.Ordered().FirstOrDefault();
@@ -500,11 +506,11 @@ internal sealed partial class SessionRegistry
             }
         }
 
-        _events.Publish(ProtocolEvents.BlockCreated, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockCreated, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         await ApplyResizesAsync(resizes.Where(resize => resize.Host != host).ToList(), cancellationToken).ConfigureAwait(false);
         if (focus)
         {
-            _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+            _ = Events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         }
 
         Persist(session);
@@ -552,7 +558,7 @@ internal sealed partial class SessionRegistry
         }
 
         block.StateChanged.Notify();
-        _events.Publish(ProtocolEvents.BlockExited, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockExited, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         if (close)
         {
             _ = CloseExitedBlockAsync(block);
@@ -584,10 +590,10 @@ internal sealed partial class SessionRegistry
             }
         }
 
-        _events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockTitled, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         if (tabRenamed)
         {
-            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+            _ = Events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
         }
     }
 }

@@ -11,5 +11,8 @@ public static class Program
     /// Runs the benchmarks named on the command line, or presents the switcher.
     /// </summary>
     /// <param name="args">BenchmarkDotNet arguments.</param>
-    public static void Main(string[] args) => BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+    public static void Main(string[] args)
+    {
+        _ = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+    }
 }

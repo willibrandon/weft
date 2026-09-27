@@ -18,25 +18,19 @@ internal static class KeyMap
         if (key.Length == 1)
         {
             char character = key[0];
-            if (char.IsAsciiLetterLower(character))
-            {
-                return Hex1bKey.A + (character - 'a');
-            }
-
-            if (char.IsAsciiDigit(character))
-            {
-                return Hex1bKey.D0 + (character - '0');
-            }
-
-            return character switch
-            {
-                '-' => Hex1bKey.OemMinus,
-                ',' => Hex1bKey.OemComma,
-                '.' => Hex1bKey.OemPeriod,
-                '/' or '?' => Hex1bKey.OemQuestion,
-                '=' => Hex1bKey.OemPlus,
-                _ => null
-            };
+            return char.IsAsciiLetterLower(character)
+                ? Hex1bKey.A + (character - 'a')
+                : char.IsAsciiDigit(character)
+                ? Hex1bKey.D0 + (character - '0')
+                : character switch
+                {
+                    '-' => Hex1bKey.OemMinus,
+                    ',' => Hex1bKey.OemComma,
+                    '.' => Hex1bKey.OemPeriod,
+                    '/' or '?' => Hex1bKey.OemQuestion,
+                    '=' => Hex1bKey.OemPlus,
+                    _ => null
+                };
         }
 
         return key switch

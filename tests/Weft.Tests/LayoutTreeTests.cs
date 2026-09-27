@@ -36,7 +36,7 @@ public sealed class LayoutTreeTests
         var tree = new LayoutTree(LayoutOptions.Separated);
         tree.Initialize(s_one, 80, 24);
 
-        tree.Split(s_one, s_two, SplitOrientation.LeftRight);
+        _ = tree.Split(s_one, s_two, SplitOrientation.LeftRight);
 
         IReadOnlyList<BlockGeometry> geometry = tree.ToGeometry();
         Assert.AreEqual(new LayoutRect(0, 0, 40, 24), geometry[0].Bounds);
@@ -51,9 +51,9 @@ public sealed class LayoutTreeTests
     {
         var tree = new LayoutTree(LayoutOptions.Framed);
         tree.Initialize(s_one, 90, 30);
-        tree.Split(s_one, s_two, SplitOrientation.LeftRight);
+        _ = tree.Split(s_one, s_two, SplitOrientation.LeftRight);
 
-        tree.Split(s_two, s_three, SplitOrientation.LeftRight);
+        _ = tree.Split(s_two, s_three, SplitOrientation.LeftRight);
 
         Assert.IsFalse(tree.Root!.IsLeaf);
         Assert.HasCount(3, tree.Root.Children);
@@ -68,7 +68,7 @@ public sealed class LayoutTreeTests
     {
         var tree = new LayoutTree(LayoutOptions.Separated);
         tree.Initialize(s_one, 80, 24);
-        tree.Split(s_one, s_two, SplitOrientation.LeftRight);
+        _ = tree.Split(s_one, s_two, SplitOrientation.LeftRight);
 
         Assert.IsTrue(tree.Remove(s_two));
 
@@ -84,7 +84,7 @@ public sealed class LayoutTreeTests
     {
         var tree = new LayoutTree(LayoutOptions.Separated);
         tree.Initialize(s_one, 80, 24);
-        tree.Split(s_one, s_two, SplitOrientation.LeftRight);
+        _ = tree.Split(s_one, s_two, SplitOrientation.LeftRight);
 
         Assert.IsTrue(tree.Resize(s_one, LayoutDirection.Right, 10));
         Assert.AreEqual(50, tree.Find(s_one)!.Width);
@@ -103,7 +103,7 @@ public sealed class LayoutTreeTests
     {
         var tree = new LayoutTree(LayoutOptions.Framed);
         tree.Initialize(s_one, 80, 24);
-        tree.Split(s_one, s_two, SplitOrientation.LeftRight);
+        _ = tree.Split(s_one, s_two, SplitOrientation.LeftRight);
 
         tree.Fit(100, 30);
         Assert.AreEqual(100, tree.Width);

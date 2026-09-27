@@ -29,12 +29,9 @@ public sealed class WeftTools(WeftBridge bridge)
             using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
             ControlClient client = lease.Client;
             SessionListResult result = await client.ListSessionsAsync(cancellationToken).ConfigureAwait(false);
-            if (result.Sessions.Count == 0)
-            {
-                return "No sessions.";
-            }
-
-            return string.Join('\n', result.Sessions.Select(session =>
+            return result.Sessions.Count == 0
+                ? "No sessions."
+                : string.Join('\n', result.Sessions.Select(session =>
                 string.Create(CultureInfo.InvariantCulture, $"{session.Name} ({session.Id}): {session.Tabs} tabs, {session.Blocks} blocks, {session.Width}x{session.Height}, {(session.Clients > 0 ? "attached" : "detached")}")));
         }
         catch (ProtocolException exception)
@@ -59,12 +56,9 @@ public sealed class WeftTools(WeftBridge bridge)
             using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
             ControlClient client = lease.Client;
             BlockListResult result = await client.ListBlocksAsync(target, cancellationToken).ConfigureAwait(false);
-            if (result.Blocks.Count == 0)
-            {
-                return "No blocks.";
-            }
-
-            return string.Join('\n', result.Blocks.Select(block =>
+            return result.Blocks.Count == 0
+                ? "No blocks."
+                : string.Join('\n', result.Blocks.Select(block =>
                 string.Create(CultureInfo.InvariantCulture, $"{block.Id} in {block.Session}:{block.Tab} [{block.State.ToString().ToLowerInvariant()}{(block.ExitCode is { } code ? " " + code : string.Empty)}] {block.Width}x{block.Height}{(block.Pid is { } pid ? " pid " + pid : string.Empty)}: {block.Title}")));
         }
         catch (ProtocolException exception)
@@ -146,26 +140,21 @@ public sealed class WeftTools(WeftBridge bridge)
             catch (ProtocolException exception) when (exception.Code == ErrorCodes.NotFound && IsSessionName(target))
             {
                 // A plain session name that does not exist yet is created, so an agent can start work with one call.
-                await client.CreateSessionAsync(new SessionCreateParams { Name = target, Cwd = cwd }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = target, Cwd = cwd }, cancellationToken).ConfigureAwait(false);
                 result = await client.RunAsync(parameters, cancellationToken).ConfigureAwait(false);
             }
 
             var text = new StringBuilder();
-            if (result.Completed)
-            {
-                text.Append(CultureInfo.InvariantCulture, $"exit code {result.ExitCode ?? 0} after {result.DurationMs} ms");
-            }
-            else
-            {
-                text.Append(CultureInfo.InvariantCulture, $"still running in block {result.Block} after {result.DurationMs} ms");
-            }
+            _ = result.Completed
+                ? text.Append(CultureInfo.InvariantCulture, $"exit code {result.ExitCode ?? 0} after {result.DurationMs} ms")
+                : text.Append(CultureInfo.InvariantCulture, $"still running in block {result.Block} after {result.DurationMs} ms");
 
             if (result.Truncated)
             {
-                text.Append(CultureInfo.InvariantCulture, $" ({result.TotalBytes} bytes of output, {result.OmittedBytes} omitted)");
+                _ = text.Append(CultureInfo.InvariantCulture, $" ({result.TotalBytes} bytes of output, {result.OmittedBytes} omitted)");
             }
 
-            text.Append('\n').Append(result.Output);
+            _ = text.Append('\n').Append(result.Output);
             return text.ToString();
         }
         catch (ProtocolException exception)
@@ -192,7 +181,7 @@ public sealed class WeftTools(WeftBridge bridge)
             ArgumentNullException.ThrowIfNull(keys);
             using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
             ControlClient client = lease.Client;
-            await client.SendKeysAsync(new BlockSendKeysParams { Target = target, Keys = keys }, cancellationToken).ConfigureAwait(false);
+            _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = target, Keys = keys }, cancellationToken).ConfigureAwait(false);
             return string.Create(CultureInfo.InvariantCulture, $"sent {keys.Length} keys to {target}");
         }
         catch (ProtocolException exception)
@@ -275,7 +264,7 @@ public sealed class WeftTools(WeftBridge bridge)
         {
             using ControlLease lease = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
             ControlClient client = lease.Client;
-            await client.CloseBlockAsync(target, cancellationToken).ConfigureAwait(false);
+            _ = await client.CloseBlockAsync(target, cancellationToken).ConfigureAwait(false);
             return "closed " + target;
         }
         catch (ProtocolException exception)
@@ -283,11 +272,13 @@ public sealed class WeftTools(WeftBridge bridge)
             throw new McpException(exception.Message, exception);
         }
     }
-    private static bool IsSessionName(string? target) =>
-        target is { Length: > 0 }
+    private static bool IsSessionName(string? target)
+    {
+        return target is { Length: > 0 }
         && !target.Contains(':', StringComparison.Ordinal)
         && !target.Contains('.', StringComparison.Ordinal)
         && !BlockId.TryParse(target, out _)
         && !SessionId.TryParse(target, out _)
         && !TabId.TryParse(target, out _);
+    }
 }

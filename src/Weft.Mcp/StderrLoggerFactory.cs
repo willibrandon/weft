@@ -16,7 +16,10 @@ internal sealed class StderrLoggerFactory(LogLevel minimumLevel) : ILoggerFactor
     internal LogLevel MinimumLevel => minimumLevel;
 
     /// <inheritdoc />
-    public ILogger CreateLogger(string categoryName) => new StderrLogger(this, categoryName);
+    public ILogger CreateLogger(string categoryName)
+    {
+        return new StderrLogger(this, categoryName);
+    }
 
     /// <summary>
     /// Ignored; this factory only ever writes to standard error.

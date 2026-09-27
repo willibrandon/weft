@@ -97,7 +97,7 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzerTests(TestContext te
 
         ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
 
-        Assert.ContainsSingle(diagnostics);
+        _ = Assert.ContainsSingle(diagnostics);
     }
 
     /// <summary>
@@ -168,6 +168,9 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzerTests(TestContext te
         Assert.AreEqual(CodeQlDereferencedValueMayBeNullAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
-    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlDereferencedValueMayBeNullAnalyzer(), testContext.CancellationToken);
+    }
 }

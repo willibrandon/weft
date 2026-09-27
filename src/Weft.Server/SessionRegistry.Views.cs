@@ -52,17 +52,20 @@ internal sealed partial class SessionRegistry
     /// </summary>
     /// <param name="client">The client.</param>
     /// <returns>The record.</returns>
-    internal static ClientInfo ToInfo(AttachedClient client) => new()
+    internal static ClientInfo ToInfo(AttachedClient client)
     {
-        Id = client.Id,
-        Session = client.Session.Id.ToString(),
-        SessionName = client.Session.Name,
-        Name = client.Name,
-        Width = client.Width,
-        Height = client.Height,
-        ReadOnly = client.ReadOnly,
-        AttachedAt = client.AttachedAt
-    };
+        return new()
+        {
+            Id = client.Id,
+            Session = client.Session.Id.ToString(),
+            SessionName = client.Session.Name,
+            Name = client.Name,
+            Width = client.Width,
+            Height = client.Height,
+            ReadOnly = client.ReadOnly,
+            AttachedAt = client.AttachedAt
+        };
+    }
 
     /// <summary>
     /// Describes a tab's geometry.
@@ -95,62 +98,71 @@ internal sealed partial class SessionRegistry
                 Tabs = session.Tabs.Select(ToInfoUnsafe).ToList(),
                 Blocks = session.Tabs.SelectMany(tab => tab.Ordered()).Select(ToInfoUnsafe).ToList(),
                 Layout = ToLayoutInfoUnsafe(active),
-                Seq = _events.Seq
+                Seq = Events.Seq
             };
         }
     }
 
-    private static SessionInfo ToInfoUnsafe(Session session) => new()
+    private static SessionInfo ToInfoUnsafe(Session session)
     {
-        Id = session.Id.ToString(),
-        Name = session.Name,
-        CreatedAt = session.CreatedAt,
-        Cwd = session.Cwd,
-        Tabs = session.Tabs.Count,
-        Blocks = session.BlockCount,
-        Clients = session.Clients.Count,
-        Width = session.Width,
-        Height = session.Height,
-        SizePolicy = session.SizePolicy,
-        ActiveTab = session.ActiveTab?.Id.ToString()
-    };
+        return new()
+        {
+            Id = session.Id.ToString(),
+            Name = session.Name,
+            CreatedAt = session.CreatedAt,
+            Cwd = session.Cwd,
+            Tabs = session.Tabs.Count,
+            Blocks = session.BlockCount,
+            Clients = session.Clients.Count,
+            Width = session.Width,
+            Height = session.Height,
+            SizePolicy = session.SizePolicy,
+            ActiveTab = session.ActiveTab?.Id.ToString()
+        };
+    }
 
-    private static TabInfo ToInfoUnsafe(Tab tab) => new()
+    private static TabInfo ToInfoUnsafe(Tab tab)
     {
-        Id = tab.Id.ToString(),
-        Index = tab.Session.Tabs.IndexOf(tab) + 1,
-        Name = tab.Name,
-        Session = tab.Session.Id.ToString(),
-        SessionName = tab.Session.Name,
-        Blocks = tab.Blocks.Count,
-        ActiveBlock = tab.Active?.Id.ToString(),
-        Zoomed = tab.Zoomed?.Id.ToString(),
-        Active = tab.Session.ActiveTab == tab,
-        Synchronized = tab.Synchronized
-    };
+        return new()
+        {
+            Id = tab.Id.ToString(),
+            Index = tab.Session.Tabs.IndexOf(tab) + 1,
+            Name = tab.Name,
+            Session = tab.Session.Id.ToString(),
+            SessionName = tab.Session.Name,
+            Blocks = tab.Blocks.Count,
+            ActiveBlock = tab.Active?.Id.ToString(),
+            Zoomed = tab.Zoomed?.Id.ToString(),
+            Active = tab.Session.ActiveTab == tab,
+            Synchronized = tab.Synchronized
+        };
+    }
 
-    private static BlockInfo ToInfoUnsafe(Block block) => new()
+    private static BlockInfo ToInfoUnsafe(Block block)
     {
-        Id = block.Id.ToString(),
-        Index = block.Tab.Ordered().IndexOf(block) + 1,
-        Tab = block.Tab.Id.ToString(),
-        Session = block.Tab.Session.Id.ToString(),
-        SessionName = block.Tab.Session.Name,
-        Title = block.DisplayTitle,
-        Command = block.Command,
-        Args = block.Arguments,
-        Cwd = block.Cwd,
-        State = block.State,
-        ExitCode = block.ExitCode,
-        Pid = block.Host?.ProcessId,
-        Width = block.Width,
-        Height = block.Height,
-        Floating = block.Floating,
-        Active = block.Tab.Active == block,
-        ExcludedFromSync = block.ExcludedFromSync,
-        Revision = block.Revision,
-        SocketPath = block.SocketPath
-    };
+        return new()
+        {
+            Id = block.Id.ToString(),
+            Index = block.Tab.Ordered().IndexOf(block) + 1,
+            Tab = block.Tab.Id.ToString(),
+            Session = block.Tab.Session.Id.ToString(),
+            SessionName = block.Tab.Session.Name,
+            Title = block.DisplayTitle,
+            Command = block.Command,
+            Args = block.Arguments,
+            Cwd = block.Cwd,
+            State = block.State,
+            ExitCode = block.ExitCode,
+            Pid = block.Host?.ProcessId,
+            Width = block.Width,
+            Height = block.Height,
+            Floating = block.Floating,
+            Active = block.Tab.Active == block,
+            ExcludedFromSync = block.ExcludedFromSync,
+            Revision = block.Revision,
+            SocketPath = block.SocketPath
+        };
+    }
 
     private LayoutInfo ToLayoutInfoUnsafe(Tab tab)
     {

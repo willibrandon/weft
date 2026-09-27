@@ -50,5 +50,8 @@ internal sealed class ServerLock : IDisposable
     /// <summary>
     /// Releases the lock.
     /// </summary>
-    public void Dispose() => _stream.Dispose();
+    public void Dispose()
+    {
+        _stream.Dispose();
+    }
 }

@@ -86,7 +86,7 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        candidates.TryAdd(field, location);
+        _ = candidates.TryAdd(field, location);
     }
 
     private static void CollectWrite(
@@ -99,7 +99,7 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        disqualifyingWrites.TryAdd(reference.Field, 0);
+        _ = disqualifyingWrites.TryAdd(reference.Field, 0);
     }
 
     private static bool IsInitializationWrite(IFieldReferenceOperation reference, ISymbol containingSymbol)

@@ -86,8 +86,12 @@ public sealed class CodeQlMissedSelectAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedSelectAnalyzer(), testContext.CancellationToken);
+    }
+
     /// <summary>
     /// Verifies a ref local projected from the iteration variable is not asked to become Select.
     /// </summary>
@@ -115,6 +119,9 @@ public sealed class CodeQlMissedSelectAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedSelectAnalyzer(), testContext.CancellationToken);
+    }
 }

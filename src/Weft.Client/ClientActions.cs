@@ -165,25 +165,29 @@ internal static class ClientActions
     /// </summary>
     /// <param name="action">The action id.</param>
     /// <returns>The tab number, or null.</returns>
-    internal static int? TabNumber(string action) =>
-        action.Length == TabPrefix.Length + 1 && action.StartsWith(TabPrefix, StringComparison.Ordinal) && action[^1] is >= '1' and <= '9'
+    internal static int? TabNumber(string action)
+    {
+        return action.Length == TabPrefix.Length + 1 && action.StartsWith(TabPrefix, StringComparison.Ordinal) && action[^1] is >= '1' and <= '9'
             ? action[^1] - '0'
             : null;
+    }
 
     /// <summary>
     /// Gets whether an action changes nothing on the server, so a read-only client may keep it bound.
     /// </summary>
     /// <param name="action">The action id.</param>
     /// <returns>True when the action only affects this client.</returns>
-    internal static bool IsReadOnlySafe(string action) =>
-        action is Detach or Lock or CopyMode or Palette or SessionPick;
+    internal static bool IsReadOnlySafe(string action)
+    {
+        return action is Detach or Lock or CopyMode or Palette or SessionPick;
+    }
 
     /// <summary>
     /// Gets the default chord for every action, in palette order.
     /// </summary>
     internal static IReadOnlyList<(string Action, string Chord, string Description)> Defaults { get; } =
     [
-        (Palette, "leader ?", "Command palette and help"),
+        (Palette, "f1", "Help and commands"),
         (Detach, "leader d", "Detach from the session"),
         (TabNew, "leader c", "New tab"),
         (TabNext, "leader n", "Next tab"),
@@ -229,6 +233,7 @@ internal static class ClientActions
     /// </summary>
     internal static IReadOnlyList<(string Action, string Chord)> Aliases { get; } =
     [
+        (Palette, "leader ?"),
         (FocusLeft, "leader left"),
         (FocusDown, "leader down"),
         (FocusUp, "leader up"),

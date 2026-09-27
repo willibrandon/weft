@@ -16,12 +16,9 @@ internal static class Targets
     /// <exception cref="ProtocolException">The text is malformed.</exception>
     internal static TargetSelector Parse(string? target)
     {
-        if (!TargetSelector.TryParse(target, out TargetSelector selector))
-        {
-            throw new ProtocolException(ErrorCodes.InvalidParams, "Malformed target " + target + ".");
-        }
-
-        return selector;
+        return !TargetSelector.TryParse(target, out TargetSelector selector)
+            ? throw new ProtocolException(ErrorCodes.InvalidParams, "Malformed target " + target + ".")
+            : selector;
     }
 
     /// <summary>

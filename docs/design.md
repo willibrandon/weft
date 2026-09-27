@@ -1,8 +1,8 @@
 # weft design
 
-weft is a durable-session terminal multiplexer built on Hex1b. It keeps any number of
+weft is a durable-session terminal multiplexer built on Hex1b. It keeps
 terminal blocks alive inside long-lived sessions on a local server, renders them through
-a smart client that owns scrollback, selection, and layout chrome, and exposes every
+a smart client that owns scrollback viewing, selection, and layout chrome, and exposes every
 action through a structured control protocol so people and software drive it the same way.
 
 This document is the source of truth for architecture and behaviour. Progress lives in
@@ -11,18 +11,21 @@ same change.
 
 ## 1. Positioning
 
-Superlogical announced a "multiplexer for all work": server-side sessions, smart clients,
-native scrollback and selection, reconnect from any device, live sharing, and a roadmap of
-composability and production operation. weft targets the same shape with three commitments:
+weft serves interactive work and automation through the same durable sessions. A single
+user may run many agents, each opening terminals and control connections, so terminal count,
+retained output, and client count are independent design concerns. Four commitments guide it:
 
 - **Durable by default.** Sessions outlive clients, terminals, and network hiccups. Closing a
-  window never loses work. The server is the only place state lives.
+  window never loses work. The server owns the authoritative state.
 - **Smart client, dumb transport.** The client never re-parses a session's ANSI into a second
   screen model of its own. Each block streams as authoritative terminal state; the client
   owns rendering, scrollback viewing, selection, and chrome.
 - **Everything is a command.** Every key binding runs a named action. Every action is callable
   from the CLI and the control socket with structured input and output. Agents and scripts
   get the same surface as the keyboard.
+- **Predictable resource use.** Measure empty terminals, output-heavy terminals, and attached
+  clients separately. Share authoritative state, bound retained data, and release resources
+  when their owner closes. A small executable alone does not establish a small running footprint.
 
 Against tmux, weft matches the command surface that matters (send-keys, capture, split,
 select, resize, list, wait, hooks) and replaces the parts that show their age: text-only
@@ -93,6 +96,14 @@ Hex1b already provides the pieces a smart-client multiplexer needs, all on its p
   prompts, info bars, theming, and a chord-capable key binding router.
 
 weft never modifies Hex1b. Where Hex1b has no host-side hook, weft composes public pieces.
+
+weft's presentation filter projects ordinary cursor restores to the server's applied cursor
+coordinates. A view can attach while a shell is drawing a temporary startup prompt, after
+the shell saved its cursor but before it restores and erases that prompt. Explicit row and
+column positioning keeps that view aligned with captures from the server, including after
+a resize. Saves or restores at the right edge and sequences using origin or horizontal
+margin modes retain their original tokens so positioning cannot discard pending wrap or
+change margin semantics.
 
 ### 3.2 Resize authority
 
@@ -175,7 +186,11 @@ blocking select loop on a pool thread, and the exit wait blocks in short slices.
 starts at the core count starves once a handful of blocks run, and the runtime injects
 replacements only about once a second, stalling every continuation in the process meanwhile.
 The server raises the pool minimum as blocks start so the pool grows immediately instead.
-
+This prevents starvation but leaves worker count and stack cost proportional to running
+blocks, including idle ones. The minimum currently remains at its high-water mark after
+blocks exit. Scale work must measure thread count, stack memory, wakeups, and reclamation,
+and evaluate event-driven PTY reads and process-exit notification through Hex1b's public
+APIs. The current reservation resolves starvation; efficient idle scale remains unverified.
 
 Each block builds a Hex1b terminal:
 
@@ -218,10 +233,46 @@ every registry event from an optional starting sequence; the server keeps a ring
 requested sequence is older than the ring. `wait.signal` and `wait.for` provide tmux-style
 named channels so scripts can synchronize with each other through the server.
 
-Backpressure never disconnects a client. A slow event subscriber is paused, gets a
+The control-event policy pauses a slow subscriber, which gets a
 `subscriber.paused` marker with the number of dropped sequence numbers, and resumes with a
-`subscriber.resumed` marker; the HMP1 block streams already pace to their transport. tmux kills
-control-mode clients that fall behind, which is the failure mode to avoid.
+`subscriber.resumed` marker. HMP1 block streams pace to their transport, but flow control
+alone does not establish a memory bound. Scale work must bound queued bytes per peer and
+verify that a stalled viewer cannot block PTY draining or other clients. Terminal updates
+cannot be discarded like event notifications: any skipped state requires an authoritative
+replay before incremental delivery resumes. If the public HMP1 API cannot support bounded
+resynchronization, close that block stream and allow a fresh attach; the workload stays alive.
+
+### 4.7 Resource ownership and retention
+
+Each block owns one authoritative terminal and history in the server. An attached viewer
+adds connection state, bounded delivery buffers, and protocol bookkeeping; it must not add a
+second full server-side history. Rendering replicas live in the client and count toward the
+total footprint. Control-only CLI and MCP connections do not need terminal widgets or HMP1
+peers. Tab bars, status bars, and other chrome remain client widgets with no per-tab or
+per-client server plugin runtime. The layout authority peer is part of each block's cost.
+
+The current `scrollback` setting caps rows. Planned retention limits also account for bytes
+per block and across the server, including cell attributes and graphics. Empty blocks should
+allocate history as output arrives, without reserving a filled history buffer. Captures,
+attach replays, event queues, and reusable buffers need byte bounds as well as item bounds,
+including temporary allocations while serializing. On pressure, evict the oldest retained
+history within policy. Reject new blocks or oversized capture requests with `unavailable`
+when the configured budget cannot accommodate them. Existing workloads stay alive. Defaults
+and enforcement remain work in the progress tracker.
+
+A disconnected client owns no durable workload. Its sockets, subscriptions, pending waits,
+delivery buffers, and view state must be released even after abrupt termination. A fresh
+attach receives authoritative state from the surviving block, without replaying input or
+restarting its process. Exited blocks may retain queryable output and exit metadata within
+the retention policy; closing a block releases its terminal, history, authority peer, PTY,
+and listener. Repeated create, attach, detach, and close cycles must reach a stable resource
+plateau after bounded caches warm up.
+
+Compact storage and compression of inactive history are candidates for measurement through
+Hex1b's public APIs. Any saving must include compression metadata and temporary buffers, and
+preserve capture, search, resize, and attach latency. Keeping an extra compressed copy beside
+unchanged terminal history does not satisfy this goal. These optimizations are unimplemented;
+they do not change the decision to use Hex1b as the terminal engine.
 
 ## 5. Client
 
@@ -236,18 +287,26 @@ The client is a Hex1bApp:
 │   │    each leaf: Border(title) > Terminal(handle)             │
 │   ├ WindowPanel: floating blocks as resizable windows          │
 │   └ popups: command palette, prompts, confirmations            │
-│  InfoBar: session name · tabs · active block · mode · hints    │
+│  InfoBar: session name · tabs · active block · mode · Help     │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-Each visible block owns a Hex1b terminal built with `WithHmp1UdsClient` and
-`WithTerminalWidget`, sized to the block's geometry. Blocks that leave the visible tab are
-disconnected after a grace period to keep the client light; reattaching replays state.
+Each block view owns a Hex1b terminal built with `WithHmp1UdsClient` and
+`WithTerminalWidget`, sized to the block's geometry. The current client opens views for all
+blocks in its session. The target is to keep views only for visible blocks and a bounded
+cache of recently hidden blocks. A short grace period may avoid reconnecting on rapid tab
+switches, but the cache also needs a byte limit. Eviction disposes the terminal replica and
+HMP1 connection while the server keeps the workload alive; returning to the block replays
+authoritative state. Hidden-tab activity comes from control events. This remains planned work.
 
 ### 5.2 Key bindings
 
-Leader model with a single chord table, default leader `Ctrl+B`, all rebindable in
-configuration. Every binding names an action id; the palette lists actions with their bindings.
+Help is discoverable through a clickable button in the bottom bar. `F1` opens it directly;
+no leader sequence is needed. Other actions use a leader model with a single chord table,
+default leader `Ctrl+B`, all rebindable in configuration. Every binding names an action id;
+the palette lists actions with their bindings. The Help button displays its configured
+shortcut and remains available when that shortcut is disabled. Locked mode passes function
+keys through to the block; the Help button remains clickable and omits the shortcut hint.
 Chord keys are limited to what the terminal input path can identify as keys: letters, digits,
 arrows, and the punctuation the key mapper knows (`-`, `,`, `.`, `/`, `?`, `=`). Symbols such as
 `%` and `"` arrive as bare characters and cannot terminate a chord, so tmux's split keys are
@@ -272,7 +331,7 @@ replaced with `v` and `-`.
 | `leader w` | tab and block picker |
 | `leader PageUp` | copy mode |
 | `leader Insert` | paste the server paste buffer |
-| `leader ?` | help and command palette |
+| `F1` | help and command palette |
 | `leader Ctrl+B` | send a literal Ctrl+B |
 
 The leader is one stroke that arms the next stroke, the way a tmux prefix does; the info bar
@@ -283,12 +342,17 @@ cannot name.
 Arming is client state rather than a router chord, so a redraw or a focus change between the
 two strokes cannot lose it. Chords that do not start with the leader use the toolkit's chord
 matching directly.
+The previous `leader ?` binding remains an alias. Read-only clients retain the Help button
+and direct help shortcut, with server-changing actions omitted from the palette.
 
 ### 5.3 Command palette
 
-`SelectionPrompt` in a popup listing every action with its binding and description. Typing
-filters. Actions that need arguments open a follow-up prompt. The palette also accepts raw
-command lines in CLI syntax, so `split --right --command htop` works from the keyboard.
+Clicking Help or pressing `F1` opens a `SelectionPrompt` popup titled "Help and commands",
+listing actions with their bindings and descriptions. Typing filters; the window explains
+how to choose and run a command. A visible Close button and `Esc` both dismiss it and return
+typing to the terminal, including when opened with the mouse. Actions that need arguments
+open a follow-up prompt. Accepting raw command lines in CLI syntax, such as
+`split --right --command htop`, remains planned work.
 
 ### 5.4 Scrollback, selection, and copy
 
@@ -321,10 +385,9 @@ Rules:
   connections. Long waits (`block.wait`, `events.subscribe`) do not block other connections.
 - Protocol version is bumped only for incompatible changes; additive fields are always allowed.
 
-Parameter objects with defaults use settable members rather than init-only ones. The .NET 10
-System.Text.Json source generator treats init-only members as constructor parameters, so a
-request that omits such a field would arrive with null or zero where the default was documented;
-required members keep init, since they must be present anyway.
+Parameter objects with defaults use settable members so source-generated deserialization
+preserves initializer values when a request omits a field. Tests verify those omitted-field
+defaults. Required members keep init, since they must be present anyway.
 
 ### 6.1 Methods
 
@@ -466,11 +529,11 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 | Sync input with per-block opt-out | zellij | `leader S` |
 | Read-only watcher attach | zellij, tmux `-r` | `--read-only` |
 | Stable JSON output as a documented contract | wezterm `cli list --format json` | `--json` everywhere |
-| Smart client over a dumb transport | wezterm mux, Superlogical | HMP1 per block |
+| Smart client over a dumb transport | wezterm mux | HMP1 per block |
 | Restore fidelity as a policy knob | shpool | `attach --restore screen|lines:N` later |
 | `SSH_AUTH_SOCK` indirection | shpool | Section 10 |
 | Event hooks that tests block on instead of sleeping | shpool `test_hooks` | `events.subscribe` in tests |
-| Pause instead of disconnect for slow clients | tmux's failure mode | Section 4.6 |
+| Pause delivery for slow event subscribers | tmux's failure mode | Section 4.6 |
 
 ## 11. Security
 
@@ -486,18 +549,63 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 
 ## 12. Performance budgets
 
+These are targets unless a measurement is stated. Terminal and client scale must be measured
+independently, with both steady-state and peak resource use reported.
+
 - Keystroke to PTY write: under 1 ms inside the server.
 - Output to client paint: bounded by Hex1b's frame limiter (16 ms) plus socket latency.
 - Attach with 20 blocks: under 300 ms to first full paint on a local socket.
-- Idle server with 50 blocks: no periodic wakeups; every loop awaits I/O.
+- Idle server with 50 blocks: target no periodic wakeups. The blocking PTY and exit waits in
+  section 4.3 remain a constraint to measure and resolve.
 - Native AOT binary under 22 MB with no runtime dependency. The linux-x64 build measures about
   20.3 MB with Hex1b 0.171. The CI size check reads the compiler's size report, whose total
   runs about 2.3 MB above the file on disk, so its budget is 24 MB.
 
-Benchmarks in `benchmarks/Weft.Benchmarks` cover layout computation, protocol encoding, and
-capture serialization.
+Benchmarks in `benchmarks/Weft.Benchmarks` currently cover layout computation, protocol
+encoding, and key chords. They do not establish terminal or client memory costs. Add a
+process-level scale harness as a .NET file-based C# app under `scripts/`, using the published
+Native AOT executable, real PTYs, sockets, and client processes:
+
+| Scenario | Measurement |
+| --- | --- |
+| Server start with no sessions, then one session and one block | Fixed server cost and first-block cost |
+| 1, 10, 50, and 100 idle blocks at 80 by 24 cells | Total footprint and incremental cost per empty block |
+| The same blocks with 10,000 and 20,000 retained lines of real command output | Cost per filled block and retained byte; peak cost while ingesting |
+| 0, 1, 10, and 50 clients against a fixed set of 50 filled blocks | Incremental server cost per control-only connection and per TUI client, measured separately |
+| The same blocks in one tab and spread across many tabs, including hidden tabs | Per-tab overhead, visible-view cost, and hidden-view reclamation |
+| Slow readers, abrupt client exits, reattach, and repeated block creation and closure | Queue bounds, cleanup, recovery latency, and memory after churn |
+
+Use reproducible output from real commands or checked-in captures of real workloads passed
+through the PTY. Include ordinary text, styled and Unicode output, and graphics where
+supported. Record retained bytes as well as lines, and raise the configured row cap for the
+20,000-line case. Keep the output corpus, terminal dimensions, configuration, and visible
+block count fixed when varying clients. Exercise one control connection per agent and
+concurrent MCP calls separately, since a tool call can lease its own connection.
+
+Report server memory, each client process, and child workloads separately, along with their
+combined cost. Record the OS, architecture, hardware, SDK and dependency versions, build
+mode, sampling method, and settling interval. Use macOS physical footprint and the relevant
+resident/private-memory metrics on other systems, naming each metric rather than treating
+them as interchangeable. Include managed and native memory, thread stacks, handles or file
+descriptors, CPU time, wakeups, and attach/input latency under load. Allocation counts alone
+are insufficient. Repeat measurements and report their spread.
+
+After closing clients and blocks, live resource counts should return to baseline apart from
+documented bounded caches and intentional retained blocks. Process memory may stay above
+its initial value because of allocator or thread-pool retention, but repeated cycles must
+plateau; explain retained capacity instead of labeling every high-water mark a leak. Set
+numerical memory budgets and regression tolerances from these measurements before release.
+There are no measured memory budgets yet.
 
 ## 13. Testing
+
+Product projects target .NET 11 with C# 15; the compiler analyzer stays on
+`netstandard2.0` so Roslyn can load it. Compatible preview SDKs are supported without an
+SDK pin. CI installs the rolling .NET 11 preview channel for builds, tests, repository
+checks, CodeQL, and Native AOT publishing, and records the resolved SDK with `dotnet --info`.
+Build properties explicitly enable all code-style rules, and repository configuration
+makes the Style category an error so builds and formatting checks enforce the same policy.
+Only NETSDK1057, the preview SDK notice, is suppressed through its dedicated SDK property.
 
 The repository's own analyzers, in `Weft.SourceGen`, compile into every project. They enforce
 the conventions in `AGENTS.md` and mirror the CodeQL queries CI runs, so those findings fail
@@ -516,6 +624,11 @@ Real processes only. Test tiers:
   assert screen text with Hex1b's snapshot and automator APIs.
 - **End-to-end tests**: publish the executable and drive it with the installed `hex1b` tool
   through a hosted terminal: keys in, screen assertions out.
+- **Scale and lifecycle acceptance tests (planned)**: use real client processes and PTYs to
+  verify that a client killed during output leaves the same workload running, reattach
+  restores state, slow readers do not stall other clients, hidden views are reclaimed, and
+  repeated close cycles release owned resources. Measure footprint with the section 12
+  harness; keep timing and memory tolerances tied to recorded platform baselines.
 
 No mocking libraries, no hand-written substitutes for production services, no skipped tests.
 

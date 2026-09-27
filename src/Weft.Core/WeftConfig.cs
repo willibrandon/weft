@@ -6,10 +6,8 @@ namespace Weft.Core;
 /// The user configuration file, read by both the server and the client.
 /// </summary>
 /// <remarks>
-/// Every member is settable rather than init-only on purpose. The .NET 10 System.Text.Json source
-/// generator treats init-only members as constructor parameters, so a type with any of them is
-/// created through that path and a value the file omits becomes null or zero instead of the
-/// initializer. The dictionaries are read-only and populated in place.
+/// Settable members preserve their initializer values when the configuration file omits them
+/// during source-generated deserialization. The dictionaries are read-only and populated in place.
 /// </remarks>
 public sealed class WeftConfig
 {
@@ -58,11 +56,11 @@ public sealed class WeftConfig
     /// Gets key binding overrides: chord text to action id, or <c>none</c> to unbind.
     /// </summary>
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
-    public Dictionary<string, string> Bindings { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> Bindings { get; } = [with(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
     /// Gets hooks: event name to a shell command run with the event in environment variables.
     /// </summary>
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
-    public Dictionary<string, string> Hooks { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> Hooks { get; } = [with(StringComparer.OrdinalIgnoreCase)];
 }

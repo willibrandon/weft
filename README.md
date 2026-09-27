@@ -11,9 +11,14 @@ dotnet tool install --global weft
 weft
 ```
 
+While attached, click **Help** in the bottom bar to see commands and shortcuts.
+**F1** opens the same window. Click **Close** or press **Esc** to return to your terminal.
+
 Design: [docs/design.md](docs/design.md).
 
 ## Build
+
+Install a compatible .NET 11 SDK, including previews.
 
 ```console
 dotnet build Weft.slnx

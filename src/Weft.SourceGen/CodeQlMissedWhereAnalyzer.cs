@@ -71,16 +71,20 @@ public sealed class CodeQlMissedWhereAnalyzer : DiagnosticAnalyzer
             statement.Expression,
             context.CancellationToken).Type;
         return type is IArrayTypeSymbol { Rank: 1 } ||
-            type is not null && (IsGenericEnumerable(type) ||
-                type.AllInterfaces.Any(IsGenericEnumerable));
+            (type is not null && (IsGenericEnumerable(type) ||
+                type.AllInterfaces.Any(IsGenericEnumerable)));
     }
 
-    private static bool IsGenericEnumerable(INamedTypeSymbol type) =>
-        type.OriginalDefinition.SpecialType ==
+    private static bool IsGenericEnumerable(INamedTypeSymbol type)
+    {
+        return type.OriginalDefinition.SpecialType ==
             SpecialType.System_Collections_Generic_IEnumerable_T;
+    }
 
-    private static bool IsGenericEnumerable(ITypeSymbol type) =>
-        type is INamedTypeSymbol named && IsGenericEnumerable(named);
+    private static bool IsGenericEnumerable(ITypeSymbol type)
+    {
+        return type is INamedTypeSymbol named && IsGenericEnumerable(named);
+    }
 
     private static bool ReferencesIterationVariable(
         ForEachStatementSyntax statement,
@@ -102,14 +106,17 @@ public sealed class CodeQlMissedWhereAnalyzer : DiagnosticAnalyzer
 
     private static bool IsImplicitFilter(
         IfStatementSyntax conditional,
-        SyntaxList<StatementSyntax> statements) =>
-        IsContinue(conditional.Statement) ||
-        conditional.Else is null && statements.Count == 1;
+        SyntaxList<StatementSyntax> statements)
+    {
+        return IsContinue(conditional.Statement) ||
+        (conditional.Else is null && statements.Count == 1);
+    }
 
     private static bool IsMissedAllPattern(
         IfStatementSyntax conditional,
-        SyntaxList<StatementSyntax> statements) =>
-        conditional.Else is null && statements.Count == 1 &&
+        SyntaxList<StatementSyntax> statements)
+    {
+        return conditional.Else is null && statements.Count == 1 &&
         conditional.Statement.DescendantNodesAndSelf()
             .OfType<BreakStatementSyntax>()
             .Any() &&
@@ -117,11 +124,16 @@ public sealed class CodeQlMissedWhereAnalyzer : DiagnosticAnalyzer
             .OfType<AssignmentExpressionSyntax>()
             .Any(static assignment => assignment.Right.IsKind(
                 SyntaxKind.FalseLiteralExpression));
+    }
 
-    private static bool IsContinue(StatementSyntax statement) =>
-        statement is ContinueStatementSyntax ||
-        statement is BlockSyntax { Statements.Count: 1 } block && block.Statements[0] is ContinueStatementSyntax;
+    private static bool IsContinue(StatementSyntax statement)
+    {
+        return statement is ContinueStatementSyntax ||
+        (statement is BlockSyntax { Statements.Count: 1 } block && block.Statements[0] is ContinueStatementSyntax);
+    }
 
-    private static SyntaxList<StatementSyntax> GetStatements(StatementSyntax statement) =>
-        statement is BlockSyntax block ? block.Statements : new SyntaxList<StatementSyntax>(statement);
+    private static SyntaxList<StatementSyntax> GetStatements(StatementSyntax statement)
+    {
+        return statement is BlockSyntax block ? block.Statements : SyntaxFactory.SingletonList(statement);
+    }
 }

@@ -45,7 +45,7 @@ internal sealed class SyncInputTarget : IDisposable
         TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_items.Writer.TryWrite(new SyncInputItem(bytes, pasteText, done)))
         {
-            done.TrySetResult();
+            _ = done.TrySetResult();
         }
 
         return done.Task;
@@ -54,14 +54,17 @@ internal sealed class SyncInputTarget : IDisposable
     /// <summary>
     /// Completes the queue; input already queued is still written.
     /// </summary>
-    public void Dispose() => _items.Writer.TryComplete();
+    public void Dispose()
+    {
+        _ = _items.Writer.TryComplete();
+    }
 
     private async Task PumpAsync()
     {
         await foreach (SyncInputItem item in _items.Reader.ReadAllAsync().ConfigureAwait(false))
         {
             await WriteAsync(item).ConfigureAwait(false);
-            item.Done.TrySetResult();
+            _ = item.Done.TrySetResult();
         }
     }
 

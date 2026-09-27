@@ -163,20 +163,24 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzer : DiagnosticAnalyze
             local.Name));
     }
 
-    private static bool IsOutVariable(SingleVariableDesignationSyntax declaration) =>
-        declaration.FirstAncestorOrSelf<ArgumentSyntax>()?.RefOrOutKeyword.IsKind(
+    private static bool IsOutVariable(SingleVariableDesignationSyntax declaration)
+    {
+        return declaration.FirstAncestorOrSelf<ArgumentSyntax>()?.RefOrOutKeyword.IsKind(
             SyntaxKind.OutKeyword) == true;
+    }
 
     private static bool IsProtectedByExplicitNullGuard(
         PostfixUnaryExpressionSyntax suppression,
         ILocalSymbol local,
-        SyntaxNodeAnalysisContext context) =>
-        suppression.Ancestors()
+        SyntaxNodeAnalysisContext context)
+    {
+        return suppression.Ancestors()
             .OfType<IfStatementSyntax>()
             .Any(statement =>
                 statement.Statement.Span.Contains(suppression.Span) &&
                 ImpliesNotNull(statement.Condition, local, context) &&
                 !WrittenBeforeSuppression(statement.Statement, suppression, local, context));
+    }
 
     private static bool WrittenBeforeSuppression(
         SyntaxNode scope,
@@ -187,24 +191,23 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzer : DiagnosticAnalyze
         // Only a write that can run before the suppression voids the guard's proof: an earlier
         // statement of the same block, the condition, or the branch on the suppression's own path.
         // A construct the scan does not split, such as a loop or a try, counts as a whole.
-        if (!scope.Span.Contains(suppression.Span))
-        {
-            return scope.SpanStart < suppression.SpanStart && Writes(scope, local, context);
-        }
-
-        return scope switch
-        {
-            BlockSyntax block => block.Statements.Any(statement => WrittenBeforeSuppression(statement, suppression, local, context)),
-            IfStatementSyntax conditional => WrittenBeforeSuppression(conditional.Condition, suppression, local, context) ||
-                WrittenBeforeSuppression(TakenBranch(conditional, suppression), suppression, local, context),
-            _ => Writes(scope, local, context)
-        };
+        return !scope.Span.Contains(suppression.Span)
+            ? scope.SpanStart < suppression.SpanStart && Writes(scope, local, context)
+            : scope switch
+            {
+                BlockSyntax block => block.Statements.Any(statement => WrittenBeforeSuppression(statement, suppression, local, context)),
+                IfStatementSyntax conditional => WrittenBeforeSuppression(conditional.Condition, suppression, local, context) ||
+                    WrittenBeforeSuppression(TakenBranch(conditional, suppression), suppression, local, context),
+                _ => Writes(scope, local, context)
+            };
     }
 
-    private static StatementSyntax TakenBranch(IfStatementSyntax conditional, PostfixUnaryExpressionSyntax suppression) =>
-        conditional.Statement.Span.Contains(suppression.Span) || conditional.Else is null
+    private static StatementSyntax TakenBranch(IfStatementSyntax conditional, PostfixUnaryExpressionSyntax suppression)
+    {
+        return conditional.Statement.Span.Contains(suppression.Span) || conditional.Else is null
             ? conditional.Statement
             : conditional.Else.Statement;
+    }
 
     private static bool Writes(SyntaxNode scope, ILocalSymbol local, SyntaxNodeAnalysisContext context)
     {
@@ -221,52 +224,43 @@ public sealed class CodeQlDereferencedValueMayBeNullAnalyzer : DiagnosticAnalyze
     private static bool ImpliesNotNull(ExpressionSyntax condition, ILocalSymbol local, SyntaxNodeAnalysisContext context)
     {
         // Only the Boolean structure decides: a conjunction needs one side, a disjunction needs both.
-        switch (condition)
+        return condition switch
         {
-            case ParenthesizedExpressionSyntax parenthesized:
-                return ImpliesNotNull(parenthesized.Expression, local, context);
-            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalAndExpression } and:
-                return ImpliesNotNull(and.Left, local, context) || ImpliesNotNull(and.Right, local, context);
-            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalOrExpression } or:
-                return ImpliesNotNull(or.Left, local, context) && ImpliesNotNull(or.Right, local, context);
-            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.NotEqualsExpression } unequal:
-                return unequal.Right.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(unequal.Left, local, context) ||
-                    unequal.Left.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(unequal.Right, local, context);
-            case PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalNotExpression } negation:
-                return ImpliesNull(negation.Operand, local, context);
-            case IsPatternExpressionSyntax pattern:
-                return pattern.Pattern is UnaryPatternSyntax
-                {
-                    RawKind: (int)SyntaxKind.NotPattern,
-                    Pattern: ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression },
-                } && SymbolEquals(pattern.Expression, local, context);
-            default:
-                return false;
-        }
+            ParenthesizedExpressionSyntax parenthesized => ImpliesNotNull(parenthesized.Expression, local, context),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalAndExpression } and => ImpliesNotNull(and.Left, local, context) || ImpliesNotNull(and.Right, local, context),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalOrExpression } or => ImpliesNotNull(or.Left, local, context) && ImpliesNotNull(or.Right, local, context),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.NotEqualsExpression } unequal => (unequal.Right.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(unequal.Left, local, context)) ||
+                                (unequal.Left.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(unequal.Right, local, context)),
+            PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalNotExpression } negation => ImpliesNull(negation.Operand, local, context),
+            IsPatternExpressionSyntax pattern => pattern.Pattern is UnaryPatternSyntax
+            {
+                RawKind: (int)SyntaxKind.NotPattern,
+                Pattern: ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression },
+            } && SymbolEquals(pattern.Expression, local, context),
+            _ => false,
+        };
     }
 
     private static bool ImpliesNull(ExpressionSyntax condition, ILocalSymbol local, SyntaxNodeAnalysisContext context)
     {
-        switch (condition)
+        return condition switch
         {
-            case ParenthesizedExpressionSyntax parenthesized:
-                return ImpliesNull(parenthesized.Expression, local, context);
-            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression } equal:
-                return equal.Right.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(equal.Left, local, context) ||
-                    equal.Left.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(equal.Right, local, context);
-            case IsPatternExpressionSyntax pattern:
-                return pattern.Pattern is ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression } &&
-                    SymbolEquals(pattern.Expression, local, context);
-            default:
-                return false;
-        }
+            ParenthesizedExpressionSyntax parenthesized => ImpliesNull(parenthesized.Expression, local, context),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression } equal => (equal.Right.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(equal.Left, local, context)) ||
+                                (equal.Left.IsKind(SyntaxKind.NullLiteralExpression) && SymbolEquals(equal.Right, local, context)),
+            IsPatternExpressionSyntax pattern => pattern.Pattern is ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression } &&
+                                SymbolEquals(pattern.Expression, local, context),
+            _ => false,
+        };
     }
 
     private static bool SymbolEquals(
         ExpressionSyntax expression,
         ISymbol symbol,
-        SyntaxNodeAnalysisContext context) =>
-        SymbolEqualityComparer.Default.Equals(
+        SyntaxNodeAnalysisContext context)
+    {
+        return SymbolEqualityComparer.Default.Equals(
             context.SemanticModel.GetSymbolInfo(expression, context.CancellationToken).Symbol,
             symbol);
+    }
 }

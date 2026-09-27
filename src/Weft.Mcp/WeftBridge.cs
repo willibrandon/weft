@@ -86,7 +86,7 @@ public sealed class WeftBridge : IAsyncDisposable
             _idle.Clear();
             while (_waiting.TryDequeue(out TaskCompletionSource? turn))
             {
-                turn.TrySetException(new ObjectDisposedException(nameof(WeftBridge)));
+                _ = turn.TrySetException(new ObjectDisposedException(nameof(WeftBridge)));
             }
         }
 

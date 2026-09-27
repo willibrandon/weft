@@ -10,6 +10,8 @@ internal static class Program
     /// </summary>
     /// <param name="args">The command line arguments.</param>
     /// <returns>The process exit code.</returns>
-    private static async Task<int> Main(string[] args) =>
-        await RootCommandFactory.Create().Parse(args).InvokeAsync().ConfigureAwait(false);
+    private static async Task<int> Main(string[] args)
+    {
+        return await RootCommandFactory.Create().Parse(args).InvokeAsync().ConfigureAwait(false);
+    }
 }

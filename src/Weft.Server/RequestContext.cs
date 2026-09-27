@@ -39,5 +39,8 @@ internal sealed class RequestContext
     /// Turns the connection into an event stream for a subscription.
     /// </summary>
     /// <param name="subscription">The subscription.</param>
-    internal void StartEventPump(EventSubscription subscription) => _startEventPump(subscription);
+    internal void StartEventPump(EventSubscription subscription)
+    {
+        _startEventPump(subscription);
+    }
 }

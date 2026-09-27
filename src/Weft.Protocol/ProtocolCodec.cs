@@ -54,8 +54,10 @@ public static class ProtocolCodec
     /// <param name="value">The value.</param>
     /// <param name="typeInfo">The source-generated type information.</param>
     /// <returns>The element.</returns>
-    public static JsonElement ToElement<T>(T value, JsonTypeInfo<T> typeInfo) =>
-        JsonSerializer.SerializeToElement(value, typeInfo);
+    public static JsonElement ToElement<T>(T value, JsonTypeInfo<T> typeInfo)
+    {
+        return JsonSerializer.SerializeToElement(value, typeInfo);
+    }
 
     /// <summary>
     /// Converts a message's parameters, result, or data into a typed value.
@@ -69,13 +71,10 @@ public static class ProtocolCodec
     {
         try
         {
-            if (element is null || element.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            {
-                return JsonSerializer.Deserialize("{}", typeInfo)
-                    ?? throw new ProtocolException(ErrorCodes.InvalidParams, "Parameters are required.");
-            }
-
-            return element.Value.Deserialize(typeInfo)
+            return element is null || element.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined
+                ? JsonSerializer.Deserialize("{}", typeInfo)
+                    ?? throw new ProtocolException(ErrorCodes.InvalidParams, "Parameters are required.")
+                : element.Value.Deserialize(typeInfo)
                 ?? throw new ProtocolException(ErrorCodes.InvalidParams, "Parameters are required.");
         }
         catch (JsonException exception)
@@ -93,8 +92,10 @@ public static class ProtocolCodec
     /// <param name="parameters">The parameters.</param>
     /// <param name="typeInfo">The source-generated type information.</param>
     /// <returns>The message.</returns>
-    public static ProtocolMessage Request<T>(long id, string method, T parameters, JsonTypeInfo<T> typeInfo) =>
-        new() { Id = id, Method = method, Params = ToElement(parameters, typeInfo) };
+    public static ProtocolMessage Request<T>(long id, string method, T parameters, JsonTypeInfo<T> typeInfo)
+    {
+        return new() { Id = id, Method = method, Params = ToElement(parameters, typeInfo) };
+    }
 
     /// <summary>
     /// Builds a success response.
@@ -104,8 +105,10 @@ public static class ProtocolCodec
     /// <param name="result">The result.</param>
     /// <param name="typeInfo">The source-generated type information.</param>
     /// <returns>The message.</returns>
-    public static ProtocolMessage Success<T>(long id, T result, JsonTypeInfo<T> typeInfo) =>
-        new() { Id = id, Result = ToElement(result, typeInfo) };
+    public static ProtocolMessage Success<T>(long id, T result, JsonTypeInfo<T> typeInfo)
+    {
+        return new() { Id = id, Result = ToElement(result, typeInfo) };
+    }
 
     /// <summary>
     /// Builds an error response.
@@ -114,8 +117,10 @@ public static class ProtocolCodec
     /// <param name="code">The error code.</param>
     /// <param name="message">The message.</param>
     /// <returns>The message.</returns>
-    public static ProtocolMessage Failure(long? id, string code, string message) =>
-        new() { Id = id ?? 0, Error = new ProtocolError { Code = code, Message = message } };
+    public static ProtocolMessage Failure(long? id, string code, string message)
+    {
+        return new() { Id = id ?? 0, Error = new ProtocolError { Code = code, Message = message } };
+    }
 
     /// <summary>
     /// Builds an event message.
@@ -126,14 +131,18 @@ public static class ProtocolCodec
     /// <param name="data">The payload.</param>
     /// <param name="typeInfo">The source-generated type information.</param>
     /// <returns>The message.</returns>
-    public static ProtocolMessage Event<T>(string name, long seq, T data, JsonTypeInfo<T> typeInfo) =>
-        new() { Event = name, Seq = seq, Data = ToElement(data, typeInfo) };
+    public static ProtocolMessage Event<T>(string name, long seq, T data, JsonTypeInfo<T> typeInfo)
+    {
+        return new() { Event = name, Seq = seq, Data = ToElement(data, typeInfo) };
+    }
 
     /// <summary>
     /// Renders a message as a string line for logs and tests.
     /// </summary>
     /// <param name="message">The message.</param>
     /// <returns>The JSON text without a trailing newline.</returns>
-    public static string ToJson(ProtocolMessage message) =>
-        Encoding.UTF8.GetString(EncodeLine(message).AsSpan()[..^1]);
+    public static string ToJson(ProtocolMessage message)
+    {
+        return Encoding.UTF8.GetString(EncodeLine(message).AsSpan()[..^1]);
+    }
 }

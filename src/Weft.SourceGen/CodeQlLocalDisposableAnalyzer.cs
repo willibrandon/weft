@@ -71,8 +71,8 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
 
             if (variable.Initializer?.Value is { } initializer && CreatesResource(initializer) &&
                 (DisposableLocalOwnership.MayLeak(local, variable, declaration, block, context) ||
-                    initializer is (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) &&
-                    HasConfiguredLibraryDisposal(local, block, context)))
+                    (initializer is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax &&
+                    HasConfiguredLibraryDisposal(local, block, context))))
             {
                 context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), local.Name));
             }
@@ -99,8 +99,9 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         ILocalSymbol local,
         LocalDeclarationStatementSyntax declaration,
         SyntaxNode block,
-        SyntaxNodeAnalysisContext context) =>
-        block.ChildNodes()
+        SyntaxNodeAnalysisContext context)
+    {
+        return block.ChildNodes()
             .OfType<StatementSyntax>()
             .SkipWhile(candidate => candidate != declaration)
             .Skip(1)
@@ -109,6 +110,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             .OfType<ForStatementSyntax>()
             .SelectMany(static loop => loop.Initializers.OfType<AssignmentExpressionSyntax>())
             .Where(assignment => IsResourceAssignment(assignment, local, context));
+    }
 
     // A local declared by a for initializer lives for the loop, so the loop must dispose it or hand it
     // off on every path before it is left, the paths that skip the body included.
@@ -126,18 +128,21 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool LeaksFromLoopDeclaration(VariableDeclaratorSyntax variable, ForStatementSyntax loop, SyntaxNodeAnalysisContext context) =>
-        variable.Initializer is { } initializer &&
+    private static bool LeaksFromLoopDeclaration(VariableDeclaratorSyntax variable, ForStatementSyntax loop, SyntaxNodeAnalysisContext context)
+    {
+        return variable.Initializer is { } initializer &&
         CreatesResource(initializer.Value) &&
         context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is ILocalSymbol local &&
         DisposableLocalOwnership.MayLeakInLoop(local, variable, loop, context);
+    }
 
     private static IEnumerable<ExpressionStatementSyntax> FindResourceAssignments(
         ILocalSymbol local,
         LocalDeclarationStatementSyntax declaration,
         SyntaxNode block,
-        SyntaxNodeAnalysisContext context) =>
-        block.ChildNodes()
+        SyntaxNodeAnalysisContext context)
+    {
+        return block.ChildNodes()
             .OfType<StatementSyntax>()
             .SkipWhile(candidate => candidate != declaration)
             .Skip(1)
@@ -145,42 +150,47 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
                 static node => node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)))
             .OfType<ExpressionStatementSyntax>()
             .Where(statement => IsResourceAssignment(statement, local, context));
+    }
 
-    private static bool LeaksFromAssignment(ILocalSymbol local, ExpressionStatementSyntax handoff, SyntaxNodeAnalysisContext context) =>
-        handoff.Parent is (BlockSyntax or SwitchSectionSyntax) and { } scope &&
+    private static bool LeaksFromAssignment(ILocalSymbol local, ExpressionStatementSyntax handoff, SyntaxNodeAnalysisContext context)
+    {
+        return handoff.Parent is (BlockSyntax or SwitchSectionSyntax) and { } scope &&
         DisposableLocalOwnership.MayLeak(local, ((AssignmentExpressionSyntax)handoff.Expression).Right, handoff, priorRisk: false, scope, context);
+    }
 
-    private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        statement.Expression is AssignmentExpressionSyntax assignment && IsResourceAssignment(assignment, local, context);
+    private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        return statement.Expression is AssignmentExpressionSyntax assignment && IsResourceAssignment(assignment, local, context);
+    }
 
-    private static bool IsResourceAssignment(AssignmentExpressionSyntax assignment, ILocalSymbol local, SyntaxNodeAnalysisContext context) =>
-        assignment is { Left: IdentifierNameSyntax target } &&
+    private static bool IsResourceAssignment(AssignmentExpressionSyntax assignment, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    {
+        return assignment is { Left: IdentifierNameSyntax target } &&
         assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
         CreatesResource(assignment.Right) &&
         SymbolEqualityComparer.Default.Equals(local, context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol);
+    }
 
-    private static bool CreatesResource(ExpressionSyntax expression) => expression switch
+    private static bool CreatesResource(ExpressionSyntax expression)
     {
-        ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or InvocationExpressionSyntax => true,
-        AwaitExpressionSyntax awaited => CreatesResource(awaited.Expression),
-        ConditionalExpressionSyntax conditional => CreatesResource(conditional.WhenTrue) || CreatesResource(conditional.WhenFalse),
-        ParenthesizedExpressionSyntax parenthesized => CreatesResource(parenthesized.Expression),
-        _ => false
-    };
+        return expression switch
+        {
+            ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or InvocationExpressionSyntax => true,
+            AwaitExpressionSyntax awaited => CreatesResource(awaited.Expression),
+            ConditionalExpressionSyntax conditional => CreatesResource(conditional.WhenTrue) || CreatesResource(conditional.WhenFalse),
+            ParenthesizedExpressionSyntax parenthesized => CreatesResource(parenthesized.Expression),
+            _ => false
+        };
+    }
 
     private static bool HasConfiguredLibraryDisposal(
         ILocalSymbol local,
         SyntaxNode block,
         SyntaxNodeAnalysisContext context)
     {
-        if (!local.Type.DeclaringSyntaxReferences.IsEmpty ||
-            local.Type.ContainingAssembly?.Name.StartsWith("Weft.", StringComparison.Ordinal) == true ||
-            !local.Type.AllInterfaces.Any(static type => type.ToDisplayString() == "System.IDisposable"))
-        {
-            return false;
-        }
-
-        return block.DescendantNodes(static node =>
+        return local.Type.DeclaringSyntaxReferences.IsEmpty &&
+            (local.Type.ContainingAssembly?.Name.StartsWith("Weft.", StringComparison.Ordinal)) != true &&
+            local.Type.AllInterfaces.Any(static type => type.ToDisplayString() == "System.IDisposable") && block.DescendantNodes(static node =>
                 node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax))
             .OfType<InvocationExpressionSyntax>()
             .Where(IsAsyncUsingExpression)
@@ -200,8 +210,9 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
                 containingType.ToDisplayString() == "System.Threading.Tasks.TaskAsyncEnumerableExtensions");
     }
 
-    private static bool IsAsyncUsingExpression(InvocationExpressionSyntax invocation) =>
-        invocation.Parent switch
+    private static bool IsAsyncUsingExpression(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Parent switch
         {
             UsingStatementSyntax statement => !statement.AwaitKeyword.IsKind(SyntaxKind.None),
             EqualsValueClauseSyntax
@@ -213,6 +224,7 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             } => !declaration.AwaitKeyword.IsKind(SyntaxKind.None),
             _ => false
         };
+    }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
@@ -248,14 +260,19 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             local.Name));
     }
 
-    private static bool IsDisposable(ITypeSymbol type) =>
-        type.ToDisplayString() == "System.IDisposable" ||
-        type.AllInterfaces.Any(static item => item.ToDisplayString() == "System.IDisposable");
-
-    private static ExpressionSyntax? GetLambdaValue(ExpressionSyntax expression) => expression switch
+    private static bool IsDisposable(ITypeSymbol type)
     {
-        ParenthesizedLambdaExpressionSyntax { ExpressionBody: { } value } => value,
-        SimpleLambdaExpressionSyntax { ExpressionBody: { } value } => value,
-        _ => null
-    };
+        return type.ToDisplayString() == "System.IDisposable" ||
+        type.AllInterfaces.Any(static item => item.ToDisplayString() == "System.IDisposable");
+    }
+
+    private static ExpressionSyntax? GetLambdaValue(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            ParenthesizedLambdaExpressionSyntax { ExpressionBody: { } value } => value,
+            SimpleLambdaExpressionSyntax { ExpressionBody: { } value } => value,
+            _ => null
+        };
+    }
 }

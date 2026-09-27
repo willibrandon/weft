@@ -93,26 +93,32 @@ public sealed class CodeQlMissedSelectAnalyzer : DiagnosticAnalyzer
             statement.Expression,
             context.CancellationToken).Type;
         return type is IArrayTypeSymbol { Rank: 1 } ||
-            type is not null && (IsGenericEnumerable(type) ||
-                type.AllInterfaces.Any(IsGenericEnumerable));
+            (type is not null && (IsGenericEnumerable(type) ||
+                type.AllInterfaces.Any(IsGenericEnumerable)));
     }
 
-    private static bool IsGenericEnumerable(INamedTypeSymbol type) =>
-        type.OriginalDefinition.SpecialType ==
+    private static bool IsGenericEnumerable(INamedTypeSymbol type)
+    {
+        return type.OriginalDefinition.SpecialType ==
             SpecialType.System_Collections_Generic_IEnumerable_T;
+    }
 
-    private static bool IsGenericEnumerable(ITypeSymbol type) =>
-        type is INamedTypeSymbol named && IsGenericEnumerable(named);
+    private static bool IsGenericEnumerable(ITypeSymbol type)
+    {
+        return type is INamedTypeSymbol named && IsGenericEnumerable(named);
+    }
 
     private static bool ReferencesSymbol(
         SyntaxNode node,
         ISymbol symbol,
-        SyntaxNodeAnalysisContext context) =>
-        node.DescendantNodesAndSelf()
+        SyntaxNodeAnalysisContext context)
+    {
+        return node.DescendantNodesAndSelf()
             .OfType<IdentifierNameSyntax>()
             .Any(identifier => SymbolEqualityComparer.Default.Equals(
                 symbol,
                 context.SemanticModel.GetSymbolInfo(
                     identifier,
                     context.CancellationToken).Symbol));
+    }
 }

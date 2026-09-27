@@ -55,11 +55,13 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(s_rule, assignment.Syntax.GetLocation(), variable.Name));
     }
 
-    private static bool IsConcatenation(IAssignmentOperation assignment) =>
-        assignment is ICompoundAssignmentOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } ||
-        assignment is ISimpleAssignmentOperation &&
+    private static bool IsConcatenation(IAssignmentOperation assignment)
+    {
+        return assignment is ICompoundAssignmentOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } ||
+        (assignment is ISimpleAssignmentOperation &&
         assignment.Value is IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, Type.SpecialType: SpecialType.System_String } addition &&
-        (ContainsStorage(addition.LeftOperand, assignment.Target) || ContainsStorage(addition.RightOperand, assignment.Target));
+        (ContainsStorage(addition.LeftOperand, assignment.Target) || ContainsStorage(addition.RightOperand, assignment.Target)));
+    }
 
     private static bool ContainsStorage(IOperation operand, IOperation target)
     {
@@ -69,8 +71,8 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
         }
 
         return SameStorage(operand, target) ||
-            operand is IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, Type.SpecialType: SpecialType.System_String } addition &&
-            (ContainsStorage(addition.LeftOperand, target) || ContainsStorage(addition.RightOperand, target));
+            (operand is IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, Type.SpecialType: SpecialType.System_String } addition &&
+            (ContainsStorage(addition.LeftOperand, target) || ContainsStorage(addition.RightOperand, target)));
     }
 
     private static bool SameStorage(IOperation left, IOperation right)
@@ -96,16 +98,18 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool SameReceiver(IOperation? left, IOperation? right) =>
-        (left is null or IInstanceReferenceOperation) && (right is null or IInstanceReferenceOperation) ||
-        left is not null && right is not null && SameStorage(left, right);
+    private static bool SameReceiver(IOperation? left, IOperation? right)
+    {
+        return ((left is null or IInstanceReferenceOperation) && (right is null or IInstanceReferenceOperation)) ||
+        (left is not null && right is not null && SameStorage(left, right));
+    }
 
     private static bool FlowsIntoBody(IOperation assignment, ILoopOperation loop, ISymbol variable)
     {
         if (variable is IFieldSymbol)
         {
             // Data flow does not track fields; a plain assignment earlier in the same body discards the old value.
-            return !ResetBeforeAppend(assignment, loop, variable);
+            return !ResetBeforeAppend(assignment, loop);
         }
 
         // The whole loop statement counts, so a for loop's condition and incrementors are read as well.
@@ -120,7 +124,7 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
             flow.DataFlowsIn.Any(symbol => SymbolEqualityComparer.Default.Equals(symbol, variable));
     }
 
-    private static bool ResetBeforeAppend(IOperation assignment, ILoopOperation loop, ISymbol variable)
+    private static bool ResetBeforeAppend(IOperation assignment, ILoopOperation loop)
     {
         if (loop.Body is not IBlockOperation body)
         {
@@ -146,16 +150,21 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzer : DiagnosticAnalyzer
     }
 
     // A reset computed from the old value, such as a normalization, still carries it into the append.
-    private static bool DependsOn(IOperation value, IOperation target) =>
-        value.DescendantsAndSelf().Any(operation => SameStorage(operation, target));
-
-    private static ISymbol? GetVariable(IOperation operation) => operation switch
+    private static bool DependsOn(IOperation value, IOperation target)
     {
-        ILocalReferenceOperation local => local.Local,
-        IParameterReferenceOperation parameter => parameter.Parameter,
-        IFieldReferenceOperation field => field.Field,
-        _ => null
-    };
+        return value.DescendantsAndSelf().Any(operation => SameStorage(operation, target));
+    }
+
+    private static ISymbol? GetVariable(IOperation operation)
+    {
+        return operation switch
+        {
+            ILocalReferenceOperation local => local.Local,
+            IParameterReferenceOperation parameter => parameter.Parameter,
+            IFieldReferenceOperation field => field.Field,
+            _ => null
+        };
+    }
 
     private static bool SurvivesLoop(IOperation assignment, ISymbol variable)
     {

@@ -161,8 +161,12 @@ public sealed class CodeQlUselessUpcastAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessUpcastAnalyzer(), TestContext.CancellationToken);
+    }
+
     /// <summary>
     /// Verifies an inner upcast that chooses between user-defined conversions of the outer cast is kept.
     /// </summary>
@@ -252,7 +256,7 @@ public sealed class CodeQlUselessUpcastAnalyzerTests
 
         ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
 
-        Assert.ContainsSingle(diagnostics);
+        _ = Assert.ContainsSingle(diagnostics);
     }
 
     /// <summary>
@@ -281,6 +285,9 @@ public sealed class CodeQlUselessUpcastAnalyzerTests
         Assert.IsEmpty(diagnostics);
     }
 
-    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlUselessUpcastAnalyzer(), CancellationToken.None);
+    }
 }

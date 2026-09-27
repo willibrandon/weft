@@ -128,7 +128,9 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string body) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string body)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         $$"""
         internal sealed class Accumulator
         {
@@ -141,6 +143,8 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
             }
         }
         """, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
+    }
+
     /// <summary>
     /// Verifies a parameter or field reset before it is appended in each iteration is not reported.
     /// </summary>
@@ -224,7 +228,7 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
 
         ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
 
-        Assert.ContainsSingle(diagnostics);
+        _ = Assert.ContainsSingle(diagnostics);
     }
 
     /// <summary>
@@ -255,9 +259,12 @@ public sealed class CodeQlStringConcatenationInLoopAnalyzerTests(TestContext tes
 
         ImmutableArray<Diagnostic> diagnostics = await RunAsync(Source).ConfigureAwait(false);
 
-        Assert.ContainsSingle(diagnostics);
+        _ = Assert.ContainsSingle(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlStringConcatenationInLoopAnalyzer(), testContext.CancellationToken);
+    }
 }

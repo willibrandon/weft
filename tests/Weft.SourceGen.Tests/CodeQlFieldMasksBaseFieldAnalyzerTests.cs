@@ -109,6 +109,9 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzerTests(TestContext testConte
         Assert.IsGreaterThan(Source.IndexOf("class Careless", StringComparison.Ordinal), diagnostic.Location.SourceSpan.Start);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlFieldMasksBaseFieldAnalyzer(), testContext.CancellationToken);
+    }
 }

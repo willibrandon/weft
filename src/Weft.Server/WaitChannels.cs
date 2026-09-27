@@ -6,8 +6,8 @@ namespace Weft.Server;
 internal sealed class WaitChannels
 {
     private readonly Lock _gate = new();
-    private readonly Dictionary<string, Queue<TaskCompletionSource>> _waiters = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _signalled = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Queue<TaskCompletionSource>> _waiters = [with(StringComparer.Ordinal)];
+    private readonly HashSet<string> _signalled = [with(StringComparer.Ordinal)];
 
     /// <summary>
     /// Waits until the channel is signalled.
@@ -52,15 +52,15 @@ internal sealed class WaitChannels
                 source = queue.Dequeue();
                 if (queue.Count == 0)
                 {
-                    _waiters.Remove(channel);
+                    _ = _waiters.Remove(channel);
                 }
             }
             else
             {
-                _signalled.Add(channel);
+                _ = _signalled.Add(channel);
             }
         }
 
-        source?.TrySetResult();
+        _ = (source?.TrySetResult());
     }
 }

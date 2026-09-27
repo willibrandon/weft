@@ -30,7 +30,11 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.x
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Report SDK
+        run: dotnet --info
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

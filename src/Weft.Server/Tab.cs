@@ -82,7 +82,10 @@ internal sealed class Tab
     /// </summary>
     /// <param name="id">The block id.</param>
     /// <returns>The block, or null.</returns>
-    internal Block? Find(BlockId id) => Blocks.Find(block => block.Id == id);
+    internal Block? Find(BlockId id)
+    {
+        return Blocks.Find(block => block.Id == id);
+    }
 
     /// <summary>
     /// Gets the blocks in layout order: tiled first in tree order, then floating in creation order.

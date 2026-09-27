@@ -47,7 +47,7 @@ internal sealed partial class SessionRegistry
             Session session = tab.Session;
             if (!block.Floating)
             {
-                tab.Layout.Remove(block.Id);
+                _ = tab.Layout.Remove(block.Id);
                 block.Floating = true;
             }
 
@@ -75,10 +75,10 @@ internal sealed partial class SessionRegistry
             return;
         }
 
-        _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         if (renamed)
         {
-            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+            _ = Events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
         }
     }
 
@@ -111,7 +111,7 @@ internal sealed partial class SessionRegistry
                 BlockId anchor = tab.Active is { Floating: false } active && tab.Layout.Find(active.Id) is not null ? active.Id : tab.Layout.Blocks[^1];
                 try
                 {
-                    tab.Layout.Split(anchor, block.Id, SplitOrientation.LeftRight);
+                    _ = tab.Layout.Split(anchor, block.Id, SplitOrientation.LeftRight);
                 }
                 catch (LayoutException)
                 {
@@ -131,10 +131,10 @@ internal sealed partial class SessionRegistry
 
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         Persist(block.Tab.Session);
-        _events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+        _ = Events.Publish(ProtocolEvents.BlockFocused, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         if (renamed)
         {
-            _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
+            _ = Events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(block.Tab) }, ProtocolJsonContext.Default.TabEventData);
         }
     }
 
@@ -171,15 +171,15 @@ internal sealed partial class SessionRegistry
 
     private LayoutRect DefaultFloatBounds(Session session)
     {
-        int width = Math.Max(_options.FrameSize * 2 + 20, session.Width * 3 / 5);
-        int height = Math.Max(_options.FrameSize * 2 + 5, session.Height * 3 / 5);
+        int width = Math.Max((_options.FrameSize * 2) + 20, session.Width * 3 / 5);
+        int height = Math.Max((_options.FrameSize * 2) + 5, session.Height * 3 / 5);
         return new LayoutRect((session.Width - width) / 2, (session.Height - height) / 2, width, height);
     }
 
     private LayoutRect ClampBounds(Session session, LayoutRect bounds)
     {
-        int minimumWidth = _options.FrameSize * 2 + 2;
-        int minimumHeight = _options.FrameSize * 2 + 1;
+        int minimumWidth = (_options.FrameSize * 2) + 2;
+        int minimumHeight = (_options.FrameSize * 2) + 1;
         int width = Math.Clamp(bounds.Width, minimumWidth, session.Width);
         int height = Math.Clamp(bounds.Height, minimumHeight, session.Height);
         int x = Math.Clamp(bounds.X, 0, session.Width - width);

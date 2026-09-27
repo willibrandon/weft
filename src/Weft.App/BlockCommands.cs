@@ -65,7 +65,7 @@ internal static class BlockCommands
         command.Arguments.Add(keys);
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.SendKeysAsync(new BlockSendKeysParams
+            _ = await client.SendKeysAsync(new BlockSendKeysParams
             {
                 Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)),
                 Keys = parseResult.GetValue(keys) ?? [],
@@ -89,7 +89,7 @@ internal static class BlockCommands
         command.Arguments.Add(text);
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.TypeAsync(new BlockTextParams { Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)), Text = parseResult.GetValue(text) ?? string.Empty }, cancellationToken).ConfigureAwait(false);
+            _ = await client.TypeAsync(new BlockTextParams { Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)), Text = parseResult.GetValue(text) ?? string.Empty }, cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;
@@ -115,7 +115,7 @@ internal static class BlockCommands
             }
 
             value ??= (await client.GetPasteAsync(cancellationToken).ConfigureAwait(false)).Text;
-            await client.PasteAsync(new BlockTextParams { Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)), Text = value }, cancellationToken).ConfigureAwait(false);
+            _ = await client.PasteAsync(new BlockTextParams { Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)), Text = value }, cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;
@@ -269,7 +269,7 @@ internal static class BlockCommands
         command.Arguments.Add(target);
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.CloseBlockAsync(CommonOptions.EffectiveTarget(parseResult.GetValue(target)), cancellationToken).ConfigureAwait(false);
+            _ = await client.CloseBlockAsync(CommonOptions.EffectiveTarget(parseResult.GetValue(target)), cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;
@@ -288,7 +288,7 @@ internal static class BlockCommands
         command.Options.Add(signal);
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.KillBlockAsync(new BlockKillParams { Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)), Signal = parseResult.GetValue(signal) }, cancellationToken).ConfigureAwait(false);
+            _ = await client.KillBlockAsync(new BlockKillParams { Target = CommonOptions.EffectiveTarget(parseResult.GetValue(target)), Signal = parseResult.GetValue(signal) }, cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;

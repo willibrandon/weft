@@ -95,7 +95,7 @@ internal sealed class ControlListener
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
         {
-            _connections.Add(completion.Task);
+            _ = _connections.Add(completion.Task);
         }
 
         _ = ServeAsync(connection, completion, stopping);
@@ -115,10 +115,10 @@ internal sealed class ControlListener
         {
             lock (_gate)
             {
-                _connections.Remove(completion.Task);
+                _ = _connections.Remove(completion.Task);
             }
 
-            completion.TrySetResult();
+            _ = completion.TrySetResult();
         }
     }
 }

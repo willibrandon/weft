@@ -83,22 +83,30 @@ public sealed class LayoutCell
     /// </summary>
     /// <param name="block">The block.</param>
     /// <returns>The leaf.</returns>
-    internal static LayoutCell CreateLeaf(BlockId block) => new(null, block);
+    internal static LayoutCell CreateLeaf(BlockId block)
+    {
+        return new(null, block);
+    }
 
     /// <summary>
     /// Creates an empty split.
     /// </summary>
     /// <param name="orientation">The split orientation.</param>
     /// <returns>The split.</returns>
-    internal static LayoutCell CreateSplit(SplitOrientation orientation) => new(orientation, null);
+    internal static LayoutCell CreateSplit(SplitOrientation orientation)
+    {
+        return new(orientation, null);
+    }
 
     /// <summary>
     /// Gets the cell's size along an orientation.
     /// </summary>
     /// <param name="orientation">The orientation.</param>
     /// <returns>The width for left-right, otherwise the height.</returns>
-    internal int Size(SplitOrientation orientation) =>
-        orientation == SplitOrientation.LeftRight ? Width : Height;
+    internal int Size(SplitOrientation orientation)
+    {
+        return orientation == SplitOrientation.LeftRight ? Width : Height;
+    }
 
     /// <summary>
     /// Sets the cell's size along an orientation.
@@ -144,7 +152,10 @@ public sealed class LayoutCell
     /// Appends a child and takes ownership of it.
     /// </summary>
     /// <param name="child">The child.</param>
-    internal void AddChild(LayoutCell child) => InsertChild(_children.Count, child);
+    internal void AddChild(LayoutCell child)
+    {
+        InsertChild(_children.Count, child);
+    }
 
     /// <summary>
     /// Removes a child and clears its parent.
@@ -177,12 +188,15 @@ public sealed class LayoutCell
     /// </summary>
     internal void Detach()
     {
-        Parent?.RemoveChild(this);
+        _ = (Parent?.RemoveChild(this));
     }
 
     /// <summary>
     /// Gets the index of this cell within its parent, or -1 for the root.
     /// </summary>
     /// <returns>The index or -1.</returns>
-    internal int IndexInParent() => Parent is null ? -1 : Parent._children.IndexOf(this);
+    internal int IndexInParent()
+    {
+        return Parent is null ? -1 : Parent._children.IndexOf(this);
+    }
 }

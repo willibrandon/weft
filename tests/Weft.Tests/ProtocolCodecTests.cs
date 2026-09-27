@@ -17,10 +17,10 @@ public sealed class ProtocolCodecTests
     [TestMethod]
     public void OmittedFieldsKeepTheirDefaults()
     {
-        BlockWaitParams wait = ProtocolCodec.FromElement(JsonDocument.Parse("{}").RootElement, ProtocolJsonContext.Default.BlockWaitParams);
+        BlockWaitParams wait = ProtocolCodec.FromElement(JsonElement.Parse("{}"), ProtocolJsonContext.Default.BlockWaitParams);
         Assert.AreEqual(30_000, wait.TimeoutMs);
 
-        BlockKillParams kill = ProtocolCodec.FromElement(JsonDocument.Parse("{}").RootElement, ProtocolJsonContext.Default.BlockKillParams);
+        BlockKillParams kill = ProtocolCodec.FromElement(JsonElement.Parse("{}"), ProtocolJsonContext.Default.BlockKillParams);
         Assert.AreEqual(15, kill.Signal);
     }
 
@@ -114,7 +114,7 @@ public sealed class ProtocolCodecTests
     [TestMethod]
     public void MissingRequiredParameterIsInvalidParams()
     {
-        JsonElement element = JsonDocument.Parse("{\"target\":\"x\"}").RootElement.Clone();
+        var element = JsonElement.Parse("{\"target\":\"x\"}");
 
         ProtocolException exception = Assert.ThrowsExactly<ProtocolException>(() => ProtocolCodec.FromElement(element, ProtocolJsonContext.Default.BlockSplitParams));
 

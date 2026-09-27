@@ -163,7 +163,9 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
             .ConfigureAwait(false));
     }
 
-    private static string Source(string body, string type = "System.Collections.Generic.Dictionary<int, int>") => $$"""
+    private static string Source(string body, string type = "System.Collections.Generic.Dictionary<int, int>")
+    {
+        return $$"""
         internal static class Lookup
         {
             internal static async System.Threading.Tasks.Task<int> Read({{type}} values, int key, {{type}} other)
@@ -172,6 +174,7 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
             }
         }
         """;
+    }
 
     /// <summary>
     /// Verifies a guarded lookup later in the branch is reported when nothing before it can change the dictionary.
@@ -325,6 +328,8 @@ public sealed class CodeQlInefficientContainsKeyAnalyzerTests(TestContext testCo
         Assert.AreEqual(CodeQlInefficientContainsKeyAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) =>
-        CodeQlFileCompilation.AnalyzeAsync(source, new CodeQlInefficientContainsKeyAnalyzer(), testContext.CancellationToken);
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(source, new CodeQlInefficientContainsKeyAnalyzer(), testContext.CancellationToken);
+    }
 }

@@ -41,17 +41,17 @@ internal sealed class EventSubscription : IDisposable
         if (Interlocked.Read(ref _dropped) > 0 && _channel.Reader.Count < Capacity / 2)
         {
             long dropped = Interlocked.Exchange(ref _dropped, 0);
-            _channel.Writer.TryWrite(ProtocolCodec.Event(
+            _ = _channel.Writer.TryWrite(ProtocolCodec.Event(
                 ProtocolEvents.SubscriberPaused,
                 message.Seq ?? 0,
                 new SubscriberPausedData { Dropped = dropped },
                 ProtocolJsonContext.Default.SubscriberPausedData));
-            _channel.Writer.TryWrite(new ProtocolMessage { Event = ProtocolEvents.SubscriberResumed, Seq = message.Seq });
+            _ = _channel.Writer.TryWrite(new ProtocolMessage { Event = ProtocolEvents.SubscriberResumed, Seq = message.Seq });
         }
 
         if (!_channel.Writer.TryWrite(message))
         {
-            Interlocked.Increment(ref _dropped);
+            _ = Interlocked.Increment(ref _dropped);
         }
     }
 
@@ -60,7 +60,7 @@ internal sealed class EventSubscription : IDisposable
     /// </summary>
     public void Dispose()
     {
-        _channel.Writer.TryComplete();
+        _ = _channel.Writer.TryComplete();
         _onDispose(this);
     }
 }

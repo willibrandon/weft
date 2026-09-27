@@ -1,6 +1,6 @@
 #!/usr/bin/env -S dotnet --
-#:property TargetFramework=net10.0
-#:property LangVersion=14.0
+#:property TargetFramework=net11.0
+#:property LangVersion=15.0
 #:property Nullable=enable
 #:property TreatWarningsAsErrors=true
 
@@ -80,7 +80,7 @@ static void VerifyTrackedText(string root, IReadOnlyList<string> tracked, IColle
     foreach (string path in tracked)
     {
         string name = Path.GetFileName(path);
-        if (!textExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && !name.StartsWith('.') && !string.Equals(name, "LICENSE", StringComparison.Ordinal))
+        if (!textExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && !name.StartsWith('.', StringComparison.Ordinal) && !string.Equals(name, "LICENSE", StringComparison.Ordinal))
         {
             continue;
         }
@@ -150,7 +150,7 @@ static void VerifyDocumentation(string path, string text, ICollection<string> fa
 
         // Walk up over attributes, which may span lines, to the line that must be documentation.
         int above = i - 1;
-        while (above >= 0 && lines[above].Trim() is { Length: > 0 } candidate && !candidate.StartsWith("///", StringComparison.Ordinal) && !candidate.EndsWith(';') && !candidate.EndsWith('{') && !candidate.EndsWith('}'))
+        while (above >= 0 && lines[above].Trim() is { Length: > 0 } candidate && !candidate.StartsWith("///", StringComparison.Ordinal) && !candidate.EndsWith(';', StringComparison.Ordinal) && !candidate.EndsWith('{', StringComparison.Ordinal) && !candidate.EndsWith('}', StringComparison.Ordinal))
         {
             above--;
         }
@@ -166,9 +166,9 @@ static bool IsInterfaceMember(string[] lines, int index)
 {
     // Walk up to the enclosing type declaration at one less brace depth; members of an interface need no modifier.
     string trimmed = lines[index].Trim();
-    if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('[') ||
-        trimmed.StartsWith('{') || trimmed.StartsWith('}') || trimmed.StartsWith('#') ||
-        !(trimmed.EndsWith(';') || trimmed.EndsWith('{') || trimmed.EndsWith('}') || trimmed.Contains('(', StringComparison.Ordinal) || trimmed.Contains("=>", StringComparison.Ordinal)))
+    if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('[', StringComparison.Ordinal) ||
+        trimmed.StartsWith('{', StringComparison.Ordinal) || trimmed.StartsWith('}', StringComparison.Ordinal) || trimmed.StartsWith('#', StringComparison.Ordinal) ||
+        !(trimmed.EndsWith(';', StringComparison.Ordinal) || trimmed.EndsWith('{', StringComparison.Ordinal) || trimmed.EndsWith('}', StringComparison.Ordinal) || trimmed.Contains('(', StringComparison.Ordinal) || trimmed.Contains("=>", StringComparison.Ordinal)))
     {
         return false;
     }
@@ -194,7 +194,7 @@ static bool IsInterfaceDeclarationAbove(string[] lines, int brace)
     for (int declaration = brace; declaration >= 0; declaration--)
     {
         string candidate = lines[declaration].Trim();
-        if (candidate.Length == 0 || candidate == "{" || candidate.StartsWith('[') || candidate.StartsWith("//", StringComparison.Ordinal))
+        if (candidate.Length == 0 || candidate == "{" || candidate.StartsWith('[', StringComparison.Ordinal) || candidate.StartsWith("//", StringComparison.Ordinal))
         {
             continue;
         }
@@ -236,12 +236,9 @@ static async Task<IReadOnlyList<string>> ReadTrackedPathsAsync(string root)
     }
 
     string[] paths = output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
-    if (paths.Length == 0)
-    {
-        throw new InvalidOperationException("git ls-files listed no tracked files; refusing to verify an empty tree.");
-    }
-
-    return paths;
+    return paths.Length == 0
+        ? throw new InvalidOperationException("git ls-files listed no tracked files; refusing to verify an empty tree.")
+        : (IReadOnlyList<string>)paths;
 }
 
 /// <summary>

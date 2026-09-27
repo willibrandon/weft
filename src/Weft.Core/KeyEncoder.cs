@@ -19,12 +19,7 @@ public static class KeyEncoder
     public static byte[] Encode(string key, bool applicationCursorKeys)
     {
         ArgumentNullException.ThrowIfNull(key);
-        if (TryEncodeNamed(key, applicationCursorKeys, out byte[]? bytes))
-        {
-            return bytes;
-        }
-
-        return Encoding.UTF8.GetBytes(key);
+        return TryEncodeNamed(key, applicationCursorKeys, out byte[]? bytes) ? bytes : Encoding.UTF8.GetBytes(key);
     }
 
     /// <summary>

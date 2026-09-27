@@ -58,7 +58,7 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzer : DiagnosticAnalyzer
                     syntax.SemanticModel.GetSymbolInfo(access, syntax.CancellationToken).Symbol is IFieldSymbol field &&
                     syntax.ContainingSymbol?.ContainingType is INamedTypeSymbol accessingType)
                 {
-                    explicitBaseAccesses.TryAdd(AccessKey(accessingType, field), 0);
+                    _ = explicitBaseAccesses.TryAdd(AccessKey(accessingType, field), 0);
                 }
             }, SyntaxKind.SimpleMemberAccessExpression);
             start.RegisterCompilationEndAction(end =>
@@ -86,6 +86,8 @@ public sealed class CodeQlFieldMasksBaseFieldAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static string AccessKey(INamedTypeSymbol hidingType, IFieldSymbol inherited) =>
-        hidingType.OriginalDefinition.ToDisplayString() + "|" + inherited.OriginalDefinition.ToDisplayString();
+    private static string AccessKey(INamedTypeSymbol hidingType, IFieldSymbol inherited)
+    {
+        return hidingType.OriginalDefinition.ToDisplayString() + "|" + inherited.OriginalDefinition.ToDisplayString();
+    }
 }

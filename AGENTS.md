@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`weft` targets .NET 10 and C# 14. Read `CONTRIBUTING.md` before changing code, and
+`weft` targets .NET 11 and C# 15. Read `CONTRIBUTING.md` before changing code, and
 keep `docs/design.md` and `docs/progress.md` current as work lands.
 
 ## Required conventions
@@ -18,7 +18,7 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
   explicit visibility, no `this.`, language keywords over BCL type names, and `var`
   only when the type is apparent on the right-hand side.
 - Use Central Package Management as the single package-version source.
-- Support development with any compatible .NET 10 SDK. Do not add or retain a
+- Support development with any compatible .NET 11 SDK, including previews. Do not add or retain a
   `global.json` SDK pin or an exact `dotnet-version` value.
 - Do not hard-code versions for SDKs, runtimes, tools, or editor dependencies.
   Package manifests may retain versions only where the package manager requires
@@ -28,6 +28,7 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
 - Never use a version pin to work around a CI, network, registry, release, or
   runner failure. Diagnose the failure instead.
 - Keep nullable references, analyzers, deterministic builds, and warnings-as-errors enabled.
+- Suppress only the preview SDK notice NETSDK1057 through `SuppressNETCoreSdkPreviewMessage`.
 - Keep every product assembly Native AOT compatible; the `weft` executable is published with Native AOT.
 - Direct dependencies are limited to packages owned by Microsoft or the .NET Foundation,
   StreamJsonRpc, and Hex1b. Use System.CommandLine for CLI parsing and Hex1b for terminal UI.

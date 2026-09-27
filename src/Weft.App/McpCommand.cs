@@ -24,7 +24,7 @@ internal static class McpCommand
             {
                 try
                 {
-                    await context.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                    _ = await context.ConnectAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (InvalidOperationException exception)
                 {

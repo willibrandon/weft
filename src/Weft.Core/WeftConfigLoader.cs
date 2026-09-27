@@ -66,7 +66,7 @@ public static class WeftConfigLoader
     /// <returns>The configuration.</returns>
     public static WeftConfig LoadDefault(out string? error)
     {
-        TryLoad(WeftPaths.ResolveConfigPath(), out WeftConfig config, out error);
+        _ = TryLoad(WeftPaths.ResolveConfigPath(), out WeftConfig config, out error);
         return config;
     }
 

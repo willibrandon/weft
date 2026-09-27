@@ -45,7 +45,9 @@ public sealed class CodeQlConditionalRethrowAnalyzerTests
             new CodeQlUselessAssignmentToLocalAnalyzer(), TestContext.CancellationToken).ConfigureAwait(false));
     }
 
-    private static string CreateSource(string body) => $$"""
+    private static string CreateSource(string body)
+    {
+        return $$"""
         #nullable enable
         using System;
         using System.Runtime.ExceptionServices;
@@ -62,4 +64,5 @@ public sealed class CodeQlConditionalRethrowAnalyzerTests
             private static void Check(ExceptionDispatchInfo? failure) { {{body}} }
         }
         """;
+    }
 }

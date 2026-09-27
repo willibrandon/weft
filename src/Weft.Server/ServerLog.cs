@@ -41,20 +41,29 @@ internal static class ServerLog
     /// Writes an informational line.
     /// </summary>
     /// <param name="message">The message.</param>
-    internal static void Info(string message) => Write("info", message);
+    internal static void Info(string message)
+    {
+        Write("info", message);
+    }
 
     /// <summary>
     /// Writes a warning line.
     /// </summary>
     /// <param name="message">The message.</param>
-    internal static void Warn(string message) => Write("warn", message);
+    internal static void Warn(string message)
+    {
+        Write("warn", message);
+    }
 
     /// <summary>
     /// Writes an error line with exception details.
     /// </summary>
     /// <param name="message">The message.</param>
     /// <param name="exception">The exception.</param>
-    internal static void Error(string message, Exception exception) => Write("error", message + ": " + exception);
+    internal static void Error(string message, Exception exception)
+    {
+        Write("error", message + ": " + exception);
+    }
 
     private static void Write(string level, string message)
     {
