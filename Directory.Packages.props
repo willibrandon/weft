@@ -14,7 +14,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="$(RoslynVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" Condition="'$(MSBuildProjectName)' != 'Weft.SourceGen'" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(SourceGeneratorRoslynVersion)" Condition="'$(MSBuildProjectName)' == 'Weft.SourceGen'" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.400" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" />
     <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
