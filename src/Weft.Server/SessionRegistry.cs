@@ -10,7 +10,6 @@ internal sealed partial class SessionRegistry
 {
     private readonly Lock _gate = new();
     private readonly WeftServerOptions _options;
-    private readonly EventLog _events;
     private readonly SessionStore _store;
     private readonly List<Session> _sessions = [];
     private int _nextSession;
@@ -27,7 +26,7 @@ internal sealed partial class SessionRegistry
     internal SessionRegistry(WeftServerOptions options, EventLog events, SessionStore store)
     {
         _options = options;
-        _events = events;
+        Events = events;
         _store = store;
     }
 
@@ -39,7 +38,7 @@ internal sealed partial class SessionRegistry
     /// <summary>
     /// Gets the event log.
     /// </summary>
-    internal EventLog Events => _events;
+    internal EventLog Events { get; }
 
     /// <summary>
     /// Gets the number of sessions.
@@ -154,55 +153,35 @@ internal sealed partial class SessionRegistry
 
     private Session ResolveSessionUnsafe(TargetSelector selector)
     {
-        if (selector.Session is { } id)
+        return selector switch
         {
-            return _sessions.Find(session => session.Id == id)
-                ?? throw new ProtocolException(ErrorCodes.NotFound, "No session " + id + ".");
-        }
-
-        if (selector.SessionName is { } name)
-        {
-            return _sessions.Find(session => string.Equals(session.Name, name, StringComparison.Ordinal))
-                ?? throw new ProtocolException(ErrorCodes.NotFound, "No session named " + name + ".");
-        }
-
-        if (selector.Tab is { } tabId)
-        {
-            return _sessions.Find(session => session.FindTab(tabId) is not null)
-                ?? throw new ProtocolException(ErrorCodes.NotFound, "No tab " + tabId + ".");
-        }
-
-        if (selector.Block is { } blockId)
-        {
-            return _sessions.Find(session => session.FindBlock(blockId) is not null)
-                ?? throw new ProtocolException(ErrorCodes.NotFound, "No block " + blockId + ".");
-        }
-
-        return _sessions.OrderByDescending(session => session.LastActive).FirstOrDefault()
-            ?? throw new ProtocolException(ErrorCodes.NotFound, "There are no sessions.");
+            { Session: { } id } => _sessions.Find(session => session.Id == id)
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No session " + id + "."),
+            { SessionName: { } name } => _sessions.Find(session => string.Equals(session.Name, name, StringComparison.Ordinal))
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No session named " + name + "."),
+            { Tab: { } tabId } => _sessions.Find(session => session.FindTab(tabId) is not null)
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No tab " + tabId + "."),
+            { Block: { } blockId } => _sessions.Find(session => session.FindBlock(blockId) is not null)
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No block " + blockId + "."),
+            _ => _sessions.OrderByDescending(session => session.LastActive).FirstOrDefault()
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "There are no sessions.")
+        };
     }
 
     private Tab ResolveTabUnsafe(TargetSelector selector)
     {
         Session session = ResolveSessionUnsafe(selector);
-        if (selector.Tab is { } tabId)
+        return selector switch
         {
-            return session.FindTab(tabId) ?? throw new ProtocolException(ErrorCodes.NotFound, "No tab " + tabId + ".");
-        }
-
-        if (selector.TabIndex is { } index)
-        {
-            return index >= 1 && index <= session.Tabs.Count
+            { Tab: { } tabId } => session.FindTab(tabId)
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No tab " + tabId + "."),
+            { TabIndex: { } index } => index >= 1 && index <= session.Tabs.Count
                 ? session.Tabs[index - 1]
-                : throw new ProtocolException(ErrorCodes.NotFound, "Session " + session.Name + " has no tab " + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".");
-        }
-
-        if (selector.Block is { } blockId)
-        {
-            return session.FindBlock(blockId)?.Tab ?? throw new ProtocolException(ErrorCodes.NotFound, "No block " + blockId + ".");
-        }
-
-        return session.ActiveTab ?? throw new ProtocolException(ErrorCodes.NotFound, "Session " + session.Name + " has no tabs.");
+                : throw new ProtocolException(ErrorCodes.NotFound, "Session " + session.Name + " has no tab " + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "."),
+            { Block: { } blockId } => session.FindBlock(blockId)?.Tab
+                ?? throw new ProtocolException(ErrorCodes.NotFound, "No block " + blockId + "."),
+            _ => session.ActiveTab ?? throw new ProtocolException(ErrorCodes.NotFound, "Session " + session.Name + " has no tabs.")
+        };
     }
 
     private Block ResolveBlockUnsafe(TargetSelector selector)
@@ -225,21 +204,18 @@ internal sealed partial class SessionRegistry
         return tab.Active ?? throw new ProtocolException(ErrorCodes.NotFound, "Tab " + tab.Id + " has no blocks.");
     }
 
-    private LayoutOptions LayoutOptionsFor() => _options.FrameSize > 0 ? LayoutOptions.Framed : LayoutOptions.Separated;
+    private LayoutOptions LayoutOptionsFor()
+    {
+        return _options.FrameSize > 0 ? LayoutOptions.Framed : LayoutOptions.Separated;
+    }
 
     private string DefaultShell()
     {
-        if (!string.IsNullOrEmpty(_options.DefaultShell))
-        {
-            return _options.DefaultShell;
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            return Environment.GetEnvironmentVariable("COMSPEC") is { Length: > 0 } comspec ? comspec : "cmd.exe";
-        }
-
-        return Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } shell ? shell : "/bin/sh";
+        return !string.IsNullOrEmpty(_options.DefaultShell)
+            ? _options.DefaultShell
+            : OperatingSystem.IsWindows()
+            ? Environment.GetEnvironmentVariable("COMSPEC") is { Length: > 0 } comspec ? comspec : "cmd.exe"
+            : Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } shell ? shell : "/bin/sh";
     }
 
     private string NextSessionName()

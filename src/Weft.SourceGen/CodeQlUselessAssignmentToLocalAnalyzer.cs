@@ -126,7 +126,7 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzer : DiagnosticAnalyzer
         }
 
         return expression.Parent is RefExpressionSyntax or ArgumentSyntax { RefKindKeyword.RawKind: not 0 } ||
-            expression.Parent is PrefixUnaryExpressionSyntax prefix && prefix.IsKind(SyntaxKind.AddressOfExpression);
+            (expression.Parent is PrefixUnaryExpressionSyntax prefix && prefix.IsKind(SyntaxKind.AddressOfExpression));
     }
 
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
@@ -158,8 +158,10 @@ public sealed class CodeQlUselessAssignmentToLocalAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool FlowsOut(DataFlowAnalysis flow, ILocalSymbol local)
-        => flow.DataFlowsOut.Any(symbol =>
-            SymbolEqualityComparer.Default.Equals(symbol, local));
+    {
+        return flow.DataFlowsOut.Any(symbol =>
+                SymbolEqualityComparer.Default.Equals(symbol, local));
+    }
 
     private static void AnalyzeForEach(SyntaxNodeAnalysisContext context)
     {

@@ -28,7 +28,10 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     internal event Action<ReadOnlyMemory<byte>>? InputWritten;
 
     /// <inheritdoc />
-    public ValueTask<ReadOnlyMemory<byte>> ReadOutputAsync(CancellationToken ct = default) => _process.ReadOutputAsync(ct);
+    public ValueTask<ReadOnlyMemory<byte>> ReadOutputAsync(CancellationToken ct = default)
+    {
+        return _process.ReadOutputAsync(ct);
+    }
 
     /// <inheritdoc />
     public ValueTask WriteInputAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
@@ -38,11 +41,17 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     }
 
     /// <inheritdoc />
-    public ValueTask ResizeAsync(int width, int height, CancellationToken ct = default) => _process.ResizeAsync(width, height, ct);
+    public ValueTask ResizeAsync(int width, int height, CancellationToken ct = default)
+    {
+        return _process.ResizeAsync(width, height, ct);
+    }
 
     /// <summary>
     /// Releases nothing; the block host owns the process.
     /// </summary>
     /// <returns>A completed task.</returns>
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 }

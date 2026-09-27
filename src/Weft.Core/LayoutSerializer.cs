@@ -73,29 +73,29 @@ public static class LayoutSerializer
 
     private static void Append(LayoutCell cell, StringBuilder body)
     {
-        body.Append(CultureInfo.InvariantCulture, $"{cell.Width}x{cell.Height},{cell.X},{cell.Y}");
+        _ = body.Append(CultureInfo.InvariantCulture, $"{cell.Width}x{cell.Height},{cell.X},{cell.Y}");
         if (cell.IsLeaf)
         {
             if (cell.Block is { } block)
             {
-                body.Append(CultureInfo.InvariantCulture, $",{block.Value}");
+                _ = body.Append(CultureInfo.InvariantCulture, $",{block.Value}");
             }
 
             return;
         }
 
-        body.Append(cell.Orientation == SplitOrientation.LeftRight ? '{' : '[');
+        _ = body.Append(cell.Orientation == SplitOrientation.LeftRight ? '{' : '[');
         for (int i = 0; i < cell.Children.Count; i++)
         {
             if (i > 0)
             {
-                body.Append(',');
+                _ = body.Append(',');
             }
 
             Append(cell.Children[i], body);
         }
 
-        body.Append(cell.Orientation == SplitOrientation.LeftRight ? '}' : ']');
+        _ = body.Append(cell.Orientation == SplitOrientation.LeftRight ? '}' : ']');
     }
 
     private static LayoutCell? ParseCell(string body, ref int position)

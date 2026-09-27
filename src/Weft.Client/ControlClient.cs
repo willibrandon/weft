@@ -18,7 +18,6 @@ public sealed class ControlClient : IAsyncDisposable
     private readonly Channel<ProtocolMessage> _events = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Lock _gate = new();
     private readonly Dictionary<long, TaskCompletionSource<ProtocolMessage>> _pending = [];
-    private readonly Task _readLoop;
     private long _nextId;
     private bool _transportFailed;
 
@@ -29,7 +28,7 @@ public sealed class ControlClient : IAsyncDisposable
         _stream = new NetworkStream(socket, ownsSocket: false);
         _writer = new ProtocolWriter(_stream);
         _reader = new ProtocolReader(_stream);
-        _readLoop = ReadLoopAsync();
+        Closed = ReadLoopAsync();
     }
 
     /// <summary>
@@ -45,7 +44,7 @@ public sealed class ControlClient : IAsyncDisposable
     /// <summary>
     /// Gets a task that completes when the connection is closed by either side.
     /// </summary>
-    public Task Closed => _readLoop;
+    public Task Closed { get; }
 
     /// <summary>
     /// Gets whether a request failed while writing to the control transport.
@@ -134,18 +133,15 @@ public sealed class ControlClient : IAsyncDisposable
                 throw;
             }
             ProtocolMessage response = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            if (response.Error is { } error)
-            {
-                throw new ProtocolException(error.Code, error.Message);
-            }
-
-            return ProtocolCodec.FromElement(response.Result, resultInfo);
+            return response.Error is { } error
+                ? throw new ProtocolException(error.Code, error.Message)
+                : ProtocolCodec.FromElement(response.Result, resultInfo);
         }
         finally
         {
             lock (_gate)
             {
-                _pending.Remove(id);
+                _ = _pending.Remove(id);
             }
         }
     }
@@ -158,7 +154,7 @@ public sealed class ControlClient : IAsyncDisposable
     {
         await _closed.CancelAsync().ConfigureAwait(false);
         _socket.Dispose();
-        while (!_readLoop.IsCompleted)
+        while (!Closed.IsCompleted)
         {
             await Task.Delay(5, CancellationToken.None).ConfigureAwait(false);
         }
@@ -183,7 +179,7 @@ public sealed class ControlClient : IAsyncDisposable
 
                 if (message.IsEvent)
                 {
-                    _events.Writer.TryWrite(message);
+                    _ = _events.Writer.TryWrite(message);
                     continue;
                 }
 
@@ -192,10 +188,10 @@ public sealed class ControlClient : IAsyncDisposable
                     TaskCompletionSource<ProtocolMessage>? completion;
                     lock (_gate)
                     {
-                        _pending.TryGetValue(id, out completion);
+                        _ = _pending.TryGetValue(id, out completion);
                     }
 
-                    completion?.TrySetResult(message);
+                    _ = (completion?.TrySetResult(message));
                 }
             }
         }
@@ -221,7 +217,7 @@ public sealed class ControlClient : IAsyncDisposable
         }
         finally
         {
-            _events.Writer.TryComplete();
+            _ = _events.Writer.TryComplete();
             List<TaskCompletionSource<ProtocolMessage>> pending;
             lock (_gate)
             {
@@ -231,7 +227,7 @@ public sealed class ControlClient : IAsyncDisposable
 
             foreach (TaskCompletionSource<ProtocolMessage> completion in pending)
             {
-                completion.TrySetResult(ProtocolCodec.Failure(0, ErrorCodes.Unavailable, "The connection closed."));
+                _ = completion.TrySetResult(ProtocolCodec.Failure(0, ErrorCodes.Unavailable, "The connection closed."));
             }
         }
     }

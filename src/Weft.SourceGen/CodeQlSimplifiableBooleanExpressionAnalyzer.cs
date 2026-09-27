@@ -59,12 +59,7 @@ public sealed class CodeQlSimplifiableBooleanExpressionAnalyzer : DiagnosticAnal
         ExpressionSyntax throwCandidate,
         ExpressionSyntax literalCandidate)
     {
-        if (throwCandidate is not ThrowExpressionSyntax)
-        {
-            return false;
-        }
-
-        return literalCandidate.IsKind(SyntaxKind.TrueLiteralExpression) ||
-            literalCandidate.IsKind(SyntaxKind.FalseLiteralExpression);
+        return throwCandidate is ThrowExpressionSyntax && (literalCandidate.IsKind(SyntaxKind.TrueLiteralExpression) ||
+            literalCandidate.IsKind(SyntaxKind.FalseLiteralExpression));
     }
 }

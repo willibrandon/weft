@@ -8,9 +8,9 @@ namespace Weft.Client;
 internal sealed class SessionMirror
 {
     private readonly Lock _gate = new();
-    private readonly Dictionary<string, BlockInfo> _blocks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, BlockInfo> _blocks = [with(StringComparer.Ordinal)];
     private readonly List<TabInfo> _tabs = [];
-    private readonly HashSet<string> _activity = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _activity = [with(StringComparer.Ordinal)];
 
     /// <summary>
     /// Initializes the mirror from an attach snapshot.
@@ -176,13 +176,13 @@ internal sealed class SessionMirror
                     if (string.Equals(name, ProtocolEvents.TabSelected, StringComparison.Ordinal))
                     {
                         Session = Session with { ActiveTab = tab.Id };
-                        _activity.Remove(tab.Id);
+                        _ = _activity.Remove(tab.Id);
                     }
 
                     return null;
                 case ProtocolEvents.TabClosed:
                     TabInfo closed = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.TabEventData).Tab;
-                    _tabs.RemoveAll(existing => string.Equals(existing.Id, closed.Id, StringComparison.Ordinal));
+                    _ = _tabs.RemoveAll(existing => string.Equals(existing.Id, closed.Id, StringComparison.Ordinal));
                     return null;
                 case ProtocolEvents.BlockOutput:
                     BlockInfo producer = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block;

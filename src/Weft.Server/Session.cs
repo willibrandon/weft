@@ -93,12 +93,18 @@ internal sealed class Session
     /// </summary>
     /// <param name="id">The tab id.</param>
     /// <returns>The tab, or null.</returns>
-    internal Tab? FindTab(TabId id) => Tabs.Find(tab => tab.Id == id);
+    internal Tab? FindTab(TabId id)
+    {
+        return Tabs.Find(tab => tab.Id == id);
+    }
 
     /// <summary>
     /// Finds a block by id across tabs.
     /// </summary>
     /// <param name="id">The block id.</param>
     /// <returns>The block, or null.</returns>
-    internal Block? FindBlock(BlockId id) => Tabs.Select(tab => tab.Find(id)).FirstOrDefault(block => block is not null);
+    internal Block? FindBlock(BlockId id)
+    {
+        return Tabs.Select(tab => tab.Find(id)).FirstOrDefault(block => block is not null);
+    }
 }

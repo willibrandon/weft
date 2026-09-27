@@ -9,14 +9,17 @@ namespace Weft.Server;
 /// </summary>
 internal sealed class RequestDispatcher
 {
-    private readonly Dictionary<string, RequestHandler> _handlers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RequestHandler> _handlers = [with(StringComparer.Ordinal)];
 
     /// <summary>
     /// Registers a raw handler.
     /// </summary>
     /// <param name="method">The method name.</param>
     /// <param name="handler">The handler.</param>
-    internal void Register(string method, RequestHandler handler) => _handlers[method] = handler;
+    internal void Register(string method, RequestHandler handler)
+    {
+        _handlers[method] = handler;
+    }
 
     /// <summary>
     /// Registers a typed handler that decodes parameters and encodes the result.
@@ -88,5 +91,8 @@ internal sealed class RequestDispatcher
         }
     }
 
-    private static bool IsUnexpected(Exception exception) => exception is not OperationCanceledException;
+    private static bool IsUnexpected(Exception exception)
+    {
+        return exception is not OperationCanceledException;
+    }
 }

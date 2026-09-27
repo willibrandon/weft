@@ -18,12 +18,12 @@ internal static class EventCommands
         var command = new Command("events", "Stream server events as JSON lines until interrupted.");
         var since = new Option<long?>("--since") { Description = "Replay events after this sequence number." };
         command.Options.Add(since);
-        command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (_, client) =>
+        command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.SubscribeAsync(parseResult.GetValue(since), cancellationToken).ConfigureAwait(false);
+            _ = await client.SubscribeAsync(parseResult.GetValue(since), cancellationToken).ConfigureAwait(false);
             await foreach (ProtocolMessage message in client.Events.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                await Console.Out.WriteLineAsync(ProtocolCodec.ToJson(message)).ConfigureAwait(false);
+                await Console.Out.WriteLineAsync(ProtocolCodec.ToJson(message), cancellationToken).ConfigureAwait(false);
             }
         }, cancellationToken));
         return command;
@@ -40,7 +40,7 @@ internal static class EventCommands
         command.Arguments.Add(channel);
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.SignalAsync(parseResult.GetValue(channel) ?? string.Empty, cancellationToken).ConfigureAwait(false);
+            _ = await client.SignalAsync(parseResult.GetValue(channel) ?? string.Empty, cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;
@@ -59,7 +59,7 @@ internal static class EventCommands
         command.Options.Add(timeout);
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.WaitForAsync(new WaitChannelParams { Channel = parseResult.GetValue(channel) ?? string.Empty, TimeoutMs = parseResult.GetValue(timeout) }, cancellationToken).ConfigureAwait(false);
+            _ = await client.WaitForAsync(new WaitChannelParams { Channel = parseResult.GetValue(channel) ?? string.Empty, TimeoutMs = parseResult.GetValue(timeout) }, cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;

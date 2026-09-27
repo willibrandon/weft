@@ -1,6 +1,6 @@
 #!/usr/bin/env -S dotnet --
-#:property TargetFramework=net10.0
-#:property LangVersion=14.0
+#:property TargetFramework=net11.0
+#:property LangVersion=15.0
 #:property Nullable=enable
 #:property TreatWarningsAsErrors=true
 
@@ -88,10 +88,12 @@ internal static class SarifRead
     /// <param name="name">The property name.</param>
     /// <param name="fallback">The value to use when the property is absent.</param>
     /// <returns>The property value or the fallback.</returns>
-    internal static string ReadString(JsonElement element, string name, string fallback) =>
-        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+    internal static string ReadString(JsonElement element, string name, string fallback)
+    {
+        return element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? fallback
             : fallback;
+    }
 
     /// <summary>
     /// Reads the first physical location of a SARIF result.

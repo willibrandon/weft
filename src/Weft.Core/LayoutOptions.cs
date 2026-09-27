@@ -23,6 +23,8 @@ public readonly record struct LayoutOptions(int Spacing, int MinimumWidth, int M
     /// </summary>
     /// <param name="orientation">The orientation.</param>
     /// <returns>The minimum width for left-right, otherwise the minimum height.</returns>
-    public int Minimum(SplitOrientation orientation) =>
-        orientation == SplitOrientation.LeftRight ? MinimumWidth : MinimumHeight;
+    public int Minimum(SplitOrientation orientation)
+    {
+        return orientation == SplitOrientation.LeftRight ? MinimumWidth : MinimumHeight;
+    }
 }

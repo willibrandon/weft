@@ -28,14 +28,14 @@ internal static class SessionHandlers
             });
 
         dispatcher.Register(ProtocolMethods.SessionGet, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.SessionInfo,
-            async (context, parameters, cancellationToken) => (context.Registry.ToInfo(await Targets.SessionAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false))));
+            async (context, parameters, cancellationToken) => context.Registry.ToInfo(await Targets.SessionAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false)));
 
         dispatcher.Register(ProtocolMethods.SessionRename, ProtocolJsonContext.Default.SessionRenameParams, ProtocolJsonContext.Default.SessionInfo,
             async (context, parameters, cancellationToken) =>
             {
                 Session session = await Targets.SessionAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 context.Registry.RenameSession(session, parameters.Name);
-                return (context.Registry.ToInfo(session));
+                return context.Registry.ToInfo(session);
             });
 
         dispatcher.Register(ProtocolMethods.SessionClose, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.EmptyResult,
@@ -87,7 +87,7 @@ internal static class SessionHandlers
             async (context, parameters, cancellationToken) =>
             {
                 Session session = await Targets.SessionAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
-                return (new TabListResult { Tabs = session.Tabs.Select(context.Registry.ToInfo).ToList() });
+                return new TabListResult { Tabs = session.Tabs.Select(context.Registry.ToInfo).ToList() };
             });
 
         dispatcher.Register(ProtocolMethods.TabCreate, ProtocolJsonContext.Default.TabCreateParams, ProtocolJsonContext.Default.TabInfo,
@@ -103,7 +103,7 @@ internal static class SessionHandlers
             {
                 Tab tab = await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 context.Registry.SelectTab(tab);
-                return (context.Registry.ToInfo(tab));
+                return context.Registry.ToInfo(tab);
             });
 
         dispatcher.Register(ProtocolMethods.TabRename, ProtocolJsonContext.Default.TabRenameParams, ProtocolJsonContext.Default.TabInfo,
@@ -111,7 +111,7 @@ internal static class SessionHandlers
             {
                 Tab tab = await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 context.Registry.RenameTab(tab, parameters.Name);
-                return (context.Registry.ToInfo(tab));
+                return context.Registry.ToInfo(tab);
             });
 
         dispatcher.Register(ProtocolMethods.TabClose, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.EmptyResult,

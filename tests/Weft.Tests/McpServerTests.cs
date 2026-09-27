@@ -56,7 +56,7 @@ public sealed class McpServerTests
                 CallToolResult prompt = await client.CallToolAsync("wait_for", new Dictionary<string, object?> { ["target"] = blockId, ["pattern"] = "\\$\\s*$", ["timeoutMs"] = 20_000 }, cancellationToken: cancellationToken).ConfigureAwait(false);
                 Assert.StartsWith("pattern", Text(prompt));
 
-                await client.CallToolAsync("send_keys", new Dictionary<string, object?> { ["target"] = blockId, ["keys"] = s_keys }, cancellationToken: cancellationToken).ConfigureAwait(false);
+                _ = await client.CallToolAsync("send_keys", new Dictionary<string, object?> { ["target"] = blockId, ["keys"] = s_keys }, cancellationToken: cancellationToken).ConfigureAwait(false);
                 CallToolResult wait = await client.CallToolAsync("wait_for", new Dictionary<string, object?> { ["target"] = blockId, ["pattern"] = "^keys-4$", ["timeoutMs"] = 20_000 }, cancellationToken: cancellationToken).ConfigureAwait(false);
                 Assert.StartsWith("pattern", Text(wait));
 
@@ -77,6 +77,8 @@ public sealed class McpServerTests
         }
     }
 
-    private static string Text(CallToolResult result) =>
-        string.Join('\n', result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+    private static string Text(CallToolResult result)
+    {
+        return string.Join('\n', result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+    }
 }

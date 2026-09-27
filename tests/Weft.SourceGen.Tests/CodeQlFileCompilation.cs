@@ -39,8 +39,10 @@ internal static class CodeQlFileCompilation
                 .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
             var options = new CompilationWithAnalyzersOptions(new AnalyzerOptions([]), onAnalyzerException: null,
                 concurrentAnalysis: true, logAnalyzerExecutionTime: true, reportSuppressedDiagnostics: false);
-            return await compilation.WithAnalyzers([analyzer], options).GetAnalyzerDiagnosticsAsync(cancellationToken)
+            ImmutableArray<Diagnostic> diagnostics = await compilation.WithAnalyzers([analyzer], options).GetAnalyzerDiagnosticsAsync(cancellationToken)
                 .ConfigureAwait(false);
+            Assert.IsEmpty(diagnostics.Where(static diagnostic => diagnostic.Id == "AD0001"), string.Join(Environment.NewLine, diagnostics));
+            return diagnostics;
         }
         finally
         {

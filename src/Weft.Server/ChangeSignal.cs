@@ -36,6 +36,6 @@ internal sealed class ChangeSignal
             _current = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        previous.TrySetResult();
+        _ = previous.TrySetResult();
     }
 }

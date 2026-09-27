@@ -165,7 +165,9 @@ public sealed class CodeQlMissedTernaryOperatorAnalyzerTests(TestContext testCon
         Assert.IsEmpty(diagnostics);
     }
 
-    private static string CreateDiscardSource(string whenTrue, string whenFalse) => $$"""
+    private static string CreateDiscardSource(string whenTrue, string whenFalse)
+    {
+        return $$"""
         using System.Threading.Tasks;
         internal static class Projection
         {
@@ -185,6 +187,7 @@ public sealed class CodeQlMissedTernaryOperatorAnalyzerTests(TestContext testCon
             }
         }
         """;
+    }
 
     private async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {

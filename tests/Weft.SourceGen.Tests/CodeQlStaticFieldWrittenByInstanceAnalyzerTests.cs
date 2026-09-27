@@ -131,6 +131,9 @@ public sealed class CodeQlStaticFieldWrittenByInstanceAnalyzerTests(TestContext 
         Assert.IsEmpty(await AnalyzeAsync(Source).ConfigureAwait(false));
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlStaticFieldWrittenByInstanceAnalyzer(), testContext.CancellationToken);
+    }
 }

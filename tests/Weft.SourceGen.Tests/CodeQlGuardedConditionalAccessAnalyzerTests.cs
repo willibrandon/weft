@@ -112,7 +112,9 @@ public sealed class CodeQlGuardedConditionalAccessAnalyzerTests(TestContext test
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string setup) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string setup)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         $$"""
         internal static class Reader
         {
@@ -128,4 +130,5 @@ public sealed class CodeQlGuardedConditionalAccessAnalyzerTests(TestContext test
             private static void Change(ref string? value) => value = null;
         }
         """, new CodeQlConstantConditionAnalyzer(), testContext.CancellationToken);
+    }
 }

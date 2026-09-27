@@ -53,10 +53,10 @@ internal sealed partial class SessionRegistry
             _sessions.Add(session);
         }
 
-        _events.Publish(ProtocolEvents.SessionCreated, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
+        _ = Events.Publish(ProtocolEvents.SessionCreated, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
         try
         {
-            await CreateTabAsync(session, null, cwd, command, cancellationToken).ConfigureAwait(false);
+            _ = await CreateTabAsync(session, null, cwd, command, cancellationToken).ConfigureAwait(false);
         }
         catch (ProtocolException)
         {
@@ -94,7 +94,7 @@ internal sealed partial class SessionRegistry
 
         _store.Delete(previous);
         Persist(session);
-        _events.Publish(ProtocolEvents.SessionRenamed, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
+        _ = Events.Publish(ProtocolEvents.SessionRenamed, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
     }
 
     /// <summary>
@@ -103,8 +103,10 @@ internal sealed partial class SessionRegistry
     /// <param name="session">The session.</param>
     /// <param name="cancellationToken">Cancels the wait for blocks to stop.</param>
     /// <returns>A task that completes when the session is gone.</returns>
-    internal Task CloseSessionAsync(Session session, CancellationToken cancellationToken) =>
-        CloseSessionAsync(session, forget: true, cancellationToken);
+    internal Task CloseSessionAsync(Session session, CancellationToken cancellationToken)
+    {
+        return CloseSessionAsync(session, forget: true, cancellationToken);
+    }
 
     private async Task CloseSessionAsync(Session session, bool forget, CancellationToken cancellationToken)
     {
@@ -133,7 +135,7 @@ internal sealed partial class SessionRegistry
 
         foreach (AttachedClient client in clients)
         {
-            _events.Publish(ProtocolEvents.ClientDetached, new ClientEventData { Client = ToInfo(client) }, ProtocolJsonContext.Default.ClientEventData);
+            _ = Events.Publish(ProtocolEvents.ClientDetached, new ClientEventData { Client = ToInfo(client) }, ProtocolJsonContext.Default.ClientEventData);
         }
 
         if (forget)
@@ -141,7 +143,7 @@ internal sealed partial class SessionRegistry
             _store.Delete(session.Name);
         }
 
-        _events.Publish(ProtocolEvents.SessionClosed, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
+        _ = Events.Publish(ProtocolEvents.SessionClosed, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
     }
 
     /// <summary>
@@ -182,7 +184,7 @@ internal sealed partial class SessionRegistry
             resizes = ApplySizePolicyUnsafe(session);
         }
 
-        _events.Publish(ProtocolEvents.ClientAttached, new ClientEventData { Client = ToInfo(client) }, ProtocolJsonContext.Default.ClientEventData);
+        _ = Events.Publish(ProtocolEvents.ClientAttached, new ClientEventData { Client = ToInfo(client) }, ProtocolJsonContext.Default.ClientEventData);
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
         return client;
     }
@@ -206,7 +208,7 @@ internal sealed partial class SessionRegistry
             resizes = ApplySizePolicyUnsafe(client.Session);
         }
 
-        _events.Publish(ProtocolEvents.ClientDetached, new ClientEventData { Client = ToInfo(client) }, ProtocolJsonContext.Default.ClientEventData);
+        _ = Events.Publish(ProtocolEvents.ClientDetached, new ClientEventData { Client = ToInfo(client) }, ProtocolJsonContext.Default.ClientEventData);
         await ApplyResizesAsync(resizes, cancellationToken).ConfigureAwait(false);
     }
 
@@ -311,18 +313,13 @@ internal sealed partial class SessionRegistry
             resizes.AddRange(RelayoutUnsafe(tab));
         }
 
-        _events.Publish(ProtocolEvents.SessionResized, new SessionEventData { Session = ToInfoUnsafe(session) }, ProtocolJsonContext.Default.SessionEventData);
+        _ = Events.Publish(ProtocolEvents.SessionResized, new SessionEventData { Session = ToInfoUnsafe(session) }, ProtocolJsonContext.Default.SessionEventData);
         return resizes;
     }
 
     private static string ResolveDirectory(string? requested, string fallback)
     {
-        if (!string.IsNullOrEmpty(requested) && Directory.Exists(requested))
-        {
-            return Path.GetFullPath(requested);
-        }
-
-        return fallback;
+        return !string.IsNullOrEmpty(requested) && Directory.Exists(requested) ? Path.GetFullPath(requested) : fallback;
     }
 
     private void Persist(Session session)
@@ -428,7 +425,7 @@ internal sealed partial class SessionRegistry
             }
         }
 
-        await ResurrectAsync(name, cancellationToken).ConfigureAwait(false);
+        _ = await ResurrectAsync(name, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -458,7 +455,7 @@ internal sealed partial class SessionRegistry
             _sessions.Add(session);
         }
 
-        _events.Publish(ProtocolEvents.SessionCreated, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
+        _ = Events.Publish(ProtocolEvents.SessionCreated, new SessionEventData { Session = ToInfo(session) }, ProtocolJsonContext.Default.SessionEventData);
         foreach (StoredTab storedTab in stored.Tabs)
         {
             await RestoreTabAsync(session, storedTab, cancellationToken).ConfigureAwait(false);

@@ -36,8 +36,10 @@ internal sealed class OwningLocals
     /// </summary>
     /// <param name="symbol">The symbol an identifier resolved to.</param>
     /// <returns>Whether the symbol is an owning local.</returns>
-    internal bool Contains(ISymbol? symbol) =>
-        symbol is ILocalSymbol local && _locals.Any(owner => SymbolEqualityComparer.Default.Equals(owner, local));
+    internal bool Contains(ISymbol? symbol)
+    {
+        return symbol is ILocalSymbol local && _locals.Any(owner => SymbolEqualityComparer.Default.Equals(owner, local));
+    }
 
     /// <summary>
     /// Adds a local the resource was copied into, so cleanup through it counts too.
@@ -58,7 +60,7 @@ internal sealed class OwningLocals
     /// <returns>Whether the resource is still referenced.</returns>
     internal bool Remove(ILocalSymbol local)
     {
-        _locals.RemoveAll(owner => SymbolEqualityComparer.Default.Equals(owner, local));
+        _ = _locals.RemoveAll(owner => SymbolEqualityComparer.Default.Equals(owner, local));
         return _locals.Count > 0;
     }
 }

@@ -49,19 +49,28 @@ public class LayoutBenchmarks
     /// </summary>
     /// <returns>The layout string.</returns>
     [Benchmark]
-    public string Serialize() => _tree.Serialize();
+    public string Serialize()
+    {
+        return _tree.Serialize();
+    }
 
     /// <summary>
     /// Parses the layout string back into a tree.
     /// </summary>
     /// <returns>Whether parsing succeeded.</returns>
     [Benchmark]
-    public bool Parse() => LayoutSerializer.TryParse(_serialized, out _);
+    public bool Parse()
+    {
+        return LayoutSerializer.TryParse(_serialized, out _);
+    }
 
     /// <summary>
     /// Computes geometry for every block.
     /// </summary>
     /// <returns>The placements.</returns>
     [Benchmark]
-    public IReadOnlyList<BlockGeometry> Geometry() => _tree.ToGeometry();
+    public IReadOnlyList<BlockGeometry> Geometry()
+    {
+        return _tree.ToGeometry();
+    }
 }

@@ -17,14 +17,20 @@ public class ProtocolBenchmarks
     /// Encodes a request line to decode in the decode benchmark.
     /// </summary>
     [GlobalSetup]
-    public void Setup() => _line = ProtocolCodec.EncodeLine(ProtocolCodec.Request(1, ProtocolMethods.BlockSplit, _split, ProtocolJsonContext.Default.BlockSplitParams));
+    public void Setup()
+    {
+        _line = ProtocolCodec.EncodeLine(ProtocolCodec.Request(1, ProtocolMethods.BlockSplit, _split, ProtocolJsonContext.Default.BlockSplitParams));
+    }
 
     /// <summary>
     /// Encodes a split request to a line.
     /// </summary>
     /// <returns>The encoded bytes.</returns>
     [Benchmark]
-    public byte[] EncodeRequest() => ProtocolCodec.EncodeLine(ProtocolCodec.Request(1, ProtocolMethods.BlockSplit, _split, ProtocolJsonContext.Default.BlockSplitParams));
+    public byte[] EncodeRequest()
+    {
+        return ProtocolCodec.EncodeLine(ProtocolCodec.Request(1, ProtocolMethods.BlockSplit, _split, ProtocolJsonContext.Default.BlockSplitParams));
+    }
 
     /// <summary>
     /// Decodes a line and its parameters.

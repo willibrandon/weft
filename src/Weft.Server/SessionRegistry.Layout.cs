@@ -123,8 +123,8 @@ internal sealed partial class SessionRegistry
                 continue;
             }
 
-            int width = Math.Max(1, bounds.Width - 2 * frame);
-            int height = Math.Max(1, bounds.Height - 2 * frame);
+            int width = Math.Max(1, bounds.Width - (2 * frame));
+            int height = Math.Max(1, bounds.Height - (2 * frame));
             if (width != block.Width || height != block.Height)
             {
                 block.Width = width;
@@ -136,7 +136,7 @@ internal sealed partial class SessionRegistry
             }
         }
 
-        _events.Publish(ProtocolEvents.LayoutChanged, new LayoutEventData { Layout = ToLayoutInfoUnsafe(tab) }, ProtocolJsonContext.Default.LayoutEventData);
+        _ = Events.Publish(ProtocolEvents.LayoutChanged, new LayoutEventData { Layout = ToLayoutInfoUnsafe(tab) }, ProtocolJsonContext.Default.LayoutEventData);
         return resizes;
     }
 

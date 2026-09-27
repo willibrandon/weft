@@ -50,12 +50,9 @@ public sealed class ProtocolReader : IAsyncDisposable
             if (result.IsCompleted || result.IsCanceled)
             {
                 _reader.AdvanceTo(buffer.End);
-                if (buffer.Length > 0 && !buffer.IsSingleSegment || (buffer.IsSingleSegment && buffer.First.Span.Trim((byte)' ').Length > 0))
-                {
-                    throw new ProtocolException(ErrorCodes.InvalidRequest, "The stream ended in the middle of a line.");
-                }
-
-                return null;
+                return (buffer.Length > 0 && !buffer.IsSingleSegment) || (buffer.IsSingleSegment && buffer.First.Span.Trim((byte)' ').Length > 0)
+                    ? throw new ProtocolException(ErrorCodes.InvalidRequest, "The stream ended in the middle of a line.")
+                    : null;
             }
 
             _reader.AdvanceTo(buffer.Start, buffer.End);
@@ -90,6 +87,8 @@ public sealed class ProtocolReader : IAsyncDisposable
         }
     }
 
-    private static ReadOnlySpan<byte> TrimCarriageReturn(ReadOnlySpan<byte> line) =>
-        line.Length > 0 && line[^1] == (byte)'\r' ? line[..^1] : line;
+    private static ReadOnlySpan<byte> TrimCarriageReturn(ReadOnlySpan<byte> line)
+    {
+        return line.Length > 0 && line[^1] == (byte)'\r' ? line[..^1] : line;
+    }
 }

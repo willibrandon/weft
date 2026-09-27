@@ -17,11 +17,6 @@ internal static class IdFormat
     internal static bool TryParse(ReadOnlySpan<char> text, char prefix, out int value)
     {
         value = 0;
-        if (text.Length < 2 || text[0] != prefix)
-        {
-            return false;
-        }
-
-        return int.TryParse(text[1..], NumberStyles.None, CultureInfo.InvariantCulture, out value) && value > 0;
+        return text.Length >= 2 && text[0] == prefix && int.TryParse(text[1..], NumberStyles.None, CultureInfo.InvariantCulture, out value) && value > 0;
     }
 }

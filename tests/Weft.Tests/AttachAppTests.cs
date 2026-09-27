@@ -119,6 +119,86 @@ public sealed class AttachAppTests
         }
     }
 
+    /// <summary>
+    /// Verifies help opens through terminal keys and mouse clicks, restores terminal focus, and respects read-only input and disabled shortcuts.
+    /// </summary>
+    /// <param name="readOnly">Whether the attached client can type into the shell.</param>
+    /// <param name="disableShortcuts">Whether help is accessible only through its button.</param>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [Timeout(90_000, CooperativeCancellation = true)]
+    public async Task HelpOpensAndReturnsToTerminal(bool readOnly, bool disableShortcuts)
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            var config = new WeftConfig();
+            if (disableShortcuts)
+            {
+                config.Bindings["f1"] = "none";
+                config.Bindings["leader ?"] = "none";
+            }
+
+            var app = new AttachApp(new AttachOptions { SocketPath = fixture.SocketPath, Target = "help", Name = "test", Headless = (100, 30), ReadOnly = readOnly, Config = config });
+            Task run = app.RunAsync(cancellationToken);
+            Hex1bTerminal terminal = await WaitForTerminalAsync(app, run, cancellationToken).ConfigureAwait(false);
+            var automator = new Hex1bTerminalAutomator(terminal, TimeSpan.FromSeconds(20));
+            await automator.WaitUntilTextAsync(disableShortcuts ? "Help" : "F1 Help").ConfigureAwait(false);
+
+            if (!disableShortcuts)
+            {
+                await automator.KeyAsync(Hex1bKey.F1, cancellationToken).ConfigureAwait(false);
+                await automator.WaitUntilTextAsync("Search commands").ConfigureAwait(false);
+                if (readOnly)
+                {
+                    Assert.IsFalse(automator.CreateSnapshot().ContainsText("Split right"));
+                }
+
+                await automator.KeyAsync(Hex1bKey.Escape, cancellationToken).ConfigureAwait(false);
+                await automator.WaitUntilAsync(snapshot => !snapshot.ContainsText("Search commands")).ConfigureAwait(false);
+            }
+
+            (int helpLine, int helpColumn) = automator.CreateSnapshot().FindText("Help").Single();
+            await automator.ClickAtAsync(helpColumn, helpLine, ct: cancellationToken).ConfigureAwait(false);
+            await automator.WaitUntilTextAsync("Search commands").ConfigureAwait(false);
+            (int closeLine, int closeColumn) = automator.CreateSnapshot().FindText("Close").Last();
+            await automator.ClickAtAsync(closeColumn, closeLine, ct: cancellationToken).ConfigureAwait(false);
+            await automator.WaitUntilAsync(snapshot => !snapshot.ContainsText("Search commands")).ConfigureAwait(false);
+
+            ControlClient client = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (client.ConfigureAwait(false))
+            {
+                await ServerFixture.WaitForPromptAsync(client, "help", cancellationToken).ConfigureAwait(false);
+                await automator.TypeAsync("echo help-ok-$((6*7))", cancellationToken).ConfigureAwait(false);
+                await automator.EnterAsync(cancellationToken).ConfigureAwait(false);
+                if (readOnly)
+                {
+                    await automator.KeyAsync(Hex1bKey.F1, cancellationToken).ConfigureAwait(false);
+                    await automator.WaitUntilTextAsync("Search commands").ConfigureAwait(false);
+                    BlockCaptureResult capture = await client.CaptureAsync(new BlockCaptureParams { Target = "help" }, cancellationToken).ConfigureAwait(false);
+                    Assert.DoesNotContain(line => line.Contains("help-ok", StringComparison.Ordinal), capture.Lines);
+                    await automator.KeyAsync(Hex1bKey.Escape, cancellationToken).ConfigureAwait(false);
+                    await automator.WaitUntilAsync(snapshot => !snapshot.ContainsText("Search commands")).ConfigureAwait(false);
+                }
+                else
+                {
+                    await automator.WaitUntilTextAsync("help-ok-42").ConfigureAwait(false);
+                }
+            }
+
+            await automator.Ctrl().KeyAsync(Hex1bKey.B, cancellationToken).ConfigureAwait(false);
+            await automator.WaitUntilTextAsync("Ctrl+B\u2026").ConfigureAwait(false);
+            await automator.KeyAsync(Hex1bKey.D, cancellationToken).ConfigureAwait(false);
+            await run.WaitAsync(cancellationToken).ConfigureAwait(false);
+            Assert.IsNull(app.ExitMessage);
+        }
+    }
+
     private static async Task WaitForFramesAsync(AttachApp app, Hex1bTerminalAutomator automator, int frames)
     {
         try

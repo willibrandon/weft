@@ -14,7 +14,7 @@ internal static class LayoutHandlers
     internal static void Register(RequestDispatcher dispatcher)
     {
         dispatcher.Register(ProtocolMethods.LayoutGet, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.LayoutInfo,
-            async (context, parameters, cancellationToken) => (context.Registry.ToLayoutInfo(await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false))));
+            async (context, parameters, cancellationToken) => context.Registry.ToLayoutInfo(await Targets.TabAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false)));
 
         dispatcher.Register(ProtocolMethods.LayoutApply, ProtocolJsonContext.Default.LayoutApplyParams, ProtocolJsonContext.Default.LayoutInfo,
             async (context, parameters, cancellationToken) =>
@@ -36,7 +36,7 @@ internal static class LayoutHandlers
             async (context, parameters, cancellationToken) =>
             {
                 Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
-                await context.Registry.ResizeBlockAsync(block, parameters.Direction, parameters.Amount, cancellationToken).ConfigureAwait(false);
+                _ = await context.Registry.ResizeBlockAsync(block, parameters.Direction, parameters.Amount, cancellationToken).ConfigureAwait(false);
                 return context.Registry.ToLayoutInfo(block.Tab);
             });
     }

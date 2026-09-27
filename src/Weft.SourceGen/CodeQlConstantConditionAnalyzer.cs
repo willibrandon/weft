@@ -222,21 +222,18 @@ public sealed class CodeQlConstantConditionAnalyzer : DiagnosticAnalyzer
         DataFlowAnalysis? bodyFlow = context.SemanticModel.AnalyzeDataFlow(body);
         DataFlowAnalysis? initialFlow = context.SemanticModel.AnalyzeDataFlow(initializer);
         DataFlowAnalysis? subsequentFlow = context.SemanticModel.AnalyzeDataFlow(first, last);
-        if (bodyFlow is null || !bodyFlow.Succeeded ||
-            initialFlow is null || !initialFlow.Succeeded ||
-            subsequentFlow is null || !subsequentFlow.Succeeded)
-        {
-            return false;
-        }
-
-        return !bodyFlow.Captured.Any(symbol => IsCorrelatedSymbol(symbol, source, local)) &&
+        return bodyFlow is not null && bodyFlow.Succeeded &&
+            initialFlow is not null && initialFlow.Succeeded &&
+            subsequentFlow is not null && subsequentFlow.Succeeded && !bodyFlow.Captured.Any(symbol => IsCorrelatedSymbol(symbol, source, local)) &&
             !bodyFlow.UnsafeAddressTaken.Any(symbol => IsCorrelatedSymbol(symbol, source, local)) &&
             !initialFlow.WrittenInside.Any(symbol => IsCorrelatedSymbol(symbol, source, local)) &&
             !subsequentFlow.WrittenInside.Any(symbol => IsCorrelatedSymbol(symbol, source, local));
     }
 
-    private static bool IsCorrelatedSymbol(ISymbol symbol, ISymbol source, ILocalSymbol local) =>
-        SymbolEqualityComparer.Default.Equals(symbol, source) || SymbolEqualityComparer.Default.Equals(symbol, local);
+    private static bool IsCorrelatedSymbol(ISymbol symbol, ISymbol source, ILocalSymbol local)
+    {
+        return SymbolEqualityComparer.Default.Equals(symbol, source) || SymbolEqualityComparer.Default.Equals(symbol, local);
+    }
 
     private static bool MayHaveChangedSince(
         SyntaxNodeAnalysisContext context,
@@ -308,14 +305,9 @@ public sealed class CodeQlConstantConditionAnalyzer : DiagnosticAnalyzer
     private static bool AlwaysExits(StatementSyntax statement)
     {
         // A break or continue leaves the block the guard sits in as surely as a return does.
-        if (statement is ReturnStatementSyntax or ThrowStatementSyntax or BreakStatementSyntax or ContinueStatementSyntax)
-        {
-            return true;
-        }
-
-        return statement is BlockSyntax block &&
+        return statement is ReturnStatementSyntax or ThrowStatementSyntax or BreakStatementSyntax or ContinueStatementSyntax || (statement is BlockSyntax block &&
             block.Statements.Count > 0 &&
-            AlwaysExits(block.Statements[block.Statements.Count - 1]);
+            AlwaysExits(block.Statements[block.Statements.Count - 1]));
     }
 
     private static bool TryGetNullTest(PatternSyntax pattern, out bool testsNull)

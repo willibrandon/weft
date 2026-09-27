@@ -13,6 +13,7 @@ namespace Weft.Server;
 /// </remarks>
 internal sealed class OutputRevisionFilter : IHex1bTerminalPresentationFilter
 {
+    private readonly CursorReplay _cursorReplay = new();
     private long _revision;
 
     /// <summary>
@@ -31,29 +32,37 @@ internal sealed class OutputRevisionFilter : IHex1bTerminalPresentationFilter
     internal event Action? Output;
 
     /// <inheritdoc />
-    public ValueTask OnSessionStartAsync(int width, int height, DateTimeOffset timestamp, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnSessionStartAsync(int width, int height, DateTimeOffset timestamp, CancellationToken ct = default)
+    {
+        _cursorReplay.Resize(width);
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
     public ValueTask<IReadOnlyList<AnsiToken>> OnOutputAsync(IReadOnlyList<AppliedToken> appliedTokens, TimeSpan elapsed, CancellationToken ct = default)
     {
-        Interlocked.Increment(ref _revision);
+        _ = Interlocked.Increment(ref _revision);
         Changed.Notify();
         Output?.Invoke();
-        var tokens = new AnsiToken[appliedTokens.Count];
-        for (int i = 0; i < tokens.Length; i++)
-        {
-            tokens[i] = appliedTokens[i].Token;
-        }
-
-        return ValueTask.FromResult<IReadOnlyList<AnsiToken>>(tokens);
+        return ValueTask.FromResult(_cursorReplay.Project(appliedTokens));
     }
 
     /// <inheritdoc />
-    public ValueTask OnInputAsync(IReadOnlyList<AnsiToken> tokens, TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnInputAsync(IReadOnlyList<AnsiToken> tokens, TimeSpan elapsed, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
-    public ValueTask OnResizeAsync(int width, int height, TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnResizeAsync(int width, int height, TimeSpan elapsed, CancellationToken ct = default)
+    {
+        _cursorReplay.Resize(width);
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc />
-    public ValueTask OnSessionEndAsync(TimeSpan elapsed, CancellationToken ct = default) => ValueTask.CompletedTask;
+    public ValueTask OnSessionEndAsync(TimeSpan elapsed, CancellationToken ct = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 }

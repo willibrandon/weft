@@ -59,7 +59,7 @@ internal static class AttachCommand
             WeftConfig config = WeftConfigLoader.LoadDefault(out string? configError);
             if (configError is not null)
             {
-                await Console.Error.WriteLineAsync("weft: " + configError).ConfigureAwait(false);
+                await Console.Error.WriteLineAsync("weft: " + configError, cancellationToken).ConfigureAwait(false);
             }
 
             string? current = string.IsNullOrEmpty(target) ? null : target;
@@ -75,7 +75,8 @@ internal static class AttachCommand
                 await app.RunAsync(cancellationToken).ConfigureAwait(false);
                 if (app.ExitMessage is { } message)
                 {
-                    await Console.Error.WriteLineAsync("weft: " + message).ConfigureAwait(false);
+                    // The final message is still useful when cancellation ended the UI.
+                    await Console.Error.WriteLineAsync("weft: " + message, CancellationToken.None).ConfigureAwait(false);
                 }
 
                 if (app.SwitchTarget is not { } next)

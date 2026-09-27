@@ -54,12 +54,12 @@ internal sealed class BlockHost : IAsyncDisposable
         {
             OnClientConnected = (_, _) =>
             {
-                Interlocked.Increment(ref _clientCount);
+                _ = Interlocked.Increment(ref _clientCount);
                 return Task.CompletedTask;
             },
             OnClientDisconnected = (_, _) =>
             {
-                Interlocked.Decrement(ref _clientCount);
+                _ = Interlocked.Decrement(ref _clientCount);
                 return Task.CompletedTask;
             }
         };
@@ -152,12 +152,12 @@ internal sealed class BlockHost : IAsyncDisposable
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException or System.Net.Sockets.SocketException)
         {
-            _authorityReady.TrySetCanceled(CancellationToken.None);
+            _ = _authorityReady.TrySetCanceled(CancellationToken.None);
             throw new InvalidOperationException("The block's layout authority could not attach: " + exception.Message, exception);
         }
 
         long authorityStarted = Environment.TickCount64;
-        _authorityReady.TrySetResult();
+        _ = _authorityReady.TrySetResult();
         while (!_started.Task.IsCompleted)
         {
             if (_runTask.IsCompleted)
@@ -182,8 +182,10 @@ internal sealed class BlockHost : IAsyncDisposable
     /// <param name="bytes">The bytes.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when written.</returns>
-    internal ValueTask WriteInputAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken) =>
-        _process.WriteInputAsync(bytes, cancellationToken);
+    internal ValueTask WriteInputAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
+    {
+        return _process.WriteInputAsync(bytes, cancellationToken);
+    }
 
     /// <summary>
     /// Resizes the terminal and process through the layout authority.
@@ -192,8 +194,10 @@ internal sealed class BlockHost : IAsyncDisposable
     /// <param name="height">The height in rows.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>A task that completes when the resize has been sent.</returns>
-    internal Task ResizeAsync(int width, int height, CancellationToken cancellationToken) =>
-        _authority.ResizeAsync(width, height, cancellationToken);
+    internal Task ResizeAsync(int width, int height, CancellationToken cancellationToken)
+    {
+        return _authority.ResizeAsync(width, height, cancellationToken);
+    }
 
     /// <summary>
     /// Sends a signal to the process.
@@ -218,7 +222,7 @@ internal sealed class BlockHost : IAsyncDisposable
         long revision = Revision;
         int wanted = Math.Max(0, Math.Min(historyLines, _terminal.ScrollbackCount));
         using Hex1bTerminalSnapshot snapshot = _terminal.CreateSnapshot(wanted);
-        List<string> lines = new(snapshot.Height);
+        List<string> lines = [with(snapshot.Height)];
         if (format == CaptureFormat.Ansi)
         {
             lines.AddRange(snapshot.ToAnsi().Split('\n'));
@@ -256,7 +260,7 @@ internal sealed class BlockHost : IAsyncDisposable
         {
             try
             {
-                await run.ConfigureAwait(false);
+                _ = await run.ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -301,7 +305,7 @@ internal sealed class BlockHost : IAsyncDisposable
         catch (OperationCanceledException)
         {
             // The authority never attached, so the process is not started; StartAsync reports the reason.
-            _started.TrySetResult();
+            _ = _started.TrySetResult();
             return -1;
         }
 
@@ -312,11 +316,11 @@ internal sealed class BlockHost : IAsyncDisposable
         catch (Exception exception) when (exception is IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             _startError = exception;
-            _started.TrySetResult();
+            _ = _started.TrySetResult();
             return -1;
         }
 
-        _started.TrySetResult();
+        _ = _started.TrySetResult();
         ThreadPoolReservation.Acquire();
         int exitCode;
         try
@@ -336,7 +340,7 @@ internal sealed class BlockHost : IAsyncDisposable
         // The pseudo-terminal may still hold output the process wrote just before exiting; keep the
         // pumps running until the screen has been quiet for a moment so captures see the final state.
         await DrainOutputAsync(cancellationToken).ConfigureAwait(false);
-        _exited.TrySetResult(exitCode);
+        _ = _exited.TrySetResult(exitCode);
         Exited?.Invoke(exitCode);
         return exitCode;
     }
@@ -390,7 +394,7 @@ internal sealed class BlockHost : IAsyncDisposable
     {
         try
         {
-            await _presentation.AddClient(stream, cancellationToken).ConfigureAwait(false);
+            _ = await _presentation.AddClient(stream, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -418,7 +422,7 @@ internal sealed class BlockHost : IAsyncDisposable
         }
 
         Kill(9);
-        await WaitForExitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        _ = await WaitForExitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
     }
 
     private async Task<bool> WaitForExitAsync(TimeSpan timeout)

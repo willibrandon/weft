@@ -49,6 +49,9 @@ public sealed class CodeQlComplexConditionAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlComplexConditionAnalyzer(), testContext.CancellationToken);
+    }
 }

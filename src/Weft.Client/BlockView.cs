@@ -10,16 +10,14 @@ internal sealed class BlockView : IAsyncDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly Hex1bTerminal _terminal;
     private readonly Task _run;
-    private int _width;
-    private int _height;
 
     private BlockView(string id, Hex1bTerminal terminal, TerminalWidgetHandle handle, int width, int height)
     {
         Id = id;
         _terminal = terminal;
         Handle = handle;
-        _width = width;
-        _height = height;
+        Width = width;
+        Height = height;
         _run = RunAsync();
     }
 
@@ -99,12 +97,12 @@ internal sealed class BlockView : IAsyncDisposable
     /// <summary>
     /// Gets the block's terminal width.
     /// </summary>
-    internal int Width => _width;
+    internal int Width { get; private set; }
 
     /// <summary>
     /// Gets the block's terminal height.
     /// </summary>
-    internal int Height => _height;
+    internal int Height { get; private set; }
 
     /// <summary>
     /// Resizes the local terminal to match the block.
@@ -115,13 +113,13 @@ internal sealed class BlockView : IAsyncDisposable
     {
         width = Math.Max(1, width);
         height = Math.Max(1, height);
-        if (width == _width && height == _height)
+        if (width == Width && height == Height)
         {
             return;
         }
 
-        _width = width;
-        _height = height;
+        Width = width;
+        Height = height;
         _terminal.Resize(width, height);
     }
 
@@ -145,7 +143,7 @@ internal sealed class BlockView : IAsyncDisposable
     {
         try
         {
-            await _terminal.RunAsync(_stopping.Token).ConfigureAwait(false);
+            _ = await _terminal.RunAsync(_stopping.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

@@ -5,11 +5,11 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Phases 2 and 3 have landed on main, including the MCP server with per-call connection leases and the repository's own analyzers. Next: release pipeline, mouse resize, search.
+- Phases 2 and 3 have landed on main, including the MCP server with per-call connection leases and the repository's own analyzers. The .NET 11 preview migration, analyzer cleanup, visible Help controls, and startup prompt synchronization pass local verification; updated GitHub workflows await a run. Next: release pipeline, terminal and client resource baselines, mouse resize, search. The scale requirements are documented; measurements and enforcement remain pending.
 
 ## Phase 0: Research and scaffolding
 
-- [x] Superlogical announcement and coverage reviewed
+- [x] Durable-session multiplexer architecture and coverage reviewed
 - [x] Repository conventions extracted from csls and dotsider
 - [x] dotnet/runtime coding style adopted
 - [x] Name chosen: weft (free on nuget.org and Homebrew)
@@ -27,6 +27,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [x] Session, tab, and block model with stable ids
 - [x] PTY-backed blocks via Hex1b child processes with scrollback
 - [x] Attach and detach from any number of clients
+- [x] Startup prompt cursor restoration stays aligned between server and attached views, including an intervening resize
 - [x] Client renders server-side state (smart client, no ANSI re-parsing)
 - [x] Session persistence across server restarts (layout, cwd, commands)
 - [x] Real tests: server process, real shells, real sockets
@@ -37,7 +38,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [x] Floating blocks (server methods, persistence, client rendering; keyboard move pending)
 - [x] Status bar, block titles, and tab activity markers
 - [x] Leader-key keybinding model with configurable chords, an armed-leader indicator, and a lock mode (repeat pending)
-- [x] Command palette, rename prompts, session and tab pickers
+- [x] Command palette with a clickable Help button, direct F1 shortcut, and mouse-accessible Close button; rename prompts, session and tab pickers
 - [x] Native scrollback, selection, and copy through the terminal widget; paste from the server buffer (search pending)
 - [ ] Mouse: focus, select, and scroll work through the toolkit; drag to resize pending
 - [x] Themes and configuration file
@@ -57,6 +58,12 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Phase 4: Sharing and operations
 
+- [x] Resource ownership, terminal and client scale scenarios, and lifecycle acceptance criteria documented
+- [ ] Measure Native AOT server, client, and child-process footprint across empty blocks, filled history, many clients, and many tabs; set memory budgets and regression tolerances before release
+- [ ] Bound history and transient buffers by bytes, enforce aggregate retention limits, and evaluate compact or compressed history through Hex1b public APIs
+- [ ] Keep client terminal views to visible blocks and a bounded cache; dispose hidden views and restore state on return
+- [ ] Measure idle PTY workers, stack cost, wakeups, and reclamation; evaluate event-driven I/O through Hex1b public APIs
+- [ ] Verify bounded slow-reader behavior, abrupt client loss, workload-preserving reattach, and resource reclamation under repeated create and close cycles
 - [ ] Multi-client live sharing with read-only observers
 - [ ] Remote attach over forwarded sockets
 - [ ] Session recording and replay
@@ -80,3 +87,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 | 2026-09-26 | Source generator review follow-up | lock acquisition is checked before cleanup, checked blocks count their disposal, and the repository verifier applies source conventions to file-based apps |
 | 2026-09-26 | MCP bridge review follow-up | queued openers cancel promptly, disposal fails queued calls, and failed request writes prevent connection reuse |
 | 2026-09-26 | Hex1b update sizing | version 0.171 raises the linux-x64 Native AOT binary from 18.5 MB to 20.3 MB; the compiler size report rises from 20.6 MB to 22.6 MB, so the documented budget is raised to 24 MB |
+| 2026-09-27 | .NET 11 preview migration and analyzer enforcement | the prior green CI run used SDK 10.0.401, whose analysis level omitted the inherited full style ruleset; local SDK 11 RC1 exposed the findings. Projects and scripts now target .NET 11 with C# 15, all workflows follow the preview channel, and Style severity is explicitly an error. Only NETSDK1057 is suppressed. Clean build passes with zero warnings and errors, all 527 tests pass, and repository and formatting checks pass |
+| 2026-09-27 | Native AOT on macOS arm64 with .NET 11 RC1 | publish and executable version smoke test pass; the native symbol tool reports duplicate debug-map objects and missing module-cache metadata from prebuilt libraries. Those messages remain visible |
+| 2026-09-27 | Discoverable help in the attach UI | clickable Help and Close buttons, F1, and terminal focus restoration verified against real shells and sockets, including read-only input blocking and disabled help shortcuts. All 530 tests pass; build, formatting, and repository checks pass |
+| 2026-09-27 | Startup prompt synchronization | reproduced a view attaching between cursor save and restore with real shells, PTYs, and HMP1 sockets. The weft presentation filter now sends authoritative coordinates for ordinary restores. A fresh zsh attach shows one prompt without the stray `%`; regression coverage includes resize, a view present before the save, and pending wrap at the right edge. All 534 tests pass; build, formatting, and repository checks pass |

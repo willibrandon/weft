@@ -29,11 +29,11 @@ internal static class BlockHandlers
                     }
                 }
 
-                return (new BlockListResult { Blocks = blocks });
+                return new BlockListResult { Blocks = blocks };
             });
 
         dispatcher.Register(ProtocolMethods.BlockGet, ProtocolJsonContext.Default.TargetParams, ProtocolJsonContext.Default.BlockInfo,
-            async (context, parameters, cancellationToken) => (context.Registry.ToInfo(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false))));
+            async (context, parameters, cancellationToken) => context.Registry.ToInfo(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false)));
 
         dispatcher.Register(ProtocolMethods.BlockSplit, ProtocolJsonContext.Default.BlockSplitParams, ProtocolJsonContext.Default.BlockInfo,
             async (context, parameters, cancellationToken) =>
@@ -54,7 +54,7 @@ internal static class BlockHandlers
             async (context, parameters, cancellationToken) =>
             {
                 SessionRegistry.KillBlock(await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false), parameters.Signal);
-                return (EmptyResult.Instance);
+                return EmptyResult.Instance;
             });
 
         dispatcher.Register(ProtocolMethods.BlockRename, ProtocolJsonContext.Default.BlockRenameParams, ProtocolJsonContext.Default.BlockInfo,
@@ -62,7 +62,7 @@ internal static class BlockHandlers
             {
                 Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 context.Registry.RenameBlock(block, parameters.Title);
-                return (context.Registry.ToInfo(block));
+                return context.Registry.ToInfo(block);
             });
 
         dispatcher.Register(ProtocolMethods.BlockFocus, ProtocolJsonContext.Default.BlockFocusParams, ProtocolJsonContext.Default.BlockInfo,
@@ -76,7 +76,7 @@ internal static class BlockHandlers
                 }
 
                 context.Registry.FocusBlock(block);
-                return (context.Registry.ToInfo(block));
+                return context.Registry.ToInfo(block);
             });
 
         dispatcher.Register(ProtocolMethods.BlockZoom, ProtocolJsonContext.Default.BlockZoomParams, ProtocolJsonContext.Default.TabInfo,
@@ -154,7 +154,7 @@ internal static class BlockHandlers
             {
                 Block block = await Targets.BlockAsync(context.Registry, parameters.Target, cancellationToken).ConfigureAwait(false);
                 BlockCapture capture = SessionRegistry.Capture(block, parameters.History, parameters.Format);
-                return (new BlockCaptureResult
+                return new BlockCaptureResult
                 {
                     Block = block.Id.ToString(),
                     Revision = capture.Revision,
@@ -164,7 +164,7 @@ internal static class BlockHandlers
                     CursorY = capture.CursorY,
                     HistoryLines = capture.HistoryLines,
                     Lines = capture.Lines
-                });
+                };
             });
 
         dispatcher.Register(ProtocolMethods.BlockWait, ProtocolJsonContext.Default.BlockWaitParams, ProtocolJsonContext.Default.BlockWaitResult,

@@ -142,8 +142,12 @@ public sealed class CodeQlMissedWhereAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedWhereAnalyzer(), testContext.CancellationToken);
+    }
+
     /// <summary>
     /// Verifies a braced continue filter with later work is reported like the unbraced form.
     /// </summary>
@@ -179,6 +183,9 @@ public sealed class CodeQlMissedWhereAnalyzerTests(TestContext testContext)
         Assert.AreEqual(CodeQlMissedWhereAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
-    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedWhereAnalyzer(), testContext.CancellationToken);
+    }
 }

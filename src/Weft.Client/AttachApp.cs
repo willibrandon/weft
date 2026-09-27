@@ -17,16 +17,13 @@ public sealed class AttachApp
     private static readonly Hex1bColor s_terminal = Hex1bColor.FromRgb(0, 0, 0);
     private readonly AttachOptions _options;
     private readonly BindingTable _bindings;
-    private readonly Dictionary<string, BlockView> _views = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, BlockView> _views = [with(StringComparer.Ordinal)];
     private readonly Lock _gate = new();
     // Session names are trimmed by the server, so an entry that starts with a space can never collide with one.
     private const string NewSessionEntry = " + new session";
     private ControlClient? _control;
     private RootContext? _root;
     private SessionMirror? _mirror;
-    private Hex1bApp? _app;
-    private CancellationTokenSource? _stopping;
-    private string? _status;
     private const int LeaderSafetyTimeoutMs = 10_000;
     private const int ActivationIntervalMs = 1000;
     private long _lastActivation;
@@ -49,7 +46,7 @@ public sealed class AttachApp
         _bindings = BindingTable.Build(options.Config);
         if (_bindings.Warnings.Count > 0)
         {
-            _status = _bindings.Warnings[0];
+            Status = _bindings.Warnings[0];
         }
     }
 
@@ -66,7 +63,7 @@ public sealed class AttachApp
     /// <summary>
     /// Gets the latest error message from a failed action, for display.
     /// </summary>
-    public string? Status => _status;
+    public string? Status { get; private set; }
 
     /// <summary>
     /// Gets the outer terminal once running, for automation in tests.
@@ -76,7 +73,7 @@ public sealed class AttachApp
     /// <summary>
     /// Gets the Hex1b application once running, for diagnostics in tests.
     /// </summary>
-    internal Hex1bApp? App => _app;
+    internal Hex1bApp? App { get; private set; }
 
     /// <summary>
     /// Attaches, runs until detached, and cleans up.
@@ -86,7 +83,6 @@ public sealed class AttachApp
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _stopping = stopping;
         ControlClient control = await ControlClient.ConnectAsync(_options.SocketPath, cancellationToken).ConfigureAwait(false);
         await using (control.ConfigureAwait(false))
         {
@@ -111,7 +107,7 @@ public sealed class AttachApp
             ControlClient events = await ControlClient.ConnectAsync(_options.SocketPath, cancellationToken).ConfigureAwait(false);
             await using (events.ConfigureAwait(false))
             {
-                await events.SubscribeAsync(attached.Seq, cancellationToken).ConfigureAwait(false);
+                _ = await events.SubscribeAsync(attached.Seq, cancellationToken).ConfigureAwait(false);
                 Task pump = PumpEventsAsync(events, stopping.Token);
                 try
                 {
@@ -131,7 +127,7 @@ public sealed class AttachApp
                         try
                         {
                             using var detachTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                            await control.DetachAsync(attached.Client.Id, detachTimeout.Token).ConfigureAwait(false);
+                            _ = await control.DetachAsync(attached.Client.Id, detachTimeout.Token).ConfigureAwait(false);
                         }
                         catch (ProtocolException)
                         {
@@ -147,13 +143,16 @@ public sealed class AttachApp
         }
     }
 
-    private static Hex1bTheme ThemeFor(string name) => name.ToUpperInvariant() switch
+    private static Hex1bTheme ThemeFor(string name)
     {
-        "OCEAN" => Hex1bThemes.Ocean,
-        "HIGH-CONTRAST" or "HIGHCONTRAST" => Hex1bThemes.HighContrast,
-        "SUNSET" => Hex1bThemes.Sunset,
-        _ => Hex1bThemes.Default
-    };
+        return name.ToUpperInvariant() switch
+        {
+            "OCEAN" => Hex1bThemes.Ocean,
+            "HIGH-CONTRAST" or "HIGHCONTRAST" => Hex1bThemes.HighContrast,
+            "SUNSET" => Hex1bThemes.Sunset,
+            _ => Hex1bThemes.Default
+        };
+    }
 
     private async Task RunTerminalAsync(CancellationToken cancellationToken)
     {
@@ -163,7 +162,7 @@ public sealed class AttachApp
             .AddWorkloadFilter(new InputActivityFilter(OnUserInput))
             .WithHex1bApp(options => options.Theme = theme, app =>
             {
-                _app = app;
+                App = app;
                 return Render;
             });
         if (_options.Headless is { } headless)
@@ -177,7 +176,7 @@ public sealed class AttachApp
             Terminal = terminal;
             try
             {
-                await terminal.RunAsync(cancellationToken).ConfigureAwait(false);
+                _ = await terminal.RunAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -228,13 +227,13 @@ public sealed class AttachApp
                 if (mirror.Closed)
                 {
                     ExitMessage = "The session was closed.";
-                    _app?.RequestStop();
+                    App?.RequestStop();
                 }
 
                 // Output flows through each block's own stream; only a new activity marker needs a redraw.
                 if (!string.Equals(message.Event, ProtocolEvents.BlockOutput, StringComparison.Ordinal) || mirror.ActivityChanged)
                 {
-                    _app?.Invalidate();
+                    App?.Invalidate();
                 }
             }
         }
@@ -246,7 +245,7 @@ public sealed class AttachApp
         if (!cancellationToken.IsCancellationRequested)
         {
             ExitMessage ??= "Lost the connection to the server.";
-            _app?.RequestStop();
+            App?.RequestStop();
         }
     }
 
@@ -259,7 +258,7 @@ public sealed class AttachApp
                 return;
             }
 
-            var view = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => _app?.Invalidate());
+            var view = BlockView.Start(block.Id, block.SocketPath, block.Width, block.Height, _options.Name, () => App?.Invalidate());
             _views[block.Id] = view;
             if (!_options.ReadOnly)
             {
@@ -283,7 +282,7 @@ public sealed class AttachApp
         {
             if (_views.TryGetValue(id, out BlockView? view))
             {
-                _views.Remove(id);
+                _ = _views.Remove(id);
                 return view;
             }
 
@@ -352,7 +351,7 @@ public sealed class AttachApp
         BlockView? view = ViewFor(id);
         if (view is not null)
         {
-            _app?.RequestFocus(node => node is TerminalNode terminal && terminal.Handle == view.Handle);
+            App?.RequestFocus(node => node is TerminalNode terminal && terminal.Handle == view.Handle);
         }
     }
 
@@ -374,7 +373,7 @@ public sealed class AttachApp
 
     private string? FocusedBlockId()
     {
-        if (_app?.FocusedNode is TerminalNode terminal)
+        if (App?.FocusedNode is TerminalNode terminal)
         {
             lock (_gate)
             {
@@ -428,7 +427,7 @@ public sealed class AttachApp
         });
 
         bool pending = LeaderPending;
-        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, _status, _locked, pending, _bindings)]));
+        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, Status, _locked, pending, _bindings)]));
         Hex1bWidget bound = body.InputBindings(bindings => RegisterBindings(bindings, mirror));
         return pending ? bound.RedrawAfter(TimeSpan.FromMilliseconds(LeaderSafetyTimeoutMs)) : bound;
     }
@@ -436,17 +435,11 @@ public sealed class AttachApp
     private Hex1bWidget RenderLayout<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
         where TParent : Hex1bWidget
     {
-        if (layout.Zoomed is { } zoomed && mirror.FindBlock(zoomed) is { } zoomedBlock)
-        {
-            return RenderBlock(ctx, zoomedBlock, layout.Width, layout.Height, layout.FrameSize > 0, mirror);
-        }
-
-        if (!LayoutSerializer.TryParse(layout.Serialized, out LayoutCell? root) || root is null)
-        {
-            return ctx.Center(ctx.Text(layout.Floating.Count > 0 ? string.Empty : "(no blocks)")).FixedWidth(layout.Width).FixedHeight(layout.Height);
-        }
-
-        return RenderCell(ctx, root, layout, mirror);
+        return layout.Zoomed is { } zoomed && mirror.FindBlock(zoomed) is { } zoomedBlock
+            ? RenderBlock(ctx, zoomedBlock, layout.Width, layout.Height, layout.FrameSize > 0, mirror)
+            : !LayoutSerializer.TryParse(layout.Serialized, out LayoutCell? root) || root is null
+            ? ctx.Center(ctx.Text(layout.Floating.Count > 0 ? string.Empty : "(no blocks)")).FixedWidth(layout.Width).FixedHeight(layout.Height)
+            : RenderCell(ctx, root, layout, mirror);
     }
 
     private Hex1bWidget RenderCell<TParent>(WidgetContext<TParent> ctx, LayoutCell cell, LayoutInfo layout, SessionMirror mirror)
@@ -455,18 +448,14 @@ public sealed class AttachApp
         if (cell.IsLeaf)
         {
             BlockInfo? block = cell.Block is { } id ? mirror.FindBlock(id.ToString()) : null;
-            if (block is null)
-            {
-                return ctx.Text(string.Empty).FixedWidth(cell.Width).FixedHeight(cell.Height);
-            }
-
-            return RenderBlock(ctx, block, cell.Width, cell.Height, layout.FrameSize > 0, mirror);
+            return block is null
+                ? ctx.Text(string.Empty).FixedWidth(cell.Width).FixedHeight(cell.Height)
+                : RenderBlock(ctx, block, cell.Width, cell.Height, layout.FrameSize > 0, mirror);
         }
 
         int spacing = layout.FrameSize > 0 ? 0 : 1;
-        if (cell.Orientation == SplitOrientation.LeftRight)
-        {
-            return ctx.HStack(h =>
+        return cell.Orientation == SplitOrientation.LeftRight
+            ? ctx.HStack(h =>
             {
                 List<Hex1bWidget> children = [];
                 for (int i = 0; i < cell.Children.Count; i++)
@@ -480,10 +469,8 @@ public sealed class AttachApp
                 }
 
                 return [.. children];
-            }).FixedWidth(cell.Width).FixedHeight(cell.Height);
-        }
-
-        return ctx.VStack(v =>
+            }).FixedWidth(cell.Width).FixedHeight(cell.Height)
+            : ctx.VStack(v =>
         {
             List<Hex1bWidget> children = [];
             for (int i = 0; i < cell.Children.Count; i++)
@@ -528,14 +515,16 @@ public sealed class AttachApp
         return ctx.Border(inner).Title(title).FixedWidth(width).FixedHeight(height);
     }
 
-    private static InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, bool leaderPending, BindingTable bindings)
+    private InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, bool leaderPending, BindingTable bindings)
         where TParent : Hex1bWidget
     {
         IReadOnlyList<TabInfo> tabs = mirror.Tabs;
         string tabText = string.Join("  ", tabs.Select(tab =>
             (tab.Active ? "[" : string.Empty) + tab.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + tab.Name + (mirror.HasActivity(tab.Id) ? "*" : string.Empty) + (tab.Active ? "]" : string.Empty)));
         string size = layout.Width.ToString(System.Globalization.CultureInfo.InvariantCulture) + "×" + layout.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        string hint = locked ? bindings.ChordFor(ClientActions.Lock) + " unlock" : bindings.ChordFor(ClientActions.Palette) + " help";
+        string hint = locked ? bindings.ChordFor(ClientActions.Lock) + " unlock" : string.Empty;
+        string helpChord = locked ? string.Empty : bindings.ChordFor(ClientActions.Palette);
+        string helpLabel = string.IsNullOrEmpty(helpChord) ? "Help" : helpChord + " Help";
         if (leaderPending)
         {
             hint = bindings.Describe(bindings.Leader) + "\u2026";
@@ -551,7 +540,12 @@ public sealed class AttachApp
             s.Spacer(),
             s.Section(locked ? "LOCKED" : status ?? string.Empty),
             s.Section(size),
-            s.Section(hint)
+            s.Section(hint),
+            s.Section(b => b.Button(helpLabel).OnClick(args =>
+            {
+                DisarmLeader();
+                Execute(ClientActions.Palette, args.Context, mirror);
+            }))
         ]).Divider(" ");
     }
 
@@ -580,7 +574,7 @@ public sealed class AttachApp
         HashSet<KeyStroke> claimed = [];
         if (singleStrokeLeader)
         {
-            claimed.Add(_bindings.Leader.Steps[0]);
+            _ = claimed.Add(_bindings.Leader.Steps[0]);
         }
 
         foreach ((KeyChord chord, string action) in _bindings.Bindings)
@@ -603,7 +597,7 @@ public sealed class AttachApp
                     continue;
                 }
 
-                claimed.Add(rest[0]);
+                _ = claimed.Add(rest[0]);
                 BuildSteps(bindings, new KeyChord(rest))?.OverridesCapture().Action(context =>
                 {
                     DisarmLeader();
@@ -612,9 +606,14 @@ public sealed class AttachApp
                 continue;
             }
 
-            if (!pending)
+            if (!pending || (string.Equals(action, ClientActions.Palette, StringComparison.Ordinal) && chord.Steps.Count == 1))
             {
-                BuildSteps(bindings, chord)?.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
+                _ = claimed.Add(chord.Steps[0]);
+                BuildSteps(bindings, chord)?.OverridesCapture().Action(context =>
+                {
+                    DisarmLeader();
+                    Execute(captured, context, mirror);
+                }, captured);
             }
         }
 
@@ -629,7 +628,7 @@ public sealed class AttachApp
         }
 
         bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
-        claimed.Add(new KeyStroke(KeyModifiers.None, "escape"));
+        _ = claimed.Add(new KeyStroke(KeyModifiers.None, "escape"));
         foreach ((KeyStroke stroke, Hex1bKeyEvent keyEvent) in KeyMap.AllStrokes()
             .Where(stroke => !claimed.Contains(stroke))
             .Select(stroke => (stroke, KeyMap.ToKeyEvent(stroke)))
@@ -651,7 +650,7 @@ public sealed class AttachApp
     private static void SwallowUnclaimed(InputBindingsBuilder bindings, HashSet<KeyStroke> claimed)
     {
         // A read-only client never forwards keys, even if a click focused a block: every stroke it can name is
-        // bound to nothing, and the leader is the only key that still opens a menu of harmless actions.
+        // bound to nothing except the configured bindings for harmless client actions.
         foreach (KeyStroke stroke in KeyMap.AllStrokes().Where(stroke => !claimed.Contains(stroke)))
         {
             BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
@@ -694,13 +693,13 @@ public sealed class AttachApp
     {
         Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderSafetyTimeoutMs);
         ClientLog.Debug("leader armed");
-        _app?.Invalidate();
+        App?.Invalidate();
     }
 
     private void DisarmLeader()
     {
         Volatile.Write(ref _leaderPendingUntil, 0);
-        _app?.Invalidate();
+        App?.Invalidate();
     }
 
     private void Execute(string action, InputBindingActionContext context, SessionMirror mirror)
@@ -708,8 +707,8 @@ public sealed class AttachApp
         // The palette and pickers route here too, so the read-only allowlist is enforced once, in one place.
         if (_options.ReadOnly && !ClientActions.IsReadOnlySafe(action))
         {
-            _status = "read-only";
-            _app?.Invalidate();
+            Status = "read-only";
+            App?.Invalidate();
             return;
         }
 
@@ -722,7 +721,7 @@ public sealed class AttachApp
         {
             case ClientActions.Detach:
                 ExitMessage = null;
-                _app?.RequestStop();
+                App?.RequestStop();
                 break;
             case ClientActions.TabNew:
                 Fire(client => client.CreateTabAsync(new TabCreateParams { Target = mirror.Session.Id }, CancellationToken.None));
@@ -773,7 +772,7 @@ public sealed class AttachApp
                 break;
             case ClientActions.CopyMode:
                 ViewFor(FocusedBlockId())?.Handle.EnterCopyMode();
-                _app?.Invalidate();
+                App?.Invalidate();
                 break;
             case ClientActions.Paste:
                 WithFocused(id => Fire(async client =>
@@ -829,13 +828,13 @@ public sealed class AttachApp
                 if (!_locked && string.IsNullOrEmpty(_bindings.ChordFor(ClientActions.Lock)))
                 {
                     // Without a chord to unlock, locking would strand the client.
-                    _status = "lock has no key bound";
-                    _app?.Invalidate();
+                    Status = "lock has no key bound";
+                    App?.Invalidate();
                     break;
                 }
 
                 _locked = !_locked;
-                _app?.Invalidate();
+                App?.Invalidate();
                 break;
             case ClientActions.Palette:
                 ShowPalette(context, mirror);
@@ -855,14 +854,14 @@ public sealed class AttachApp
     {
         PopupStack popups = context.Popups;
         RootContext ctx = _root!;
-        popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+        _ = popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
         [
             b.VStack(v =>
             [
                 v.Text(" " + label + " "),
                 v.TextBox(initial).OnSubmit(e =>
                 {
-                    popups.Pop();
+                    _ = popups.Pop();
                     onSubmit(e.Text);
                 }).FixedWidth(40),
                 v.Text(" Enter to apply, Escape to cancel ")
@@ -870,11 +869,20 @@ public sealed class AttachApp
         ]).Title(" weft ")), popups));
     }
 
-    private static Hex1bWidget Dismissable(Hex1bWidget content, PopupStack popups) =>
-        content.InputBindings(bindings => bindings.Key(Hex1bKey.Escape).Action(_ => popups.Pop(), "Dismiss"));
+    private static Hex1bWidget Dismissable(Hex1bWidget content, PopupStack popups)
+    {
+        return content.InputBindings(bindings => bindings.Key(Hex1bKey.Escape).Action(_ => popups.Pop(), "Dismiss"));
+    }
 
     private void ShowPalette(InputBindingActionContext context, SessionMirror mirror)
     {
+        // A mouse click focuses the Help button. Restore the block before opening the popup so
+        // dismissing it returns keyboard input to the terminal instead of leaving it on the button.
+        if (ViewFor(FocusedBlockId()) is { } view)
+        {
+            _ = context.FocusWhere(node => node is TerminalNode terminal && terminal.Handle == view.Handle);
+        }
+
         PopupStack popups = context.Popups;
         RootContext ctx = _root!;
         List<PaletteEntry> entries =
@@ -884,17 +892,23 @@ public sealed class AttachApp
                 .Where(item => !string.Equals(item.Action, ClientActions.Lock, StringComparison.Ordinal) || !string.IsNullOrEmpty(_bindings.ChordFor(ClientActions.Lock)))
                 .Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))
         ];
-        popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+        int visibleItems = Math.Min(entries.Count, Math.Clamp(HostSize.Read(_options.Headless).Height - 8, 1, 16));
+        _ = popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
         [
-            b.SelectionPrompt(entries)
-                .Prompt("weft")
-                .MaxVisibleItems(16)
-                .OnSelected(entry =>
-                {
-                    popups.Pop();
-                    Execute(entry.Action, context, mirror);
-                })
-        ]).Title(" commands ")), popups));
+            b.VStack(v =>
+            [
+                v.SelectionPrompt(entries)
+                    .Prompt("Search commands")
+                    .MaxVisibleItems(visibleItems)
+                    .OnSelected(entry =>
+                    {
+                        _ = popups.Pop();
+                        Execute(entry.Action, context, mirror);
+                    }).FixedHeight(visibleItems + 2),
+                v.Text(" Type to filter. ↑↓ choose. Enter runs. Esc closes. "),
+                v.Button("Close").OnClick(_ => popups.Pop())
+            ])
+        ]).Title(" Help and commands ")), popups));
     }
 
     private void PickSession(InputBindingActionContext context, SessionMirror mirror)
@@ -911,11 +925,11 @@ public sealed class AttachApp
                 names.Add(NewSessionEntry);
             }
 
-            popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+            _ = popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
             [
                 b.SelectionPrompt(names).Prompt("session").MaxVisibleItems(12).OnSelected(name =>
                 {
-                    popups.Pop();
+                    _ = popups.Pop();
                     if (string.Equals(name, mirror.Session.Name, StringComparison.Ordinal))
                     {
                         return;
@@ -923,10 +937,10 @@ public sealed class AttachApp
 
                     SwitchTarget = string.Equals(name, NewSessionEntry, StringComparison.Ordinal) ? string.Empty : name;
                     ExitMessage = null;
-                    _app?.RequestStop();
+                    App?.RequestStop();
                 })
             ]).Title(" sessions ")), popups));
-            _app?.Invalidate();
+            App?.Invalidate();
             return result;
         });
     }
@@ -946,15 +960,15 @@ public sealed class AttachApp
 
         List<string> labels = [.. items.Select(item => item.Label)];
         RootContext ctx = _root!;
-        popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
+        _ = popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
         [
             b.SelectionPrompt(labels).Prompt("go to").MaxVisibleItems(16).OnSelected(label =>
             {
-                popups.Pop();
-                (string _, string tab, string? block) = items.First(item => string.Equals(item.Label, label, StringComparison.Ordinal));
+                _ = popups.Pop();
+                (_, string tab, string? block) = items.First(item => string.Equals(item.Label, label, StringComparison.Ordinal));
                 Fire(async client =>
                 {
-                    await client.SelectTabAsync(tab, CancellationToken.None).ConfigureAwait(false);
+                    _ = await client.SelectTabAsync(tab, CancellationToken.None).ConfigureAwait(false);
                     if (block is not null)
                     {
                         BlockInfo focused = await client.FocusAsync(new BlockFocusParams { Target = block }, CancellationToken.None).ConfigureAwait(false);
@@ -980,23 +994,29 @@ public sealed class AttachApp
         Fire(client => client.SelectTabAsync(tabs[next].Id, CancellationToken.None));
     }
 
-    private void Split(SplitOrientation orientation) =>
+    private void Split(SplitOrientation orientation)
+    {
         WithFocused(id =>
         {
             ClientLog.Debug("split " + id + " " + orientation);
             Fire(client => client.SplitAsync(new BlockSplitParams { Target = id, Orientation = orientation }, CancellationToken.None));
         });
+    }
 
-    private void Resize(LayoutDirection direction) =>
+    private void Resize(LayoutDirection direction)
+    {
         WithFocused(id => Fire(client => client.ResizeAsync(new LayoutResizeParams { Target = id, Direction = direction, Amount = 5 }, CancellationToken.None)));
+    }
 
-    private void FocusDirection(LayoutDirection direction) =>
+    private void FocusDirection(LayoutDirection direction)
+    {
         WithFocused(id => Fire(async client =>
         {
             BlockInfo block = await client.FocusAsync(new BlockFocusParams { Target = id, Direction = direction }, CancellationToken.None).ConfigureAwait(false);
             FocusView(block.Id);
             return block;
         }));
+    }
 
     private void SendLeaderKey()
     {
@@ -1051,13 +1071,13 @@ public sealed class AttachApp
     {
         try
         {
-            await call(control).ConfigureAwait(false);
-            _status = null;
+            _ = await call(control).ConfigureAwait(false);
+            Status = null;
             ClientLog.Debug("action completed.");
         }
         catch (ProtocolException exception)
         {
-            _status = exception.Message;
+            Status = exception.Message;
             ClientLog.Debug("action failed: " + exception.Message);
         }
         catch (OperationCanceledException)
@@ -1065,7 +1085,7 @@ public sealed class AttachApp
             ClientLog.Debug("action ignored OperationCanceledException.");
         }
 
-        _app?.Invalidate();
+        App?.Invalidate();
     }
 
     private void ReportSize(int width, int height)

@@ -77,7 +77,7 @@ internal static class BlockWaiter
                     return new BlockWaitResult { Outcome = WaitOutcome.Exit, Revision = revision, ExitCode = block.ExitCode };
                 }
 
-                await Task.WhenAny(outputChanged!, stateChanged).ConfigureAwait(false);
+                _ = await Task.WhenAny(outputChanged!, stateChanged).ConfigureAwait(false);
 
                 if (timeout.IsCancellationRequested)
                 {

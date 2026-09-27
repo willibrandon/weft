@@ -35,8 +35,10 @@ internal sealed class ServerFixture : IAsyncDisposable
     /// Starts a server on a fresh temporary root; call <see cref="WaitReadyAsync"/> before connecting.
     /// </summary>
     /// <returns>The fixture.</returns>
-    internal static ServerFixture Start() =>
-        Resume(Path.Join(Path.GetTempPath(), "weft-test-" + Guid.NewGuid().ToString("N")[..10]));
+    internal static ServerFixture Start()
+    {
+        return Resume(Path.Join(Path.GetTempPath(), "weft-test-" + Guid.NewGuid().ToString("N")[..10]));
+    }
 
     /// <summary>
     /// Starts a server on an existing root so stored sessions can be resurrected.
@@ -98,7 +100,10 @@ internal sealed class ServerFixture : IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">Cancels the connection.</param>
     /// <returns>The client.</returns>
-    internal Task<ControlClient> ConnectAsync(CancellationToken cancellationToken) => ControlClient.ConnectAsync(SocketPath, cancellationToken);
+    internal Task<ControlClient> ConnectAsync(CancellationToken cancellationToken)
+    {
+        return ControlClient.ConnectAsync(SocketPath, cancellationToken);
+    }
 
     /// <summary>
     /// Stops the server but leaves its state on disk for a later resume.

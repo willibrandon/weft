@@ -6,7 +6,6 @@ namespace Weft.Core;
 /// <param name="options">The sizing rules.</param>
 public sealed class LayoutTree(LayoutOptions options)
 {
-    private LayoutCell? _root;
 
     /// <summary>
     /// Gets the sizing rules.
@@ -16,33 +15,27 @@ public sealed class LayoutTree(LayoutOptions options)
     /// <summary>
     /// Gets the root cell, or null when the tree holds no blocks.
     /// </summary>
-    public LayoutCell? Root => _root;
+    public LayoutCell? Root { get; private set; }
 
     /// <summary>
     /// Gets whether the tree holds no blocks.
     /// </summary>
-    public bool IsEmpty => _root is null;
+    public bool IsEmpty => Root is null;
 
     /// <summary>
     /// Gets the width of the whole layout, which may exceed the last fitted width when blocks cannot shrink.
     /// </summary>
-    public int Width => _root?.Width ?? 0;
+    public int Width => Root?.Width ?? 0;
 
     /// <summary>
     /// Gets the height of the whole layout, which may exceed the last fitted height when blocks cannot shrink.
     /// </summary>
-    public int Height => _root?.Height ?? 0;
+    public int Height => Root?.Height ?? 0;
 
     /// <summary>
     /// Gets the blocks in layout order, left to right and top to bottom.
     /// </summary>
-    public IReadOnlyList<BlockId> Blocks
-    {
-        get
-        {
-            return Leaves().Select(leaf => leaf.Block).OfType<BlockId>().ToList();
-        }
-    }
+    public IReadOnlyList<BlockId> Blocks => Leaves().Select(leaf => leaf.Block).OfType<BlockId>().ToList();
 
     /// <summary>
     /// Replaces the whole tree with a single block filling the given size.
@@ -55,7 +48,7 @@ public sealed class LayoutTree(LayoutOptions options)
         var leaf = LayoutCell.CreateLeaf(block);
         leaf.Width = Math.Max(width, Options.MinimumWidth);
         leaf.Height = Math.Max(height, Options.MinimumHeight);
-        _root = leaf;
+        Root = leaf;
     }
 
     /// <summary>
@@ -63,7 +56,10 @@ public sealed class LayoutTree(LayoutOptions options)
     /// </summary>
     /// <param name="block">The block.</param>
     /// <returns>The leaf, or null when the block is not tiled.</returns>
-    public LayoutCell? Find(BlockId block) => Leaves().Find(leaf => leaf.Block == block);
+    public LayoutCell? Find(BlockId block)
+    {
+        return Leaves().Find(leaf => leaf.Block == block);
+    }
 
     /// <summary>
     /// Resizes the whole layout to a new size, spreading the change across cells and never shrinking a block below its minimum.
@@ -72,15 +68,15 @@ public sealed class LayoutTree(LayoutOptions options)
     /// <param name="height">The target height.</param>
     public void Fit(int width, int height)
     {
-        if (_root is null)
+        if (Root is null)
         {
             return;
         }
 
-        int xchange = width - _root.Width;
+        int xchange = width - Root.Width;
         if (xchange < 0)
         {
-            int limit = ResizeCheck(_root, SplitOrientation.LeftRight);
+            int limit = ResizeCheck(Root, SplitOrientation.LeftRight);
             if (-xchange > limit)
             {
                 xchange = -limit;
@@ -89,13 +85,13 @@ public sealed class LayoutTree(LayoutOptions options)
 
         if (xchange != 0)
         {
-            ResizeAdjust(_root, SplitOrientation.LeftRight, xchange);
+            ResizeAdjust(Root, SplitOrientation.LeftRight, xchange);
         }
 
-        int ychange = height - _root.Height;
+        int ychange = height - Root.Height;
         if (ychange < 0)
         {
-            int limit = ResizeCheck(_root, SplitOrientation.TopBottom);
+            int limit = ResizeCheck(Root, SplitOrientation.TopBottom);
             if (-ychange > limit)
             {
                 ychange = -limit;
@@ -104,10 +100,10 @@ public sealed class LayoutTree(LayoutOptions options)
 
         if (ychange != 0)
         {
-            ResizeAdjust(_root, SplitOrientation.TopBottom, ychange);
+            ResizeAdjust(Root, SplitOrientation.TopBottom, ychange);
         }
 
-        FixOffsets(_root);
+        FixOffsets(Root);
     }
 
     /// <summary>
@@ -131,7 +127,7 @@ public sealed class LayoutTree(LayoutOptions options)
             throw new LayoutException($"Block {target} has no room to split.");
         }
 
-        int newSize = Math.Clamp(size ?? available / 2, minimum, available - minimum);
+        int newSize = Math.Clamp(size ?? (available / 2), minimum, available - minimum);
         int remaining = available - newSize;
         var leaf = LayoutCell.CreateLeaf(newBlock);
 
@@ -154,7 +150,7 @@ public sealed class LayoutTree(LayoutOptions options)
         }
         else
         {
-            _root = split;
+            Root = split;
         }
 
         cell.SetSize(orientation, remaining);
@@ -181,7 +177,7 @@ public sealed class LayoutTree(LayoutOptions options)
 
         if (cell.Parent is not { } parent)
         {
-            _root = null;
+            Root = null;
             return true;
         }
 
@@ -194,7 +190,7 @@ public sealed class LayoutTree(LayoutOptions options)
         if (parent.Children.Count == 1)
         {
             LayoutCell only = parent.Children[0];
-            parent.RemoveChild(only);
+            _ = parent.RemoveChild(only);
             only.X = parent.X;
             only.Y = parent.Y;
             if (parent.Parent is { } grandparent)
@@ -203,11 +199,11 @@ public sealed class LayoutTree(LayoutOptions options)
             }
             else
             {
-                _root = only;
+                Root = only;
             }
         }
 
-        FixOffsets(_root!);
+        FixOffsets(Root!);
         return true;
     }
 
@@ -251,7 +247,7 @@ public sealed class LayoutTree(LayoutOptions options)
 
         ResizeAdjust(cell, orientation, grow ? size : -size);
         ResizeAdjust(other, orientation, grow ? -size : size);
-        FixOffsets(_root!);
+        FixOffsets(Root!);
         return true;
     }
 
@@ -268,7 +264,7 @@ public sealed class LayoutTree(LayoutOptions options)
         ArgumentNullException.ThrowIfNull(blocks);
         if (blocks.Count == 0)
         {
-            _root = null;
+            Root = null;
             return;
         }
 
@@ -278,7 +274,7 @@ public sealed class LayoutTree(LayoutOptions options)
             return;
         }
 
-        _root = preset switch
+        Root = preset switch
         {
             LayoutPreset.EvenHorizontal => BuildEven(SplitOrientation.LeftRight, blocks, width, height),
             LayoutPreset.EvenVertical => BuildEven(SplitOrientation.TopBottom, blocks, width, height),
@@ -287,7 +283,7 @@ public sealed class LayoutTree(LayoutOptions options)
             LayoutPreset.Tiled => BuildTiled(blocks, width, height),
             _ => throw new ArgumentOutOfRangeException(nameof(preset))
         };
-        FixOffsets(_root);
+        FixOffsets(Root);
     }
 
     /// <summary>
@@ -380,7 +376,10 @@ public sealed class LayoutTree(LayoutOptions options)
     /// Serializes the tree to its checksummed string form.
     /// </summary>
     /// <returns>The layout string, or an empty string for an empty tree.</returns>
-    public string Serialize() => _root is null ? string.Empty : LayoutSerializer.Serialize(_root);
+    public string Serialize()
+    {
+        return Root is null ? string.Empty : LayoutSerializer.Serialize(Root);
+    }
 
     /// <summary>
     /// Replaces the tree with a parsed layout, assigning blocks to leaves in order when the leaf ids do not name exactly the given blocks.
@@ -412,7 +411,7 @@ public sealed class LayoutTree(LayoutOptions options)
             }
         }
 
-        _root = root;
+        Root = root;
         Fit(width, height);
         return true;
     }
@@ -420,9 +419,9 @@ public sealed class LayoutTree(LayoutOptions options)
     private List<LayoutCell> Leaves()
     {
         List<LayoutCell> leaves = [];
-        if (_root is not null)
+        if (Root is not null)
         {
-            CollectLeaves(_root, leaves);
+            CollectLeaves(Root, leaves);
         }
 
         return leaves;
@@ -549,9 +548,9 @@ public sealed class LayoutTree(LayoutOptions options)
     {
         SplitOrientation orientation = split.Orientation ?? throw new LayoutException("A split cell always has an orientation.");
         int count = split.Children.Count;
-        int total = split.Size(orientation) - (count - 1) * Options.Spacing;
+        int total = split.Size(orientation) - ((count - 1) * Options.Spacing);
         int each = total / count;
-        int extra = total - each * count;
+        int extra = total - (each * count);
         for (int i = 0; i < count; i++)
         {
             LayoutCell child = split.Children[i];
@@ -560,11 +559,15 @@ public sealed class LayoutTree(LayoutOptions options)
         }
     }
 
-    private static SplitOrientation Cross(SplitOrientation orientation) =>
-        orientation == SplitOrientation.LeftRight ? SplitOrientation.TopBottom : SplitOrientation.LeftRight;
+    private static SplitOrientation Cross(SplitOrientation orientation)
+    {
+        return orientation == SplitOrientation.LeftRight ? SplitOrientation.TopBottom : SplitOrientation.LeftRight;
+    }
 
-    private int RequiredSize(SplitOrientation orientation, int count) =>
-        count * Options.Minimum(orientation) + (count - 1) * Options.Spacing;
+    private int RequiredSize(SplitOrientation orientation, int count)
+    {
+        return (count * Options.Minimum(orientation)) + ((count - 1) * Options.Spacing);
+    }
 
     private LayoutCell BuildEven(SplitOrientation orientation, IReadOnlyList<BlockId> blocks, int width, int height)
     {
@@ -585,7 +588,7 @@ public sealed class LayoutTree(LayoutOptions options)
         SplitOrientation cross = Cross(orientation);
         int others = blocks.Count - 1;
         var split = LayoutCell.CreateSplit(orientation);
-        int alongMinimum = 2 * Options.Minimum(orientation) + Options.Spacing;
+        int alongMinimum = (2 * Options.Minimum(orientation)) + Options.Spacing;
         int crossMinimum = RequiredSize(cross, others);
         split.SetSize(orientation, Math.Max(orientation == SplitOrientation.LeftRight ? width : height, alongMinimum));
         split.SetSize(cross, Math.Max(cross == SplitOrientation.LeftRight ? width : height, crossMinimum));

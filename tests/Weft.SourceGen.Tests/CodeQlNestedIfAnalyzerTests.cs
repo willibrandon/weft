@@ -90,7 +90,9 @@ public sealed class CodeQlNestedIfAnalyzerTests(TestContext testContext)
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string body) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string body)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         $$"""
         internal static class Conditions
         {
@@ -101,4 +103,5 @@ public sealed class CodeQlNestedIfAnalyzerTests(TestContext testContext)
             }
         }
         """, new CodeQlNestedIfAnalyzer(), testContext.CancellationToken);
+    }
 }

@@ -22,21 +22,27 @@ internal static class CommonOptions
     /// </summary>
     /// <param name="description">The description.</param>
     /// <returns>The argument.</returns>
-    internal static Argument<string?> OptionalTarget(string description) =>
-        new("target") { Description = description, Arity = ArgumentArity.ZeroOrOne };
+    internal static Argument<string?> OptionalTarget(string description)
+    {
+        return new("target") { Description = description, Arity = ArgumentArity.ZeroOrOne };
+    }
 
     /// <summary>
     /// Creates a trailing command argument that collects everything after <c>--</c>.
     /// </summary>
     /// <returns>The argument.</returns>
-    internal static Argument<string[]> Command() =>
-        new("command") { Description = "Command and arguments to run; defaults to the shell.", Arity = ArgumentArity.ZeroOrMore };
+    internal static Argument<string[]> Command()
+    {
+        return new("command") { Description = "Command and arguments to run; defaults to the shell.", Arity = ArgumentArity.ZeroOrMore };
+    }
 
     /// <summary>
     /// Resolves the target to use when none was given: the block the caller runs in, if any.
     /// </summary>
     /// <param name="target">The explicit target.</param>
     /// <returns>The effective target.</returns>
-    internal static string? EffectiveTarget(string? target) =>
-        !string.IsNullOrEmpty(target) ? target : Environment.GetEnvironmentVariable("WEFT_BLOCK");
+    internal static string? EffectiveTarget(string? target)
+    {
+        return !string.IsNullOrEmpty(target) ? target : Environment.GetEnvironmentVariable("WEFT_BLOCK");
+    }
 }

@@ -30,13 +30,13 @@ internal sealed partial class SessionRegistry
 
         try
         {
-            await StartBlockAsync(tab, null, SplitOrientation.LeftRight, null, false, command, cwd, focus: true, keepOnExit: false, cancellationToken).ConfigureAwait(false);
+            _ = await StartBlockAsync(tab, null, SplitOrientation.LeftRight, null, false, command, cwd, focus: true, keepOnExit: false, cancellationToken).ConfigureAwait(false);
         }
         catch (ProtocolException)
         {
             lock (_gate)
             {
-                session.Tabs.Remove(tab);
+                _ = session.Tabs.Remove(tab);
                 if (session.ActiveTab == tab)
                 {
                     session.ActiveTab = session.Tabs.FirstOrDefault();
@@ -46,7 +46,7 @@ internal sealed partial class SessionRegistry
             throw;
         }
 
-        _events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        _ = Events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
         SelectTab(tab);
         Persist(session);
         return tab;
@@ -64,8 +64,8 @@ internal sealed partial class SessionRegistry
             tab.Session.LastActive = DateTimeOffset.Now;
         }
 
-        _events.Publish(ProtocolEvents.TabSelected, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
-        _events.Publish(ProtocolEvents.LayoutChanged, new LayoutEventData { Layout = ToLayoutInfo(tab) }, ProtocolJsonContext.Default.LayoutEventData);
+        _ = Events.Publish(ProtocolEvents.TabSelected, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        _ = Events.Publish(ProtocolEvents.LayoutChanged, new LayoutEventData { Layout = ToLayoutInfo(tab) }, ProtocolJsonContext.Default.LayoutEventData);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ internal sealed partial class SessionRegistry
         }
 
         Persist(tab.Session);
-        _events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        _ = Events.Publish(ProtocolEvents.TabRenamed, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
     }
 
     /// <summary>
@@ -91,7 +91,10 @@ internal sealed partial class SessionRegistry
     /// <param name="tab">The tab.</param>
     /// <param name="cancellationToken">Cancels the wait for blocks to stop.</param>
     /// <returns>A task that completes when the tab is gone.</returns>
-    internal Task CloseTabAsync(Tab tab, CancellationToken cancellationToken) => CloseTabAsync(tab, closingSession: false, cancellationToken);
+    internal Task CloseTabAsync(Tab tab, CancellationToken cancellationToken)
+    {
+        return CloseTabAsync(tab, closingSession: false, cancellationToken);
+    }
 
     private async Task CloseTabAsync(Tab tab, bool closingSession, CancellationToken cancellationToken)
     {
@@ -120,7 +123,7 @@ internal sealed partial class SessionRegistry
             await StopBlockAsync(block, cancellationToken).ConfigureAwait(false);
         }
 
-        _events.Publish(ProtocolEvents.TabClosed, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        _ = Events.Publish(ProtocolEvents.TabClosed, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
         if (closeSession)
         {
             await CloseSessionAsync(session, cancellationToken).ConfigureAwait(false);
@@ -138,8 +141,8 @@ internal sealed partial class SessionRegistry
 
             if (active is not null)
             {
-                _events.Publish(ProtocolEvents.TabSelected, new TabEventData { Tab = ToInfo(active) }, ProtocolJsonContext.Default.TabEventData);
-                _events.Publish(ProtocolEvents.LayoutChanged, new LayoutEventData { Layout = ToLayoutInfo(active) }, ProtocolJsonContext.Default.LayoutEventData);
+                _ = Events.Publish(ProtocolEvents.TabSelected, new TabEventData { Tab = ToInfo(active) }, ProtocolJsonContext.Default.TabEventData);
+                _ = Events.Publish(ProtocolEvents.LayoutChanged, new LayoutEventData { Layout = ToLayoutInfo(active) }, ProtocolJsonContext.Default.LayoutEventData);
             }
         }
     }
@@ -198,7 +201,7 @@ internal sealed partial class SessionRegistry
         {
             lock (_gate)
             {
-                session.Tabs.Remove(tab);
+                _ = session.Tabs.Remove(tab);
                 if (session.ActiveTab == tab)
                 {
                     session.ActiveTab = null;
@@ -217,7 +220,7 @@ internal sealed partial class SessionRegistry
                 CollectStoredLeaves(root, restored, order);
                 if (order.Count == tab.Layout.Blocks.Count)
                 {
-                    tab.Layout.TryApply(root, order, session.Width, session.Height);
+                    _ = tab.Layout.TryApply(root, order, session.Width, session.Height);
                 }
             }
 
@@ -241,10 +244,10 @@ internal sealed partial class SessionRegistry
         // state, and the tab's active block were applied, so a change event carries the final state of each.
         foreach (Block block in restored.Values)
         {
-            _events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
+            _ = Events.Publish(ProtocolEvents.BlockChanged, new BlockEventData { Block = ToInfo(block) }, ProtocolJsonContext.Default.BlockEventData);
         }
 
-        _events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
+        _ = Events.Publish(ProtocolEvents.TabCreated, new TabEventData { Tab = ToInfo(tab) }, ProtocolJsonContext.Default.TabEventData);
     }
 
     // The final state of every restored block is announced once the tab is complete.

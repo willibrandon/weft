@@ -21,7 +21,7 @@ internal sealed class SessionStore(string directory)
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(session, StoreJsonContext.Default.StoredSession);
         lock (_gate)
         {
-            Directory.CreateDirectory(directory);
+            _ = Directory.CreateDirectory(directory);
             File.WriteAllBytes(temporary, json);
             File.Move(temporary, path, overwrite: true);
         }

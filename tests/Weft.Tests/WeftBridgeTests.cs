@@ -94,7 +94,7 @@ public sealed class WeftBridgeTests
                 await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             }
 
-            await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
+            _ = await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
         }
     }
 
@@ -123,7 +123,7 @@ public sealed class WeftBridgeTests
 
             await using (bridge.ConfigureAwait(false))
             {
-                await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
+                _ = await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => bridge.LeaseAsync(cancellationToken)).ConfigureAwait(false);
                 Assert.IsNotNull(produced);
                 while (!produced.Closed.IsCompleted)
                 {
@@ -165,7 +165,7 @@ public sealed class WeftBridgeTests
                 }
                 finally
                 {
-                    Interlocked.Decrement(ref inFlight);
+                    _ = Interlocked.Decrement(ref inFlight);
                 }
             });
             await using (bridge.ConfigureAwait(false))
@@ -216,7 +216,7 @@ public sealed class WeftBridgeTests
                 Task<ControlLease> next = bridge.LeaseAsync(cancellationToken);
 
                 await queuedCancellation.CancelAsync().ConfigureAwait(false);
-                await Assert.ThrowsAsync<OperationCanceledException>(() => cancelled.WaitAsync(cancellationToken)).ConfigureAwait(false);
+                _ = await Assert.ThrowsAsync<OperationCanceledException>(() => cancelled.WaitAsync(cancellationToken)).ConfigureAwait(false);
                 release.SetResult();
 
                 ControlLease[] leases = await Task.WhenAll(first, next).ConfigureAwait(false);
@@ -247,7 +247,7 @@ public sealed class WeftBridgeTests
             int opens = 0;
             var bridge = new WeftBridge(async token =>
             {
-                Interlocked.Increment(ref opens);
+                _ = Interlocked.Increment(ref opens);
                 entered.SetResult();
                 await release.Task.WaitAsync(token).ConfigureAwait(false);
                 return await fixture.ConnectAsync(token).ConfigureAwait(false);
@@ -259,9 +259,9 @@ public sealed class WeftBridgeTests
                 Task<ControlLease> queued = bridge.LeaseAsync(cancellationToken);
 
                 await bridge.DisposeAsync().ConfigureAwait(false);
-                await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => queued.WaitAsync(cancellationToken)).ConfigureAwait(false);
+                _ = await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => queued.WaitAsync(cancellationToken)).ConfigureAwait(false);
                 release.SetResult();
-                await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => first.WaitAsync(cancellationToken)).ConfigureAwait(false);
+                _ = await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => first.WaitAsync(cancellationToken)).ConfigureAwait(false);
                 Assert.AreEqual(1, opens);
             }
         }
@@ -280,7 +280,7 @@ public sealed class WeftBridgeTests
         await using (fixture.ConfigureAwait(false))
         {
             await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
-            var bridge = new WeftBridge(token => fixture.ConnectAsync(token));
+            var bridge = new WeftBridge(fixture.ConnectAsync);
             await using (bridge.ConfigureAwait(false))
             {
                 ControlLease first = await bridge.LeaseAsync(cancellationToken).ConfigureAwait(false);
@@ -288,7 +288,7 @@ public sealed class WeftBridgeTests
                 using var cancelledWrite = new CancellationTokenSource();
                 await cancelledWrite.CancelAsync().ConfigureAwait(false);
 
-                await Assert.ThrowsAsync<OperationCanceledException>(() => client.ListSessionsAsync(cancelledWrite.Token)).ConfigureAwait(false);
+                _ = await Assert.ThrowsAsync<OperationCanceledException>(() => client.ListSessionsAsync(cancelledWrite.Token)).ConfigureAwait(false);
                 Assert.IsTrue(client.TransportFailed);
                 Assert.IsFalse(client.Closed.IsCompleted);
 

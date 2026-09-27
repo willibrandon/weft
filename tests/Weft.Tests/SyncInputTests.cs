@@ -31,7 +31,7 @@ public sealed class SyncInputTests
             ControlClient client = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                await client.CreateSessionAsync(new SessionCreateParams { Name = "sync" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "sync" }, cancellationToken).ConfigureAwait(false);
                 BlockInfo first = await client.GetBlockAsync("sync", cancellationToken).ConfigureAwait(false);
 
                 // Wait for the first prompt before splitting: narrowing a block truncates long prompt lines
@@ -42,15 +42,15 @@ public sealed class SyncInputTests
                 Assert.IsTrue(tab.Synchronized);
                 await ServerFixture.WaitForPromptAsync(client, second.Id, cancellationToken).ConfigureAwait(false);
 
-                await client.SendKeysAsync(new BlockSendKeysParams { Target = first.Id, Keys = ["echo fan-$((2*21))", "Enter"] }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = first.Id, Keys = ["echo fan-$((2*21))", "Enter"] }, cancellationToken).ConfigureAwait(false);
                 BlockWaitResult sibling = await client.WaitAsync(new BlockWaitParams { Target = second.Id, Pattern = "^fan-42$", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
                 if (sibling.Outcome != WaitOutcome.Pattern)
                 {
                     Assert.Fail("Synchronized input did not reach the sibling. " + await ScreensAsync(client, first.Id, second.Id, cancellationToken).ConfigureAwait(false));
                 }
 
-                await client.SyncBlockAsync(new BlockSyncParams { Target = second.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
-                await client.SendKeysAsync(new BlockSendKeysParams { Target = first.Id, Keys = ["echo only-$((3*3))", "Enter"] }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SyncBlockAsync(new BlockSyncParams { Target = second.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = first.Id, Keys = ["echo only-$((3*3))", "Enter"] }, cancellationToken).ConfigureAwait(false);
                 BlockWaitResult own = await client.WaitAsync(new BlockWaitParams { Target = first.Id, Pattern = "^only-9$", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
                 Assert.AreEqual(WaitOutcome.Pattern, own.Outcome);
                 BlockWaitResult excluded = await client.WaitAsync(new BlockWaitParams { Target = second.Id, Pattern = "^only-9$", TimeoutMs = 1_000 }, cancellationToken).ConfigureAwait(false);
@@ -78,10 +78,10 @@ public sealed class SyncInputTests
                 ControlClient subscriber = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
                 await using (subscriber.ConfigureAwait(false))
                 {
-                    await subscriber.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
-                    await control.CreateSessionAsync(new SessionCreateParams { Name = "activity" }, cancellationToken).ConfigureAwait(false);
+                    _ = await subscriber.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                    _ = await control.CreateSessionAsync(new SessionCreateParams { Name = "activity" }, cancellationToken).ConfigureAwait(false);
                     BlockInfo block = await control.GetBlockAsync("activity", cancellationToken).ConfigureAwait(false);
-                    await control.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["echo hello", "Enter"] }, cancellationToken).ConfigureAwait(false);
+                    _ = await control.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["echo hello", "Enter"] }, cancellationToken).ConfigureAwait(false);
 
                     while (true)
                     {

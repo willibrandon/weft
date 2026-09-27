@@ -66,7 +66,7 @@ public sealed class ServerTests
                 Assert.IsNotNull(block.Pid);
                 await ServerFixture.WaitForPromptAsync(client, block.Id, cancellationToken).ConfigureAwait(false);
 
-                await client.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["echo weft-$((6*7))", "Enter"] }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["echo weft-$((6*7))", "Enter"] }, cancellationToken).ConfigureAwait(false);
                 BlockWaitResult wait = await client.WaitAsync(new BlockWaitParams { Target = block.Id, Pattern = "^weft-42$", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
 
                 Assert.AreEqual(WaitOutcome.Pattern, wait.Outcome);
@@ -94,7 +94,7 @@ public sealed class ServerTests
             ControlClient client = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                await client.CreateSessionAsync(new SessionCreateParams { Name = "split" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "split" }, cancellationToken).ConfigureAwait(false);
                 BlockInfo first = await client.GetBlockAsync("split", cancellationToken).ConfigureAwait(false);
 
                 BlockInfo second = await client.SplitAsync(new BlockSplitParams { Target = first.Id, Orientation = SplitOrientation.LeftRight }, cancellationToken).ConfigureAwait(false);
@@ -127,7 +127,7 @@ public sealed class ServerTests
             ControlClient client = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                await client.CreateSessionAsync(new SessionCreateParams { Name = "run" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "run" }, cancellationToken).ConfigureAwait(false);
 
                 BlockRunResult result = await client.RunAsync(new BlockRunParams { Target = "run", Command = ["/bin/sh", "-c", "echo hello-run; exit 3"], TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
 
@@ -160,10 +160,10 @@ public sealed class ServerTests
                 ControlClient subscriber = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
                 await using (subscriber.ConfigureAwait(false))
                 {
-                    await subscriber.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                    _ = await subscriber.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
 
-                    await control.CreateSessionAsync(new SessionCreateParams { Name = "events" }, cancellationToken).ConfigureAwait(false);
-                    await control.CloseSessionAsync("events", cancellationToken).ConfigureAwait(false);
+                    _ = await control.CreateSessionAsync(new SessionCreateParams { Name = "events" }, cancellationToken).ConfigureAwait(false);
+                    _ = await control.CloseSessionAsync("events", cancellationToken).ConfigureAwait(false);
 
                     List<string> names = [];
                     while (!names.Contains(ProtocolEvents.SessionClosed, StringComparer.Ordinal))
@@ -203,7 +203,7 @@ public sealed class ServerTests
                 Assert.AreEqual(30, attached.Layout.Height);
                 Assert.HasCount(1, attached.Blocks);
                 Assert.AreEqual(98, attached.Blocks[0].Width);
-                await client.SetSizeAsync(new SessionSetSizeParams { Client = attached.Client.Id, Width = 60, Height = 20 }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SetSizeAsync(new SessionSetSizeParams { Client = attached.Client.Id, Width = 60, Height = 20 }, cancellationToken).ConfigureAwait(false);
                 SessionInfo resized = await client.GetSessionAsync("sized", cancellationToken).ConfigureAwait(false);
                 Assert.AreEqual(60, resized.Width);
             }
@@ -229,9 +229,9 @@ public sealed class ServerTests
             ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
                 BlockInfo block = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
-                await client.SplitAsync(new BlockSplitParams { Target = block.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SplitAsync(new BlockSplitParams { Target = block.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
                 LayoutInfo layout = await client.GetLayoutAsync("durable", cancellationToken).ConfigureAwait(false);
                 layoutBefore = layout.Serialized;
             }
@@ -297,12 +297,12 @@ public sealed class ServerTests
             ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
                 BlockInfo anchor = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
                 BlockInfo floating = await client.SplitAsync(new BlockSplitParams { Target = anchor.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
-                await client.RenameBlockAsync(new BlockRenameParams { Target = floating.Id, Title = "float-me" }, cancellationToken).ConfigureAwait(false);
-                await client.FloatAsync(new BlockFloatParams { Target = floating.Id }, cancellationToken).ConfigureAwait(false);
-                await client.FocusAsync(new BlockFocusParams { Target = anchor.Id }, cancellationToken).ConfigureAwait(false);
+                _ = await client.RenameBlockAsync(new BlockRenameParams { Target = floating.Id, Title = "float-me" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.FloatAsync(new BlockFloatParams { Target = floating.Id }, cancellationToken).ConfigureAwait(false);
+                _ = await client.FocusAsync(new BlockFocusParams { Target = anchor.Id }, cancellationToken).ConfigureAwait(false);
             }
 
             await first.StopKeepingStateAsync().ConfigureAwait(false);
@@ -316,7 +316,7 @@ public sealed class ServerTests
             await using (resumed.ConfigureAwait(false))
             {
                 // The stored session is restored on first use, so a live subscription sees every event the restore publishes.
-                await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                _ = await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
                 SessionAttachResult attached = await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
                 Assert.HasCount(1, attached.Layout.Floating);
 
@@ -361,10 +361,10 @@ public sealed class ServerTests
             ControlClient client = await first.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "durable" }, cancellationToken).ConfigureAwait(false);
                 BlockInfo anchor = await client.GetBlockAsync("durable", cancellationToken).ConfigureAwait(false);
                 BlockInfo excluded = await client.SplitAsync(new BlockSplitParams { Target = anchor.Id, Orientation = SplitOrientation.TopBottom }, cancellationToken).ConfigureAwait(false);
-                await client.SyncBlockAsync(new BlockSyncParams { Target = excluded.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
+                _ = await client.SyncBlockAsync(new BlockSyncParams { Target = excluded.Id, Excluded = true }, cancellationToken).ConfigureAwait(false);
             }
 
             await first.StopKeepingStateAsync().ConfigureAwait(false);
@@ -377,8 +377,8 @@ public sealed class ServerTests
             ControlClient resumed = await second.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (resumed.ConfigureAwait(false))
             {
-                await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
-                await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
+                _ = await resumed.SubscribeAsync(null, cancellationToken).ConfigureAwait(false);
+                _ = await resumed.AttachAsync(new SessionAttachParams { Target = "durable", Width = 80, Height = 24 }, cancellationToken).ConfigureAwait(false);
 
                 var changed = new List<BlockInfo>();
                 while (true)

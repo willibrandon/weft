@@ -91,7 +91,7 @@ internal sealed class CommandContext : IAsyncDisposable
     {
         if (Json)
         {
-            Console.Out.WriteLine(JsonSerializer.Serialize(value, (JsonTypeInfo<T>)s_indented.GetTypeInfo(typeof(T))));
+            Console.Out.WriteLine(JsonSerializer.Serialize(value, s_indented.GetTypeInfo<T>()));
             return;
         }
 

@@ -20,7 +20,7 @@ public static class ClientLog
         {
             if (s_lines.Count == Capacity)
             {
-                s_lines.Dequeue();
+                _ = s_lines.Dequeue();
             }
 
             s_lines.Enqueue(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:HH:mm:ss.fff} {message}"));

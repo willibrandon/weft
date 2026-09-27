@@ -106,36 +106,37 @@ internal static class ConditionalAccessGuardProof
             !region.WrittenInside.Contains(variable, SymbolEqualityComparer.Default);
     }
 
-    private static ISymbol? GetStableVariable(ExpressionSyntax expression, SyntaxNodeAnalysisContext context) =>
-        context.SemanticModel.GetSymbolInfo(Unwrap(expression), context.CancellationToken).Symbol switch
+    private static ISymbol? GetStableVariable(ExpressionSyntax expression, SyntaxNodeAnalysisContext context)
+    {
+        return context.SemanticModel.GetSymbolInfo(Unwrap(expression), context.CancellationToken).Symbol switch
         {
             ILocalSymbol { RefKind: RefKind.None } local => local,
             IParameterSymbol { RefKind: RefKind.None } parameter => parameter,
             _ => null
         };
+    }
 
     private static ExpressionSyntax? GetGuardedExpression(ExpressionSyntax condition)
     {
-        if (Unwrap(condition) is not IsPatternExpressionSyntax pattern)
-        {
-            return null;
-        }
-
-        return pattern.Pattern switch
-        {
-            ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression } => pattern.Expression,
-            UnaryPatternSyntax
+        return Unwrap(condition) is not IsPatternExpressionSyntax pattern
+            ? null
+            : pattern.Pattern switch
             {
-                RawKind: (int)SyntaxKind.NotPattern,
-                Pattern: DeclarationPatternSyntax or TypePatternSyntax or RecursivePatternSyntax
-            } => pattern.Expression,
-            _ => null
-        };
+                ConstantPatternSyntax { Expression.RawKind: (int)SyntaxKind.NullLiteralExpression } => pattern.Expression,
+                UnaryPatternSyntax
+                {
+                    RawKind: (int)SyntaxKind.NotPattern,
+                    Pattern: DeclarationPatternSyntax or TypePatternSyntax or RecursivePatternSyntax
+                } => pattern.Expression,
+                _ => null
+            };
     }
 
-    private static bool AlwaysExits(StatementSyntax statement) =>
-        statement is ReturnStatementSyntax or ThrowStatementSyntax ||
-        statement is BlockSyntax { Statements.Count: > 0 } block && AlwaysExits(block.Statements[block.Statements.Count - 1]);
+    private static bool AlwaysExits(StatementSyntax statement)
+    {
+        return statement is ReturnStatementSyntax or ThrowStatementSyntax ||
+        (statement is BlockSyntax { Statements.Count: > 0 } block && AlwaysExits(block.Statements[block.Statements.Count - 1]));
+    }
 
     private static ExpressionSyntax Unwrap(ExpressionSyntax expression)
     {

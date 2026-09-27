@@ -35,5 +35,8 @@ public readonly record struct TabId(int Value)
     /// Formats the id in its text form such as <c>t2</c>.
     /// </summary>
     /// <returns>The text form.</returns>
-    public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"{Prefix}{Value}");
+    public override string ToString()
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{Prefix}{Value}");
+    }
 }

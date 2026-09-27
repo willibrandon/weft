@@ -100,21 +100,30 @@ public static class WeftPaths
     /// </summary>
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <returns>The socket path.</returns>
-    public static string ControlSocketPath(string runtimeDirectory) => Path.Join(runtimeDirectory, "weft.sock");
+    public static string ControlSocketPath(string runtimeDirectory)
+    {
+        return Path.Join(runtimeDirectory, "weft.sock");
+    }
 
     /// <summary>
     /// Gets the server lock file path inside a runtime directory.
     /// </summary>
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <returns>The lock file path.</returns>
-    public static string LockFilePath(string runtimeDirectory) => Path.Join(runtimeDirectory, "server.lock");
+    public static string LockFilePath(string runtimeDirectory)
+    {
+        return Path.Join(runtimeDirectory, "server.lock");
+    }
 
     /// <summary>
     /// Gets the directory that holds block sockets inside a runtime directory.
     /// </summary>
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <returns>The directory path.</returns>
-    public static string BlockSocketDirectory(string runtimeDirectory) => Path.Join(runtimeDirectory, "blocks");
+    public static string BlockSocketDirectory(string runtimeDirectory)
+    {
+        return Path.Join(runtimeDirectory, "blocks");
+    }
 
     /// <summary>
     /// Gets a block's HMP1 socket path inside a runtime directory.
@@ -122,6 +131,8 @@ public static class WeftPaths
     /// <param name="runtimeDirectory">The runtime directory.</param>
     /// <param name="block">The block.</param>
     /// <returns>The socket path.</returns>
-    public static string BlockSocketPath(string runtimeDirectory, BlockId block) =>
-        Path.Join(BlockSocketDirectory(runtimeDirectory), $"{block}.sock");
+    public static string BlockSocketPath(string runtimeDirectory, BlockId block)
+    {
+        return Path.Join(BlockSocketDirectory(runtimeDirectory), $"{block}.sock");
+    }
 }

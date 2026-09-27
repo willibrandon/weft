@@ -80,7 +80,7 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
         Conversion conversion = context.Compilation.ClassifyConversion(
             sourceType,
             targetType);
-        if (!conversion.IsImplicit || conversion.IsIdentity || classReceiver && !conversion.IsReference)
+        if (!conversion.IsImplicit || conversion.IsIdentity || (classReceiver && !conversion.IsReference))
         {
             return;
         }
@@ -109,12 +109,7 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
         ITypeSymbol innerType)
     {
         // The inner cast picks which user-defined conversion the outer cast resolves to, so it is not redundant.
-        if (context.SemanticModel.GetTypeInfo(outer.Type, context.CancellationToken).Type is not ITypeSymbol outerType)
-        {
-            return true;
-        }
-
-        return context.Compilation.ClassifyConversion(innerType, outerType).IsUserDefined ||
+        return context.SemanticModel.GetTypeInfo(outer.Type, context.CancellationToken).Type is not ITypeSymbol outerType || context.Compilation.ClassifyConversion(innerType, outerType).IsUserDefined ||
             context.Compilation.ClassifyConversion(sourceType, outerType).IsUserDefined;
     }
 
@@ -165,17 +160,12 @@ public sealed class CodeQlUselessUpcastAnalyzer : DiagnosticAnalyzer
         ITypeSymbol targetType,
         SyntaxNodeAnalysisContext context)
     {
-        if (!cast.Expression.IsKind(SyntaxKind.NullLiteralExpression) ||
-            cast.Parent is not EqualsValueClauseSyntax equalsValue ||
-            equalsValue.Parent is not VariableDeclaratorSyntax declarator ||
-            declarator.Parent is VariableDeclarationSyntax { Type.IsVar: true } ||
+        return cast.Expression.IsKind(SyntaxKind.NullLiteralExpression) &&
+            cast.Parent is EqualsValueClauseSyntax equalsValue &&
+            equalsValue.Parent is VariableDeclaratorSyntax declarator &&
+            declarator.Parent is not VariableDeclarationSyntax { Type.IsVar: true } &&
             context.SemanticModel.GetDeclaredSymbol(
                 declarator,
-                context.CancellationToken) is not ILocalSymbol local)
-        {
-            return false;
-        }
-
-        return SymbolEqualityComparer.Default.Equals(local.Type, targetType);
+                context.CancellationToken) is ILocalSymbol local && SymbolEqualityComparer.Default.Equals(local.Type, targetType);
     }
 }

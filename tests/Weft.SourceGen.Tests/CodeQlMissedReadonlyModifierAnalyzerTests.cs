@@ -122,8 +122,12 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzerTests(TestContext testCo
         Assert.AreEqual(CodeQlMissedReadonlyModifierAnalyzer.DiagnosticId, diagnostic.Id);
     }
 
-    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
+    }
+
     /// <summary>
     /// Verifies a required field, which consumers set through initializers, is not asked to be readonly.
     /// </summary>
@@ -234,6 +238,9 @@ public sealed class CodeQlMissedReadonlyModifierAnalyzerTests(TestContext testCo
         Assert.IsEmpty(diagnostics);
     }
 
-    private Task<ImmutableArray<Diagnostic>> RunAsync(string source) => CodeQlFileCompilation.AnalyzeAsync(
+    private Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    {
+        return CodeQlFileCompilation.AnalyzeAsync(
         source, new CodeQlMissedReadonlyModifierAnalyzer(), testContext.CancellationToken);
+    }
 }

@@ -35,7 +35,7 @@ public sealed class ProtocolWriter : IDisposable
         }
         finally
         {
-            _gate.Release();
+            _ = _gate.Release();
         }
     }
 

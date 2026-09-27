@@ -142,46 +142,37 @@ public sealed class CodeQlInefficientContainsKeyAnalyzer : DiagnosticAnalyzer
     }
 
     // A branch exits when its last statement does, whatever runs before it.
-    private static bool Exits(StatementSyntax statement) =>
-        (statement is BlockSyntax block ? block.Statements.LastOrDefault() : statement) is ReturnStatementSyntax or ThrowStatementSyntax;
+    private static bool Exits(StatementSyntax statement)
+    {
+        return (statement is BlockSyntax block ? block.Statements.LastOrDefault() : statement) is ReturnStatementSyntax or ThrowStatementSyntax;
+    }
 
-    private static IReadOnlyList<SyntaxNode> FollowingStatements(StatementSyntax statement) =>
-        statement.Parent is BlockSyntax block
+    private static IReadOnlyList<SyntaxNode> FollowingStatements(StatementSyntax statement)
+    {
+        return statement.Parent is BlockSyntax block
             ? [.. block.Statements.SkipWhile(candidate => candidate != statement).Skip(1)]
             : [];
+    }
 
     private static bool IsUnchangedRead(IReadOnlyList<SyntaxNode> candidates, ElementAccessExpressionSyntax access)
     {
         ExpressionSyntax target = SkipParentheses(access);
-        if (target.Parent is AssignmentExpressionSyntax assignment && assignment.Left == target &&
-            assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
-        {
-            return false;
-        }
-
-        return !candidates.SelectMany(static candidate => candidate.DescendantNodesAndSelf()).Where(node => node.SpanStart < access.SpanStart).Any(static node =>
+        return (target.Parent is not AssignmentExpressionSyntax assignment || assignment.Left != target ||
+            !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)) && !candidates.SelectMany(static candidate => candidate.DescendantNodesAndSelf()).Where(node => node.SpanStart < access.SpanStart).Any(static node =>
             node is AssignmentExpressionSyntax or InvocationExpressionSyntax or AwaitExpressionSyntax ||
-            node is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None) ||
+            (node is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) ||
             node.IsKind(SyntaxKind.PreIncrementExpression) || node.IsKind(SyntaxKind.PreDecrementExpression) ||
             node.IsKind(SyntaxKind.PostIncrementExpression) || node.IsKind(SyntaxKind.PostDecrementExpression));
     }
 
     private static bool IsSameValue(IOperation? left, IOperation? right)
     {
-        if (left is null || right is null)
-        {
-            return left is null && right is null;
-        }
-        if (left is IConversionOperation { IsImplicit: true } leftConversion)
-        {
-            return IsSameValue(leftConversion.Operand, right);
-        }
-        if (right is IConversionOperation { IsImplicit: true } rightConversion)
-        {
-            return IsSameValue(left, rightConversion.Operand);
-        }
         return (left, right) switch
         {
+            (null, null) => true,
+            (null, _) or (_, null) => false,
+            (IConversionOperation { IsImplicit: true } conversion, _) => IsSameValue(conversion.Operand, right),
+            (_, IConversionOperation { IsImplicit: true } conversion) => IsSameValue(left, conversion.Operand),
             (ILocalReferenceOperation first, ILocalReferenceOperation second) =>
                 SymbolEqualityComparer.Default.Equals(first.Local, second.Local),
             (IParameterReferenceOperation first, IParameterReferenceOperation second) =>

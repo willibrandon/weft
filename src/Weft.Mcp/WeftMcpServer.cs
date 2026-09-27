@@ -21,8 +21,10 @@ public static class WeftMcpServer
     /// <param name="verbose">Whether to log the SDK's request tracing as well as warnings and errors.</param>
     /// <param name="cancellationToken">Stops the server.</param>
     /// <returns>A task that completes when the client disconnects.</returns>
-    public static Task RunStdioAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, bool verbose, CancellationToken cancellationToken) =>
-        RunAsync(connect, version, builder => builder.WithStdioServerTransport(), verbose, cancellationToken);
+    public static Task RunStdioAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, bool verbose, CancellationToken cancellationToken)
+    {
+        return RunAsync(connect, version, builder => builder.WithStdioServerTransport(), verbose, cancellationToken);
+    }
 
     /// <summary>
     /// Runs the server over a pair of streams, for tests and embedding.
@@ -34,17 +36,19 @@ public static class WeftMcpServer
     /// <param name="verbose">Whether to log the SDK's request tracing as well as warnings and errors.</param>
     /// <param name="cancellationToken">Stops the server.</param>
     /// <returns>A task that completes when the client disconnects.</returns>
-    public static Task RunStreamsAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, Stream input, Stream output, bool verbose, CancellationToken cancellationToken) =>
-        RunAsync(connect, version, builder => builder.WithStreamServerTransport(input, output), verbose, cancellationToken);
+    public static Task RunStreamsAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, Stream input, Stream output, bool verbose, CancellationToken cancellationToken)
+    {
+        return RunAsync(connect, version, builder => builder.WithStreamServerTransport(input, output), verbose, cancellationToken);
+    }
 
     private static async Task RunAsync(Func<CancellationToken, Task<ControlClient>> connect, string version, Action<IMcpServerBuilder> transport, bool verbose, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connect);
         var services = new ServiceCollection();
-        services.AddSingleton(_ => new WeftBridge(connect));
+        _ = services.AddSingleton(_ => new WeftBridge(connect));
 
         // Standard error is the channel the protocol reserves for a stdio server's logs; hosts capture it.
-        services.AddSingleton<ILoggerFactory>(_ => new StderrLoggerFactory(verbose ? LogLevel.Debug : LogLevel.Warning));
+        _ = services.AddSingleton<ILoggerFactory>(_ => new StderrLoggerFactory(verbose ? LogLevel.Debug : LogLevel.Warning));
 
         IMcpServerBuilder builder = services.AddMcpServer(options =>
         {
@@ -56,7 +60,7 @@ public static class WeftMcpServer
         // Tool arguments are bound with the SDK's generated context plus ours, so string arrays bind under Native AOT.
         var serializerOptions = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions);
         serializerOptions.TypeInfoResolverChain.Add(WeftMcpJsonContext.Default);
-        builder.WithTools<WeftTools>(serializerOptions).WithResources<WeftResources>();
+        _ = builder.WithTools<WeftTools>(serializerOptions).WithResources<WeftResources>();
         ServiceProvider provider = services.BuildServiceProvider();
         await using (provider.ConfigureAwait(false))
         {

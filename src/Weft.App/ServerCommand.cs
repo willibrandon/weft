@@ -45,7 +45,7 @@ internal static class ServerCommand
                 WeftConfig config = WeftConfigLoader.LoadDefault(out string? configError);
                 if (configError is not null)
                 {
-                    await Console.Error.WriteLineAsync("weft: " + configError).ConfigureAwait(false);
+                    await Console.Error.WriteLineAsync("weft: " + configError, cancellationToken).ConfigureAwait(false);
                 }
 
                 var server = new WeftServer(new WeftServerOptions
@@ -93,7 +93,7 @@ internal static class ServerCommand
         var command = new Command("shutdown", "Stop the server, keeping sessions on disk for resurrection.");
         command.SetAction((parseResult, cancellationToken) => SessionCommands.InvokeIfRunningAsync(parseResult, async (context, client) =>
         {
-            await client.ShutdownAsync(cancellationToken).ConfigureAwait(false);
+            _ = await client.ShutdownAsync(cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => ["stopping"]);
         }, cancellationToken));
         return command;

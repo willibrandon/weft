@@ -111,7 +111,7 @@ internal sealed class EventLog
     {
         lock (_gate)
         {
-            _subscribers.Remove(subscription);
+            _ = _subscribers.Remove(subscription);
         }
     }
 }

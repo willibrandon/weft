@@ -115,26 +115,23 @@ public sealed class CodeQlUnusedCollectionAnalyzer : DiagnosticAnalyzer
             designation.Identifier.ValueText));
     }
 
-    private static bool IsCollection(ITypeSymbol type) =>
-        type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_ICollection_T ||
+    private static bool IsCollection(ITypeSymbol type)
+    {
+        return type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_ICollection_T ||
         type.AllInterfaces.Any(static candidate =>
             candidate.OriginalDefinition.SpecialType ==
                 SpecialType.System_Collections_Generic_ICollection_T);
+    }
 
     private static bool IsMutationOnlyUse(
         IdentifierNameSyntax identifier,
         SyntaxNodeAnalysisContext context)
     {
-        if (identifier.Parent is not MemberAccessExpressionSyntax access ||
-            access.Expression != identifier ||
-            access.Parent is not InvocationExpressionSyntax invocation ||
+        return identifier.Parent is MemberAccessExpressionSyntax access &&
+            access.Expression == identifier &&
+            access.Parent is InvocationExpressionSyntax invocation &&
             context.SemanticModel.GetSymbolInfo(
                 invocation,
-                context.CancellationToken).Symbol is not IMethodSymbol method)
-        {
-            return false;
-        }
-
-        return s_mutatingMethodNames.Contains(method.Name);
+                context.CancellationToken).Symbol is IMethodSymbol method && s_mutatingMethodNames.Contains(method.Name);
     }
 }

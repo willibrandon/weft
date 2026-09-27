@@ -69,7 +69,7 @@ internal static class SessionCommands
         command.Arguments.Add(target);
         command.SetAction((parseResult, cancellationToken) => InvokeAsync(parseResult, async (context, client) =>
         {
-            await client.CloseSessionAsync(parseResult.GetValue(target), cancellationToken).ConfigureAwait(false);
+            _ = await client.CloseSessionAsync(parseResult.GetValue(target), cancellationToken).ConfigureAwait(false);
             context.Write(EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult, _ => []);
         }, cancellationToken));
         return command;
@@ -174,21 +174,25 @@ internal static class SessionCommands
     /// </summary>
     /// <param name="session">The session.</param>
     /// <returns>The line.</returns>
-    internal static string FormatSession(SessionInfo session) =>
-        session.Name + "  " + session.Id + "  " + session.Tabs.ToString(CultureInfo.InvariantCulture) + " tabs  " + session.Blocks.ToString(CultureInfo.InvariantCulture) + " blocks  " +
+    internal static string FormatSession(SessionInfo session)
+    {
+        return session.Name + "  " + session.Id + "  " + session.Tabs.ToString(CultureInfo.InvariantCulture) + " tabs  " + session.Blocks.ToString(CultureInfo.InvariantCulture) + " blocks  " +
         session.Width.ToString(CultureInfo.InvariantCulture) + "x" + session.Height.ToString(CultureInfo.InvariantCulture) + "  " +
         (session.Clients > 0 ? "attached" : "detached") + "  created " + session.CreatedAt.ToString("u", CultureInfo.InvariantCulture);
+    }
 
     /// <summary>
     /// Formats a block as one line.
     /// </summary>
     /// <param name="block">The block.</param>
     /// <returns>The line.</returns>
-    internal static string FormatBlock(BlockInfo block) =>
-        (block.Active ? "* " : "  ") + block.Id + "  " + block.Session + ":" + block.Tab + "." + block.Index.ToString(CultureInfo.InvariantCulture) + "  " +
+    internal static string FormatBlock(BlockInfo block)
+    {
+        return (block.Active ? "* " : "  ") + block.Id + "  " + block.Session + ":" + block.Tab + "." + block.Index.ToString(CultureInfo.InvariantCulture) + "  " +
         block.Width.ToString(CultureInfo.InvariantCulture) + "x" + block.Height.ToString(CultureInfo.InvariantCulture) + "  " +
         block.State.ToString().ToLowerInvariant() + (block.ExitCode is { } code ? " " + code.ToString(CultureInfo.InvariantCulture) : string.Empty) +
         (block.Pid is { } pid ? "  pid " + pid.ToString(CultureInfo.InvariantCulture) : string.Empty) + "  " + block.Title;
+    }
 
     /// <summary>
     /// Runs a command body against a connected client, starting the server when needed.
@@ -197,12 +201,14 @@ internal static class SessionCommands
     /// <param name="cancellationToken">Cancels the command.</param>
     /// <param name="body">The body.</param>
     /// <returns>The exit code.</returns>
-    internal static Task<int> InvokeAsync(ParseResult parseResult, Func<CommandContext, ControlClient, Task> body, CancellationToken cancellationToken) =>
-        InvokeWithCodeAsync(parseResult, async (context, client) =>
+    internal static Task<int> InvokeAsync(ParseResult parseResult, Func<CommandContext, ControlClient, Task> body, CancellationToken cancellationToken)
+    {
+        return InvokeWithCodeAsync(parseResult, async (context, client) =>
         {
             await body(context, client).ConfigureAwait(false);
             return 0;
         }, cancellationToken);
+    }
 
     /// <summary>
     /// Runs a command body that chooses its own exit code against a connected client.
@@ -253,7 +259,7 @@ internal static class SessionCommands
                 ControlClient? client = await context.TryConnectAsync(cancellationToken).ConfigureAwait(false);
                 if (client is null)
                 {
-                    await Console.Out.WriteLineAsync(context.Json ? "{}" : "no server running").ConfigureAwait(false);
+                    await Console.Out.WriteLineAsync(context.Json ? "{}" : "no server running", cancellationToken).ConfigureAwait(false);
 
                     return 0;
                 }

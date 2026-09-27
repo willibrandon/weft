@@ -13,7 +13,10 @@ internal static class FieldWrites
     /// </summary>
     /// <param name="reference">The field reference to classify.</param>
     /// <returns>Whether the reference counts as a write.</returns>
-    internal static bool IsWrite(IFieldReferenceOperation reference) => IsWrittenThrough(reference, reference.Field.Type);
+    internal static bool IsWrite(IFieldReferenceOperation reference)
+    {
+        return IsWrittenThrough(reference, reference.Field.Type);
+    }
 
     private static bool IsWrittenThrough(IOperation reference, ITypeSymbol type)
     {
@@ -33,6 +36,8 @@ internal static class FieldWrites
                     return true;
                 case IMemberReferenceOperation member when ReferenceEquals(member.Instance, current):
                     return member.Type is { } memberType && IsWrittenThrough(member, memberType);
+                default:
+                    break;
             }
         }
 
@@ -48,12 +53,16 @@ internal static class FieldWrites
         };
     }
 
-    private static bool IsMutableStruct(ITypeSymbol type) =>
-        type is INamedTypeSymbol { IsValueType: true, IsReadOnly: false, EnumUnderlyingType: null } &&
-            type.SpecialType == SpecialType.None ||
+    private static bool IsMutableStruct(ITypeSymbol type)
+    {
+        return (type is INamedTypeSymbol { IsValueType: true, IsReadOnly: false, EnumUnderlyingType: null } &&
+            type.SpecialType == SpecialType.None) ||
         type is ITypeParameterSymbol { HasValueTypeConstraint: true };
+    }
 
     // A writable ref return aliases the field for every caller, which a readonly field cannot allow.
-    private static bool ReturnsWritableReference(IReturnOperation returned) =>
-        returned.SemanticModel?.GetEnclosingSymbol(returned.Syntax.SpanStart) is IMethodSymbol { RefKind: RefKind.Ref };
+    private static bool ReturnsWritableReference(IReturnOperation returned)
+    {
+        return returned.SemanticModel?.GetEnclosingSymbol(returned.Syntax.SpanStart) is IMethodSymbol { RefKind: RefKind.Ref };
+    }
 }

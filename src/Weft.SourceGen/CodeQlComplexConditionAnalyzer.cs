@@ -102,10 +102,12 @@ public sealed class CodeQlComplexConditionAnalyzer : DiagnosticAnalyzer
             CountLogicalGroups(binary.Right, kind);
     }
 
-    private static bool IsRelevant(SyntaxKind kind) =>
-        kind is SyntaxKind.LogicalAndExpression or
+    private static bool IsRelevant(SyntaxKind kind)
+    {
+        return kind is SyntaxKind.LogicalAndExpression or
             SyntaxKind.LogicalOrExpression or
             SyntaxKind.BitwiseAndExpression or
             SyntaxKind.BitwiseOrExpression or
             SyntaxKind.ExclusiveOrExpression;
+    }
 }

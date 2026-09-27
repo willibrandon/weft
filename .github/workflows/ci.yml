@@ -35,7 +35,10 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.x
+          dotnet-version: 11.x
+          dotnet-quality: preview
+      - name: Report SDK
+        run: dotnet --info
       - name: Restore
         run: dotnet restore Weft.slnx
       - name: Build
@@ -59,15 +62,23 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.x
+          dotnet-version: 11.x
+          dotnet-quality: preview
+      - name: Report SDK
+        run: dotnet --info
       - name: Verify repository policy
         run: dotnet run --file scripts/Verify-Repository.cs
       - name: Restore
         run: dotnet restore Weft.slnx
       - name: Verify whitespace formatting
         run: dotnet format Weft.slnx whitespace --verify-no-changes --no-restore
+        env:
+          # The preview CLI native dispatcher resolves dotnet-format outside the SDK directory.
+          DOTNET_CLI_ENABLEAOT: false
       - name: Verify code-style formatting
         run: dotnet format Weft.slnx style --verify-no-changes --no-restore
+        env:
+          DOTNET_CLI_ENABLEAOT: false
 
   native-aot:
     name: Native AOT (${{ matrix.rid }})
@@ -91,7 +102,10 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.x
+          dotnet-version: 11.x
+          dotnet-quality: preview
+      - name: Report SDK
+        run: dotnet --info
       - name: Publish
         run: dotnet publish src/Weft.App/Weft.App.csproj -r ${{ matrix.rid }} -c Release
         env:
@@ -114,7 +128,10 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.x
+          dotnet-version: 11.x
+          dotnet-quality: preview
+      - name: Report SDK
+        run: dotnet --info
       - name: Publish with size report
         run: >-
           dotnet publish src/Weft.App/Weft.App.csproj

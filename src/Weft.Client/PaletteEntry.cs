@@ -12,5 +12,8 @@ internal sealed record PaletteEntry(string Action, string Description, string Ch
     /// Formats the row for display.
     /// </summary>
     /// <returns>The text.</returns>
-    public override string ToString() => Description.PadRight(34) + "  " + Chord;
+    public override string ToString()
+    {
+        return Description.PadRight(34) + "  " + Chord;
+    }
 }

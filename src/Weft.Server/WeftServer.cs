@@ -80,7 +80,7 @@ public sealed class WeftServer : IAsyncDisposable
         }
         finally
         {
-            _stopped.TrySetResult();
+            _ = _stopped.TrySetResult();
             ServerLog.Info("Server stopped.");
         }
     }
@@ -88,12 +88,7 @@ public sealed class WeftServer : IAsyncDisposable
     private async Task RunLockedAsync(CancellationToken cancellationToken)
     {
         PrepareDirectories();
-        using var serverLock = ServerLock.TryAcquire(WeftPaths.LockFilePath(Options.RuntimeDirectory));
-        if (serverLock is null)
-        {
-            throw new InvalidOperationException("Another weft server is running on " + Options.RuntimeDirectory + ".");
-        }
-
+        using ServerLock serverLock = ServerLock.TryAcquire(WeftPaths.LockFilePath(Options.RuntimeDirectory)) ?? throw new InvalidOperationException("Another weft server is running on " + Options.RuntimeDirectory + ".");
         ServerLog.UseFile(Path.Join(Options.StateDirectory, "server.log"));
         StartedAt = DateTimeOffset.Now;
         using CancellationTokenRegistration registration = cancellationToken.Register(RequestShutdown);
@@ -109,7 +104,7 @@ public sealed class WeftServer : IAsyncDisposable
             }
             finally
             {
-                Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
+                _ = Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
                 await Registry.CloseAllAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
@@ -175,10 +170,10 @@ public sealed class WeftServer : IAsyncDisposable
     {
         if (OperatingSystem.IsWindows())
         {
-            Directory.CreateDirectory(path);
+            _ = Directory.CreateDirectory(path);
             return;
         }
 
-        Directory.CreateDirectory(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        _ = Directory.CreateDirectory(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 }

@@ -15,7 +15,7 @@ public sealed class WeftConfigTests
     public void LoadsCommentedFile()
     {
         string path = Path.Join(Path.GetTempPath(), "weft-config-" + Guid.NewGuid().ToString("N")[..8] + ".json");
-        File.WriteAllText(path, """
+        File.WriteAllText(path, /*lang=json*/ """
             {
               // leader key
               "leader": "ctrl+a",
@@ -73,7 +73,7 @@ public sealed class WeftConfigTests
 
         // Valid JSON that nulls a member the code relies on must fall back rather than throw later.
         string nulled = missing + ".null";
-        File.WriteAllText(nulled, "{ \"bindings\": null }");
+        File.WriteAllText(nulled, /*lang=json,strict*/ "{ \"bindings\": null }");
         try
         {
             Assert.IsFalse(WeftConfigLoader.TryLoad(nulled, out WeftConfig fallback, out string? error));

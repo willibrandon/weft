@@ -38,7 +38,7 @@ internal sealed class BindingTable
     {
         if (!KeyChord.TryParse(config.Leader, null, out KeyChord leader))
         {
-            KeyChord.TryParse("ctrl+b", null, out leader);
+            _ = KeyChord.TryParse("ctrl+b", null, out leader);
         }
 
         var table = new BindingTable(leader);
@@ -67,7 +67,7 @@ internal sealed class BindingTable
                 continue;
             }
 
-            table._bindings.RemoveAll(existing => existing.Chord.Equals(chord));
+            _ = table._bindings.RemoveAll(existing => existing.Chord.Equals(chord));
             if (string.Equals(action, "none", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -94,9 +94,11 @@ internal sealed class BindingTable
 
     // A single-stroke leader arms exactly one key after it, so a longer remainder can never be entered,
     // and a stroke without a terminal key cannot be matched at all.
-    private bool IsUsable(KeyChord chord) =>
-        chord.Steps.All(stroke => KeyMap.ToHex1bKey(stroke.Key) is not null) &&
+    private bool IsUsable(KeyChord chord)
+    {
+        return chord.Steps.All(stroke => KeyMap.ToHex1bKey(stroke.Key) is not null) &&
         (Leader.Steps.Count != 1 || !TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest) || rest.Count == 1);
+    }
 
     /// <summary>
     /// Splits a chord into the leader prefix and the strokes that follow it.
