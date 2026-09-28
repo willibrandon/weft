@@ -2,12 +2,23 @@ import AppKit
 
 extension MacSmoke {
     /// Emits the paced terminal workload in one process so shell child startup cannot set its frame rate.
-    static func produceOutput() throws {
+    static func produceOutput(report: String) throws {
+        guard FileManager.default.createFile(atPath: report, contents: Data("frame\twrite_ms\tsleep_ms\n".utf8)) else {
+            throw SmokeFailure.failed("Could not create the output producer report")
+        }
+        let diagnostics = try FileHandle(forWritingTo: URL(fileURLWithPath: report))
+        defer { try? diagnostics.close() }
+        try diagnostics.seekToEnd()
         let start = ContinuousClock.now
         for frame in 1...120 {
             let lines = (1...30).map { String(format: "visible %03d %03d 0123456789abcdefghijklmnopqrstuvwxyz\n", frame, $0) }.joined()
+            let writing = ContinuousClock.now
             try FileHandle.standardOutput.write(contentsOf: Data(lines.utf8))
+            let sleeping = ContinuousClock.now
             Thread.sleep(forTimeInterval: 0.02)
+            let measurement = String(format: "%d\t%.3f\t%.3f\n", frame,
+                milliseconds(writing.duration(to: sleeping)), milliseconds(sleeping.duration(to: .now)))
+            try diagnostics.write(contentsOf: Data(measurement.utf8))
         }
         let result = String(format: "OUTPUT-DONE in %.1f ms\n", milliseconds(start.duration(to: .now)))
         try FileHandle.standardOutput.write(contentsOf: Data(result.utf8))
@@ -61,8 +72,9 @@ extension MacSmoke {
                 text: "awk 'BEGIN {for(i=1;i<=2000;i++) printf \"hidden %06d 0123456789abcdefghijklmnopqrstuvwxyz\\n\",i}'; printf 'HIDDEN\\055DONE\\n'\r"))
         }
         let producer = "'" + CommandLine.arguments[0].replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let producerReport = "'" + (report + ".producer.txt").replacingOccurrences(of: "'", with: "'\\''") + "'"
         controller.terminal.send?(DesktopCommand(operation: "text", target: originalBlock,
-            text: "\(producer) --produce-output\r"))
+            text: "\(producer) --produce-output \(producerReport)\r"))
         _ = try await wait(controller) { $0.blocks.first(where: { $0.id == originalBlock })?.cells.map(\.text).joined().contains("visible ") == true }
         var latency: [Double] = []
         var drawing: [Double] = []

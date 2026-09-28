@@ -312,6 +312,8 @@ Swift builds group files into compiler batches based on the host's processor cou
 so both native tests and analysis avoid redundant parsing of the entire module.
 Tab-switch timing ends at the selected tab's first paint; background command
 completion is checked separately before sampling loaded memory.
+Producer reports separate time spent writing to the PTY from deliberate pacing
+so output completion failures can be distinguished from presentation delays.
 The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching

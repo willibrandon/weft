@@ -167,6 +167,11 @@ The faster output producer also exposed that tab-switch timing included waiting
 for a background command to finish. Timing now ends when the selected tab's frame
 is painted, then separately verifies output completion. Loaded memory is sampled
 after every background producer has completed.
+Both CI architectures now compile and pass functional and idle-resource checks,
+but output completion can still time out with the native producer. A local server
+profile was dominated by waits. Per-frame write and sleep timings are retained
+alongside qualification results to identify whether production or consumption is
+delayed; no throughput fix is claimed yet.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.

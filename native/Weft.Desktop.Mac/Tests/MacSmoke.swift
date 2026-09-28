@@ -10,7 +10,8 @@ struct MacSmoke {
     static func main() {
         if CommandLine.arguments.dropFirst().first == "--produce-output" {
             do {
-                try produceOutput()
+                guard CommandLine.arguments.count == 3 else { throw SmokeFailure.failed("Output production requires a report path") }
+                try produceOutput(report: CommandLine.arguments[2])
                 exit(0)
             } catch {
                 FileHandle.standardError.write(Data(("Output workload failed: \(error)\n").utf8))
