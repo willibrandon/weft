@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Client.Core</AssemblyName>
+    <RootNamespace>Weft.Client</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Client" />
+    <InternalsVisibleTo Include="Weft.Tests" />
+    <PackageReference Include="Hex1b" />
+    <ProjectReference Include="../Weft.Core/Weft.Core.csproj" />
+    <ProjectReference Include="../Weft.Protocol/Weft.Protocol.csproj" />
+  </ItemGroup>
+</Project>

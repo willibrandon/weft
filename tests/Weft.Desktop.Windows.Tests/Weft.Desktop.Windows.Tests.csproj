@@ -1,0 +1,55 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Weft.Desktop.Windows.Tests</AssemblyName>
+    <RootNamespace>Weft.Desktop.Windows.Tests</RootNamespace>
+    <Description>Real window, server, and pseudo-terminal tests for the Windows app.</Description>
+    <!-- WinUI needs a Windows target. The portable solution never builds this project. -->
+    <WeftAllowAlternateTargetFramework>true</WeftAllowAlternateTargetFramework>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
+    <!-- Pixel checks capture windows with Windows Graphics Capture, which needs Windows 10 build 20348. -->
+    <TargetPlatformMinVersion>10.0.20348.0</TargetPlatformMinVersion>
+    <WeftHostArchitecture>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</WeftHostArchitecture>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$(WeftHostArchitecture)</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- The test host loads the self-contained runtime the same way the app does. -->
+    <WindowsAppSdkUndockedRegFreeWinRTInitialize>false</WindowsAppSdkUndockedRegFreeWinRTInitialize>
+    <!-- Windows open with the app's own DPI awareness and code page. -->
+    <ApplicationManifest>../../src/Weft.Desktop.Windows/app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Localized test framework assemblies have no neutral resource for the WinUI resource index. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Hex1b" ExcludeAssets="native" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" />
+    <PackageReference Include="Microsoft.UI.Reactor" />
+    <!-- Only the WinUI and windowing components ship; the rest of the Windows App SDK is unused. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Weft.Desktop.Windows/Weft.Desktop.Windows.csproj" />
+    <!-- Windows start this build of the server on demand, as the app starts its bundled copy. -->
+    <ProjectReference Include="../../src/Weft.App/Weft.App.csproj" ReferenceOutputAssembly="false" OutputItemType="WeftServerAssembly" />
+  </ItemGroup>
+
+  <Target Name="WeftRecordServer" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <AssemblyMetadata Include="WeftServer" Value="@(WeftServerAssembly->'%(RootDir)%(Directory)%(Filename).exe')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The deterministic file-based shell runs in every test terminal, as in the portable tests. -->
+  <Target Name="WeftBuildTestPrograms" AfterTargets="Build" Inputs="../programs/TestShell.cs" Outputs="$(OutDir)programs/TestShell.dll">
+    <PropertyGroup>
+      <WeftDotnetHost>$(DOTNET_HOST_PATH)</WeftDotnetHost>
+      <WeftDotnetHost Condition="'$(WeftDotnetHost)' == ''">dotnet</WeftDotnetHost>
+    </PropertyGroup>
+    <Exec Command="&quot;$(WeftDotnetHost)&quot; build &quot;$(MSBuildThisFileDirectory)../programs/TestShell.cs&quot; -c $(Configuration) -o &quot;$(OutDir)programs&quot;" />
+  </Target>
+</Project>

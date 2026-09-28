@@ -24,14 +24,11 @@ public sealed class AttachApp
     private ControlClient? _control;
     private RootContext? _root;
     private SessionMirror? _mirror;
-    private const int LeaderSafetyTimeoutMs = 10_000;
+    private PopupStack? _helpPopups;
     private const int ActivationIntervalMs = 1000;
     private long _lastActivation;
-    private long _bindingBuilds;
-    private bool _lastRenderPending;
     private bool _locked;
     private bool _focusedOnce;
-    private long _leaderPendingUntil;
     private int _reportedWidth;
     private int _reportedHeight;
 
@@ -321,7 +318,7 @@ public sealed class AttachApp
     private void OnUserInput()
     {
         // Any input marks this client as the most recently active one, which the latest size policy follows.
-        // Leader actions activate through Execute as well; this covers ordinary typing that goes straight to a block.
+        // Actions activate through Execute as well; this covers ordinary typing that goes straight to a block.
         // A read-only viewer never becomes the size authority, whatever it presses.
         if (_options.ReadOnly)
         {
@@ -367,8 +364,7 @@ public sealed class AttachApp
             views = string.Join(",", _views.Keys);
         }
 
-        long remaining = Volatile.Read(ref _leaderPendingUntil) - Environment.TickCount64;
-        return "focusedBlock=" + (FocusedBlockId() ?? "none") + " views=[" + views + "] activeBlock=" + (_mirror?.ActiveTab?.ActiveBlock ?? "none") + " control=" + (_control is null ? "none" : "ok") + " leaderRemainingMs=" + remaining + " bindingBuilds=" + _bindingBuilds + " lastRenderPending=" + _lastRenderPending;
+        return "focusedBlock=" + (FocusedBlockId() ?? "none") + " views=[" + views + "] activeBlock=" + (_mirror?.ActiveTab?.ActiveBlock ?? "none") + " control=" + (_control is null ? "none" : "ok");
     }
 
     private string? FocusedBlockId()
@@ -426,10 +422,8 @@ public sealed class AttachApp
             return [.. layers];
         });
 
-        bool pending = LeaderPending;
-        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, Status, _locked, pending, _bindings)]));
-        Hex1bWidget bound = body.InputBindings(bindings => RegisterBindings(bindings, mirror));
-        return pending ? bound.RedrawAfter(TimeSpan.FromMilliseconds(LeaderSafetyTimeoutMs)) : bound;
+        Hex1bWidget body = new BackgroundPanelWidget(s_panel, ctx.VStack(v => [content.Fill(), RenderInfoBar(v, mirror, layout, Status, _locked, _bindings)]));
+        return body.InputBindings(bindings => RegisterBindings(bindings, mirror));
     }
 
     private Hex1bWidget RenderLayout<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout)
@@ -515,7 +509,7 @@ public sealed class AttachApp
         return ctx.Border(inner).Title(title).FixedWidth(width).FixedHeight(height);
     }
 
-    private InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, bool leaderPending, BindingTable bindings)
+    private InfoBarWidget RenderInfoBar<TParent>(WidgetContext<TParent> ctx, SessionMirror mirror, LayoutInfo layout, string? status, bool locked, BindingTable bindings)
         where TParent : Hex1bWidget
     {
         IReadOnlyList<TabInfo> tabs = mirror.Tabs;
@@ -525,10 +519,6 @@ public sealed class AttachApp
         string hint = locked ? bindings.ChordFor(ClientActions.Lock) + " unlock" : string.Empty;
         string helpChord = locked ? string.Empty : bindings.ChordFor(ClientActions.Palette);
         string helpLabel = string.IsNullOrEmpty(helpChord) ? "Help" : helpChord + " Help";
-        if (leaderPending)
-        {
-            hint = bindings.Describe(bindings.Leader) + "\u2026";
-        }
         if (mirror.ActiveTab is { Synchronized: true })
         {
             size = "SYNC " + size;
@@ -541,42 +531,19 @@ public sealed class AttachApp
             s.Section(locked ? "LOCKED" : status ?? string.Empty),
             s.Section(size),
             s.Section(hint),
-            s.Section(b => b.Button(helpLabel).OnClick(args =>
-            {
-                DisarmLeader();
-                Execute(ClientActions.Palette, args.Context, mirror);
-            }))
+            s.Section(b => b.Button(helpLabel).OnClick(args => Execute(ClientActions.Palette, args.Context, mirror))),
+            s.Section(b => b.Button("Exit weft").OnClick(args => Execute(ClientActions.Detach, args.Context, mirror)))
         ]).Divider(" ");
     }
 
-    private bool LeaderPending => Environment.TickCount64 < Volatile.Read(ref _leaderPendingUntil);
-
     private void RegisterBindings(InputBindingsBuilder bindings, SessionMirror mirror)
     {
-        // The leader is a single stroke that arms the next stroke rather than a router-level chord:
-        // arming state lives here, so a re-render or capture change between strokes cannot lose it.
-        // While armed, every identifiable key is intercepted: bound keys run their action and any
-        // other key disarms the leader and is forwarded to the block, the way a tmux prefix behaves.
-        bool pending = LeaderPending;
-        _bindingBuilds++;
-        if (pending != _lastRenderPending)
+        if (_helpPopups is { HasPopups: true })
         {
-            ClientLog.Debug("render pending=" + pending);
-        }
-
-        _lastRenderPending = pending;
-        bool singleStrokeLeader = _bindings.Leader.Steps.Count == 1;
-        if (singleStrokeLeader && !pending)
-        {
-            BuildSteps(bindings, _bindings.Leader)?.OverridesCapture().Action(_ => ArmLeader(), "Leader");
+            return;
         }
 
         HashSet<KeyStroke> claimed = [];
-        if (singleStrokeLeader)
-        {
-            _ = claimed.Add(_bindings.Leader.Steps[0]);
-        }
-
         foreach ((KeyChord chord, string action) in _bindings.Bindings)
         {
             if (_locked && !string.Equals(action, ClientActions.Lock, StringComparison.Ordinal))
@@ -590,60 +557,13 @@ public sealed class AttachApp
             }
 
             string captured = action;
-            if (singleStrokeLeader && _bindings.TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest))
-            {
-                if (!pending || rest.Count != 1)
-                {
-                    continue;
-                }
-
-                _ = claimed.Add(rest[0]);
-                BuildSteps(bindings, new KeyChord(rest))?.OverridesCapture().Action(context =>
-                {
-                    DisarmLeader();
-                    Execute(captured, context, mirror);
-                }, captured);
-                continue;
-            }
-
-            if (!pending || (string.Equals(action, ClientActions.Palette, StringComparison.Ordinal) && chord.Steps.Count == 1))
-            {
-                _ = claimed.Add(chord.Steps[0]);
-                BuildSteps(bindings, chord)?.OverridesCapture().Action(context =>
-                {
-                    DisarmLeader();
-                    Execute(captured, context, mirror);
-                }, captured);
-            }
+            _ = claimed.Add(chord.Steps[0]);
+            BuildShortcut(bindings, chord)?.OverridesCapture().Action(context => Execute(captured, context, mirror), captured);
         }
 
-        if (!pending)
+        if (_options.ReadOnly)
         {
-            if (_options.ReadOnly)
-            {
-                SwallowUnclaimed(bindings, claimed);
-            }
-
-            return;
-        }
-
-        bindings.Key(Hex1bKey.Escape).OverridesCapture().Action(_ => DisarmLeader(), "Cancel leader");
-        _ = claimed.Add(new KeyStroke(KeyModifiers.None, "escape"));
-        foreach ((KeyStroke stroke, Hex1bKeyEvent keyEvent) in KeyMap.AllStrokes()
-            .Where(stroke => !claimed.Contains(stroke))
-            .Select(stroke => (stroke, KeyMap.ToKeyEvent(stroke)))
-            .Where(pair => pair.Item2 is not null)
-            .Select(pair => (pair.stroke, pair.Item2!)))
-        {
-
-            BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(context =>
-            {
-                DisarmLeader();
-                if (!_options.ReadOnly && ViewFor(FocusedBlockId()) is { } view)
-                {
-                    _ = view.Handle.SendEventAsync(keyEvent);
-                }
-            }, "Forward " + stroke);
+            SwallowUnclaimed(bindings, claimed);
         }
     }
 
@@ -653,53 +573,35 @@ public sealed class AttachApp
         // bound to nothing except the configured bindings for harmless client actions.
         foreach (KeyStroke stroke in KeyMap.AllStrokes().Where(stroke => !claimed.Contains(stroke)))
         {
-            BuildSteps(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
+            BuildShortcut(bindings, new KeyChord([stroke]))?.OverridesCapture().Action(_ => { }, "Read-only");
         }
     }
 
-    private static KeyStepBuilder? BuildSteps(InputBindingsBuilder bindings, KeyChord chord)
+    private static KeyStepBuilder? BuildShortcut(InputBindingsBuilder bindings, KeyChord chord)
     {
-        KeyStepBuilder? builder = null;
-        foreach (KeyStroke stroke in chord.Steps)
+        KeyStroke stroke = chord.Steps[0];
+        if (KeyMap.ToHex1bKey(stroke.Key) is not { } key)
         {
-            if (KeyMap.ToHex1bKey(stroke.Key) is not { } key)
-            {
-                return null;
-            }
+            return null;
+        }
 
-            KeyStepBuilder step = builder is null ? bindings.Key(key) : builder.Then().Key(key);
-            if (stroke.Modifiers.HasFlag(KeyModifiers.Control))
-            {
-                step = step.Ctrl();
-            }
+        KeyStepBuilder builder = bindings.Key(key);
+        if (stroke.Modifiers.HasFlag(KeyModifiers.Control))
+        {
+            builder = builder.Ctrl();
+        }
 
-            if (stroke.Modifiers.HasFlag(KeyModifiers.Alt))
-            {
-                step = step.Alt();
-            }
+        if (stroke.Modifiers.HasFlag(KeyModifiers.Alt))
+        {
+            builder = builder.Alt();
+        }
 
-            if (stroke.Modifiers.HasFlag(KeyModifiers.Shift))
-            {
-                step = step.Shift();
-            }
-
-            builder = step;
+        if (stroke.Modifiers.HasFlag(KeyModifiers.Shift))
+        {
+            builder = builder.Shift();
         }
 
         return builder;
-    }
-
-    private void ArmLeader()
-    {
-        Volatile.Write(ref _leaderPendingUntil, Environment.TickCount64 + LeaderSafetyTimeoutMs);
-        ClientLog.Debug("leader armed");
-        App?.Invalidate();
-    }
-
-    private void DisarmLeader()
-    {
-        Volatile.Write(ref _leaderPendingUntil, 0);
-        App?.Invalidate();
     }
 
     private void Execute(string action, InputBindingActionContext context, SessionMirror mirror)
@@ -839,9 +741,6 @@ public sealed class AttachApp
             case ClientActions.Palette:
                 ShowPalette(context, mirror);
                 break;
-            case ClientActions.SendLeader:
-                SendLeaderKey();
-                break;
             case var numbered when ClientActions.TabNumber(numbered) is { } number:
                 SelectTabNumber(mirror, number);
                 break;
@@ -876,6 +775,13 @@ public sealed class AttachApp
 
     private void ShowPalette(InputBindingActionContext context, SessionMirror mirror)
     {
+        if (_helpPopups is { HasPopups: true })
+        {
+            ClosePalette();
+            return;
+        }
+
+        context.ReleaseCapture();
         // A mouse click focuses the Help button. Restore the block before opening the popup so
         // dismissing it returns keyboard input to the terminal instead of leaving it on the button.
         if (ViewFor(FocusedBlockId()) is { } view)
@@ -884,31 +790,79 @@ public sealed class AttachApp
         }
 
         PopupStack popups = context.Popups;
-        RootContext ctx = _root!;
+        _helpPopups = popups;
         List<PaletteEntry> entries =
         [
             .. ClientActions.Defaults
+                .Where(item => !string.Equals(item.Action, ClientActions.Palette, StringComparison.Ordinal))
                 .Where(item => !_options.ReadOnly || ClientActions.IsReadOnlySafe(item.Action))
                 .Where(item => !string.Equals(item.Action, ClientActions.Lock, StringComparison.Ordinal) || !string.IsNullOrEmpty(_bindings.ChordFor(ClientActions.Lock)))
-                .Select(item => new PaletteEntry(item.Action, item.Description, _bindings.ChordFor(item.Action)))
+                .Select(item => new PaletteEntry(item.Action, _locked && string.Equals(item.Action, ClientActions.Lock, StringComparison.Ordinal) ? "Enable weft shortcuts" : item.Description, _bindings.ChordFor(item.Action)))
         ];
-        int visibleItems = Math.Min(entries.Count, Math.Clamp(HostSize.Read(_options.Headless).Height - 8, 1, 16));
-        _ = popups.Push(() => Dismissable(ctx.Center(ctx.Border(b =>
-        [
-            b.VStack(v =>
+        _ = popups.Push(() =>
+        {
+            RootContext ctx = _root!;
+            (int width, int height) = HostSize.Read(_options.Headless);
+            int visibleItems = Math.Min(entries.Count, Math.Clamp(height - 8, 1, 16));
+            return ctx.Border(b =>
             [
-                v.SelectionPrompt(entries)
+                b.SelectionPrompt(entries)
                     .Prompt("Search commands")
                     .MaxVisibleItems(visibleItems)
                     .OnSelected(entry =>
                     {
                         _ = popups.Pop();
+                        _helpPopups = null;
+                        if (FocusedBlockId() is { } id)
+                        {
+                            FocusView(id);
+                        }
+
                         Execute(entry.Action, context, mirror);
                     }).FixedHeight(visibleItems + 2),
-                v.Text(" Type to filter. ↑↓ choose. Enter runs. Esc closes. "),
-                v.Button("Close").OnClick(_ => popups.Pop())
-            ])
-        ]).Title(" Help and commands ")), popups));
+                b.Text(" Type to filter. ↑↓ choose. Enter runs. ").FixedHeight(1),
+                b.HStack(h =>
+                [
+                    h.Text(" Esc closes Help ").FillWidth(),
+                    h.Button("[ Close ]").OnClick(_ => ClosePalette())
+                ]).FixedHeight(1)
+            ]).Title(" Help and commands ")
+                .FixedWidth(Math.Max(1, Math.Min(64, width - 4)))
+                .FixedHeight(visibleItems + 6)
+                .InputBindings(bindings =>
+                {
+                    // Dialog shortcuts take precedence over input capture and text predictions.
+                    // This binding exists only while Help is open; terminal Esc stays untouched.
+                    bindings.Key(Hex1bKey.Escape).Global().OverridesCapture().Action(_ => ClosePalette(), "Close help");
+                    foreach ((KeyChord chord, _) in _bindings.Bindings.Where(binding => string.Equals(binding.Action, ClientActions.Palette, StringComparison.Ordinal)))
+                    {
+                        BuildShortcut(bindings, chord)?.Global().OverridesCapture().Action(_ => ClosePalette(), "Close help");
+                    }
+
+                    foreach ((KeyChord chord, _) in _bindings.Bindings.Where(binding => string.Equals(binding.Action, ClientActions.Detach, StringComparison.Ordinal)))
+                    {
+                        BuildShortcut(bindings, chord)?.Global().OverridesCapture().Action(args => Execute(ClientActions.Detach, args, mirror), "Exit weft");
+                    }
+                });
+        }).AsBarrier();
+        App?.RequestFocus(node => node is TextBoxNode);
+    }
+
+    private void ClosePalette()
+    {
+        if (_helpPopups is not { } popups)
+        {
+            return;
+        }
+
+        _ = popups.Pop();
+        _helpPopups = null;
+        if (FocusedBlockId() is { } id)
+        {
+            FocusView(id);
+        }
+
+        App?.Invalidate();
     }
 
     private void PickSession(InputBindingActionContext context, SessionMirror mirror)
@@ -1016,26 +970,6 @@ public sealed class AttachApp
             FocusView(block.Id);
             return block;
         }));
-    }
-
-    private void SendLeaderKey()
-    {
-        BlockView? view = ViewFor(FocusedBlockId());
-        if (view is null)
-        {
-            return;
-        }
-
-        // A multi-stroke leader is sent stroke by stroke, in order, on one queue.
-        _ = SendStrokesAsync(view, _bindings.Leader.Steps);
-    }
-
-    private static async Task SendStrokesAsync(BlockView view, IReadOnlyList<KeyStroke> strokes)
-    {
-        foreach (Hex1bKeyEvent keyEvent in strokes.Select(KeyMap.ToKeyEvent).Where(keyEvent => keyEvent is not null).Select(keyEvent => keyEvent!))
-        {
-            await view.Handle.SendEventAsync(keyEvent).ConfigureAwait(false);
-        }
     }
 
     private void SelectTabNumber(SessionMirror mirror, int number)

@@ -35,13 +35,6 @@ public static class WeftConfigLoader
                 return false;
             }
 
-            if (!KeyChord.TryParse(config.Leader, null, out _))
-            {
-                error = "The leader chord '" + config.Leader + "' is not valid.";
-                config = new WeftConfig();
-                return false;
-            }
-
             return true;
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException)
@@ -72,11 +65,6 @@ public static class WeftConfigLoader
 
     private static string? NullMember(WeftConfig config)
     {
-        if (config.Leader is null)
-        {
-            return "leader";
-        }
-
         if (config.Theme is null)
         {
             return "theme";

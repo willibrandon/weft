@@ -469,7 +469,7 @@ internal sealed partial class SessionRegistry
             ["WEFT_BLOCK"] = block.Id.ToString(),
             ["WEFT_SOCKET"] = WeftPaths.ControlSocketPath(_options.RuntimeDirectory)
         };
-        var host = new BlockHost(block.SocketPath, file, arguments, directory, environment, Math.Max(1, block.Width), Math.Max(1, block.Height), _options.Scrollback);
+        var host = new BlockHost(block.SocketPath, file, arguments, directory, environment, Math.Max(1, block.Width), Math.Max(1, block.Height), _options.Scrollback, _outputProcessing);
         block.Host = host;
         host.Exited += code => OnBlockExited(block, code);
         host.TitleChanged += title => OnBlockTitled(block, title);

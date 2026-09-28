@@ -11,6 +11,7 @@ internal sealed partial class SessionRegistry
     private readonly Lock _gate = new();
     private readonly WeftServerOptions _options;
     private readonly SessionStore _store;
+    private readonly SemaphoreSlim _outputProcessing;
     private readonly List<Session> _sessions = [];
     private int _nextSession;
     private int _nextTab;
@@ -23,11 +24,13 @@ internal sealed partial class SessionRegistry
     /// <param name="options">The server options.</param>
     /// <param name="events">The event log.</param>
     /// <param name="store">The session store.</param>
-    internal SessionRegistry(WeftServerOptions options, EventLog events, SessionStore store)
+    /// <param name="outputProcessing">The server-owned output processing slot.</param>
+    internal SessionRegistry(WeftServerOptions options, EventLog events, SessionStore store, SemaphoreSlim outputProcessing)
     {
         _options = options;
         Events = events;
         _store = store;
+        _outputProcessing = outputProcessing;
     }
 
     /// <summary>

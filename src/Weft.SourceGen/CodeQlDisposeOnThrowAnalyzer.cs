@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Weft.SourceGen;
 
@@ -56,17 +57,13 @@ public sealed class CodeQlDisposeOnThrowAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        foreach (VariableDeclaratorSyntax variable in declaration.Declaration.Variables)
+        foreach (VariableDeclaratorSyntax variable in declaration.Declaration.Variables.Where(variable =>
+            variable.Initializer?.Value is ExpressionSyntax initializer &&
+            context.SemanticModel.GetTypeInfo(
+                initializer,
+                context.CancellationToken).Type?.OriginalDefinition.ToDisplayString() ==
+                DisposableCollectionTypeName))
         {
-            if (variable.Initializer?.Value is not ExpressionSyntax initializer ||
-                context.SemanticModel.GetTypeInfo(
-                    initializer,
-                    context.CancellationToken).Type?.OriginalDefinition.ToDisplayString() !=
-                    DisposableCollectionTypeName)
-            {
-                continue;
-            }
-
             context.ReportDiagnostic(Diagnostic.Create(
                 s_rule,
                 variable.GetLocation(),

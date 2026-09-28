@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Weft</AssemblyName>
+    <RootNamespace>Weft.Desktop.Windows</RootNamespace>
+    <Description>The native Windows app for weft, built with Microsoft UI Reactor over WinUI.</Description>
+    <!-- WinUI needs a Windows target. The portable solution never builds this project. -->
+    <WeftAllowAlternateTargetFramework>true</WeftAllowAlternateTargetFramework>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <WeftHostArchitecture>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</WeftHostArchitecture>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$(WeftHostArchitecture)</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Program initializes the self-contained runtime with a P/Invoke limited to the app directory. -->
+    <WindowsAppSdkUndockedRegFreeWinRTInitialize>false</WindowsAppSdkUndockedRegFreeWinRTInitialize>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The app only renders terminals; the bundled server carries the pseudo-console host. -->
+    <PackageReference Include="Hex1b" ExcludeAssets="native" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" />
+    <PackageReference Include="Microsoft.UI.Reactor" />
+    <!-- Only the WinUI and windowing components ship; the rest of the Windows App SDK is unused. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Weft.Client.Core/Weft.Client.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Desktop.Windows.Tests" />
+  </ItemGroup>
+  <!-- Development builds render the icon beside the app, where windows and the taskbar pick it up. -->
+  <Target Name="WeftRenderIcon" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'"
+          Inputs="AppIcon.cs" Outputs="$(OutDir)Assets/AppIcon.ico">
+    <Exec Command="&quot;$(TargetDir)$(AssemblyName).exe&quot; --render-icon &quot;$(OutDir)Assets&quot;" />
+  </Target>
+  <!-- An unpackaged Native AOT publish leaves the app's resource index behind (WindowsAppSDK#6394),
+       and WinUI controls then fail to find their resources. Remove once the publish output includes it. -->
+  <Target Name="WeftCopyResourceIndex" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).pri" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+  </Target>
+</Project>

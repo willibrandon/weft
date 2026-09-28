@@ -42,6 +42,11 @@ public sealed class ControlClient : IAsyncDisposable
     public ChannelReader<ProtocolMessage> Events => _events.Reader;
 
     /// <summary>
+    /// Notifies an event-driven client that the event queue or transport state changed.
+    /// </summary>
+    internal event Action? EventReceived;
+
+    /// <summary>
     /// Gets a task that completes when the connection is closed by either side.
     /// </summary>
     public Task Closed { get; }
@@ -180,6 +185,7 @@ public sealed class ControlClient : IAsyncDisposable
                 if (message.IsEvent)
                 {
                     _ = _events.Writer.TryWrite(message);
+                    EventReceived?.Invoke();
                     continue;
                 }
 
@@ -218,6 +224,7 @@ public sealed class ControlClient : IAsyncDisposable
         finally
         {
             _ = _events.Writer.TryComplete();
+            EventReceived?.Invoke();
             List<TaskCompletionSource<ProtocolMessage>> pending;
             lock (_gate)
             {

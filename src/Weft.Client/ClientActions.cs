@@ -151,11 +151,6 @@ internal static class ClientActions
     internal const string Palette = "palette";
 
     /// <summary>
-    /// Send the leader chord to the focused block, stroke by stroke.
-    /// </summary>
-    internal const string SendLeader = "send-leader";
-
-    /// <summary>
     /// The prefix of the actions that select a tab by number, tab.1 through tab.9.
     /// </summary>
     internal const string TabPrefix = "tab.";
@@ -188,56 +183,42 @@ internal static class ClientActions
     internal static IReadOnlyList<(string Action, string Chord, string Description)> Defaults { get; } =
     [
         (Palette, "f1", "Help and commands"),
-        (Detach, "leader d", "Detach from the session"),
-        (TabNew, "leader c", "New tab"),
-        (TabNext, "leader n", "Next tab"),
-        (TabPrevious, "leader p", "Previous tab"),
-        (TabClose, "leader shift+x", "Close tab"),
-        (TabRename, "leader .", "Rename tab"),
-        (SplitRight, "leader v", "Split right"),
-        (SplitDown, "leader -", "Split below"),
-        (BlockClose, "leader x", "Close block"),
-        (BlockZoom, "leader z", "Zoom block"),
-        (BlockFloat, "leader f", "Float or tile block"),
-        (BlockRename, "leader ,", "Rename block"),
-        (CopyMode, "leader pageup", "Copy mode and scrollback"),
-        (Paste, "leader insert", "Paste"),
-        (FocusLeft, "leader h", "Focus left"),
-        (FocusDown, "leader j", "Focus down"),
-        (FocusUp, "leader k", "Focus up"),
-        (FocusRight, "leader l", "Focus right"),
-        (ResizeLeft, "leader shift+h", "Resize left"),
-        (ResizeDown, "leader shift+j", "Resize down"),
-        (ResizeUp, "leader shift+k", "Resize up"),
-        (ResizeRight, "leader shift+l", "Resize right"),
-        (LayoutNext, "leader space", "Next layout preset"),
-        (SessionPick, "leader s", "Switch session"),
-        (TabSync, "leader shift+s", "Synchronize input across the tab"),
-        (SessionRename, "leader shift+r", "Rename session"),
-        (TabPick, "leader w", "Pick tab or block"),
-        (Lock, "leader g", "Lock: pass every key through"),
-        (SendLeader, "leader leader", "Send the leader key"),
-        (TabPrefix + "1", "leader 1", "Tab 1"),
-        (TabPrefix + "2", "leader 2", "Tab 2"),
-        (TabPrefix + "3", "leader 3", "Tab 3"),
-        (TabPrefix + "4", "leader 4", "Tab 4"),
-        (TabPrefix + "5", "leader 5", "Tab 5"),
-        (TabPrefix + "6", "leader 6", "Tab 6"),
-        (TabPrefix + "7", "leader 7", "Tab 7"),
-        (TabPrefix + "8", "leader 8", "Tab 8"),
-        (TabPrefix + "9", "leader 9", "Tab 9")
-    ];
-
-    /// <summary>
-    /// Gets extra default chords that alias actions.
-    /// </summary>
-    internal static IReadOnlyList<(string Action, string Chord)> Aliases { get; } =
-    [
-        (Palette, "leader ?"),
-        (FocusLeft, "leader left"),
-        (FocusDown, "leader down"),
-        (FocusUp, "leader up"),
-        (FocusRight, "leader right"),
-        (TabNext, "leader tab")
+        (TabNew, "f2", "New tab"),
+        (SplitRight, "f3", "Split right"),
+        (SplitDown, "f4", "Split below"),
+        (BlockZoom, "f5", "Zoom block"),
+        (TabNext, "f6", "Next tab"),
+        (TabPrevious, "f7", "Previous tab"),
+        (TabPick, "f8", "Pick tab or block"),
+        (SessionPick, "f9", "Switch session"),
+        (Detach, "f10", "Exit weft"),
+        (Lock, "f12", "Pass shortcuts to terminal"),
+        (TabClose, "", "Close tab"),
+        (TabRename, "", "Rename tab"),
+        (BlockClose, "", "Close block"),
+        (BlockFloat, "", "Float or tile block"),
+        (BlockRename, "", "Rename block"),
+        (CopyMode, "", "Copy mode and scrollback"),
+        (Paste, "", "Paste"),
+        (FocusLeft, "", "Focus left"),
+        (FocusDown, "", "Focus down"),
+        (FocusUp, "", "Focus up"),
+        (FocusRight, "", "Focus right"),
+        (ResizeLeft, "", "Resize left"),
+        (ResizeDown, "", "Resize down"),
+        (ResizeUp, "", "Resize up"),
+        (ResizeRight, "", "Resize right"),
+        (LayoutNext, "", "Next layout preset"),
+        (TabSync, "", "Synchronize input across the tab"),
+        (SessionRename, "", "Rename session"),
+        (TabPrefix + "1", "", "Tab 1"),
+        (TabPrefix + "2", "", "Tab 2"),
+        (TabPrefix + "3", "", "Tab 3"),
+        (TabPrefix + "4", "", "Tab 4"),
+        (TabPrefix + "5", "", "Tab 5"),
+        (TabPrefix + "6", "", "Tab 6"),
+        (TabPrefix + "7", "", "Tab 7"),
+        (TabPrefix + "8", "", "Tab 8"),
+        (TabPrefix + "9", "", "Tab 9")
     ];
 }

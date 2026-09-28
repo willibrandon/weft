@@ -1,6 +1,8 @@
 version: 2
 
 updates:
+  # Add Swift package updates when the Mac app introduces Package.swift dependencies.
+  # It currently uses only Apple system frameworks; NuGet owns the shared core.
   - package-ecosystem: github-actions
     directory: /
     schedule:

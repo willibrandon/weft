@@ -26,6 +26,19 @@ internal sealed class CursorReplay
     }
 
     /// <summary>
+    /// Disables position projection until both modes are known again after an untracked control.
+    /// </summary>
+    internal void Invalidate()
+    {
+        lock (_gate)
+        {
+            _originMode = true;
+            _marginMode = true;
+            _canPositionRestore = false;
+        }
+    }
+
+    /// <summary>
     /// Preserves output tokens and makes ordinary cursor restores independent of a viewer's earlier output.
     /// </summary>
     /// <param name="appliedTokens">Tokens applied to the authoritative server terminal.</param>

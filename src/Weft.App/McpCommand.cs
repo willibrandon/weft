@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Weft.Client;
 using Weft.Mcp;
 
 namespace Weft.App;

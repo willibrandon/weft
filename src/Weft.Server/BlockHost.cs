@@ -1,5 +1,6 @@
 using Hex1b;
 using Hex1b.Automation;
+using Hex1b.Tokens;
 using Weft.Protocol;
 
 namespace Weft.Server;
@@ -10,7 +11,8 @@ namespace Weft.Server;
 internal sealed class BlockHost : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stopping = new();
-    private readonly OutputRevisionFilter _revision = new();
+    private readonly OutputRevision _revision = new();
+    private readonly CursorReplay _cursorReplay = new();
     private readonly Hex1bTerminalChildProcess _process;
     private readonly InputObservingWorkload _workload;
     private readonly Hmp1PresentationAdapter _presentation;
@@ -35,6 +37,7 @@ internal sealed class BlockHost : IAsyncDisposable
     /// <param name="width">The initial width in columns.</param>
     /// <param name="height">The initial height in rows.</param>
     /// <param name="scrollback">The scrollback capacity in rows.</param>
+    /// <param name="outputProcessing">The server-owned output processing slot.</param>
     internal BlockHost(
         string socketPath,
         string command,
@@ -43,13 +46,16 @@ internal sealed class BlockHost : IAsyncDisposable
         Dictionary<string, string> environment,
         int width,
         int height,
-        int scrollback)
+        int scrollback,
+        SemaphoreSlim outputProcessing)
     {
         SocketPath = socketPath;
         _process = new Hex1bTerminalChildProcess(command, [.. arguments], workingDirectory, environment, inheritEnvironment: true, width, height);
-        _workload = new InputObservingWorkload(_process);
+        _workload = new InputObservingWorkload(_process, outputProcessing)
+        {
+            OutputApplied = OnOutputAppliedAsync
+        };
         _workload.InputWritten += bytes => InputReceived?.Invoke(bytes);
-        _revision.Output += () => Output?.Invoke();
         _presentation = new Hmp1PresentationAdapter(width, height)
         {
             OnClientConnected = (_, _) =>
@@ -72,7 +78,6 @@ internal sealed class BlockHost : IAsyncDisposable
             ScrollbackCapacity = scrollback,
             RunCallback = RunProcessAsync
         };
-        options.PresentationFilters.Add(_revision);
         _terminal = new Hex1bTerminal(options);
         _terminal.WindowTitleChanged += title => TitleChanged?.Invoke(title);
         _authority = new LayoutAuthorityPeer(socketPath, width, height);
@@ -142,7 +147,7 @@ internal sealed class BlockHost : IAsyncDisposable
     {
         long started = Environment.TickCount64;
         _listenTask = ListenAsync(_stopping.Token);
-        _runTask = _terminal.RunAsync(_stopping.Token);
+        _runTask = RunTerminalAsync();
 
         // The layout authority attaches before the process starts. Otherwise a command that exits at once can
         // finish before the authority's hello, and the block answers that hello with its exit instead.
@@ -296,6 +301,43 @@ internal sealed class BlockHost : IAsyncDisposable
         }
     }
 
+    private async Task<int> RunTerminalAsync()
+    {
+        try
+        {
+            return await _terminal.RunAsync(_stopping.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            // A failed or canceled pump may stop before its presentation callback.
+            _workload.CompleteOutput();
+        }
+    }
+
+    private async ValueTask OnOutputAppliedAsync(CursorControlReader controls, CancellationToken cancellationToken)
+    {
+        if (controls.Uncertain)
+        {
+            _cursorReplay.Invalidate();
+        }
+        if (controls.Controls.Count != 0)
+        {
+            using Hex1bTerminalSnapshot snapshot = _terminal.CreateSnapshot();
+            _cursorReplay.Resize(snapshot.Width);
+            IReadOnlyList<AnsiToken> projected = _cursorReplay.Project(controls.Controls.Select(token =>
+                AppliedToken.WithNoCellImpacts(token, 0, 0, snapshot.CursorX, snapshot.CursorY)).ToArray());
+            if (projected.Count > controls.Controls.Count)
+            {
+                // The original restore has already crossed HMP1. Send its authoritative
+                // coordinates before allowing any following workload bytes through.
+                ReadOnlyMemory<byte> correction = AnsiTokenUtf8Serializer.Serialize(projected.Skip(controls.Controls.Count).ToArray());
+                await _presentation.WriteOutputAsync(correction, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        _revision.Advance();
+        Output?.Invoke();
+    }
+
     private async Task<int> RunProcessAsync(CancellationToken cancellationToken)
     {
         try
@@ -348,7 +390,7 @@ internal sealed class BlockHost : IAsyncDisposable
     private async Task DrainOutputAsync(CancellationToken cancellationToken)
     {
         long deadline = Environment.TickCount64 + 1500;
-        while (Environment.TickCount64 < deadline && !cancellationToken.IsCancellationRequested)
+        while ((Environment.TickCount64 < deadline || _workload.HasPendingOutput) && !cancellationToken.IsCancellationRequested)
         {
             long before = _revision.Revision;
             using var quiet = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -359,7 +401,7 @@ internal sealed class BlockHost : IAsyncDisposable
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                if (_revision.Revision == before)
+                if (_revision.Revision == before && !_workload.HasPendingOutput)
                 {
                     return;
                 }

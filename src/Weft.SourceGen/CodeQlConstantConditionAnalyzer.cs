@@ -75,19 +75,17 @@ public sealed class CodeQlConstantConditionAnalyzer : DiagnosticAnalyzer
         }
 
         // A guard is looked for in every block around the test, from the nearest outward to the method body.
-        foreach (BlockSyntax scope in EnclosingBlocks(pattern, body))
+        bool? guardValue = EnclosingBlocks(pattern, body)
+            .Select(scope => FindContainingTopLevelStatement(pattern, scope) is StatementSyntax tested
+                ? FindGuardValue(context, pattern, scope, tested, testsNull)
+                : null)
+            .FirstOrDefault(static value => value.HasValue);
+        if (guardValue is bool constantValue)
         {
-            if (FindContainingTopLevelStatement(pattern, scope) is not StatementSyntax tested ||
-                FindGuardValue(context, pattern, scope, tested, testsNull) is not bool constantValue)
-            {
-                continue;
-            }
-
             context.ReportDiagnostic(Diagnostic.Create(
                 s_rule,
                 pattern.GetLocation(),
                 constantValue ? "true" : "false"));
-            return;
         }
     }
 

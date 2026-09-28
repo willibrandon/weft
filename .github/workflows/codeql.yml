@@ -47,6 +47,118 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@v4
         with:
+          category: /language:csharp
+          output: artifacts/codeql-results
+          wait-for-processing: false
+
+      - name: Enforce zero CodeQL findings
+        run: dotnet run --file scripts/Verify-CodeQl.cs -- artifacts/codeql-results
+
+  analyze-windows:
+    name: Analyze Windows C#
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Report SDK
+        run: dotnet --info
+
+      - name: Initialize CodeQL
+        # Extraction without a build reads the repository's own sources, resolving the Windows SDK, WinUI,
+        # Reactor, and Win2D packages on Windows. A traced build would also extract source generator output,
+        # which is compiler code rather than ours and which the path filter cannot exclude for compiled languages.
+        uses: github/codeql-action/init@v4
+        with:
+          build-mode: none
+          config-file: ./.github/codeql-config.yml
+          languages: csharp
+          queries: security-and-quality
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:csharp-windows
+          output: artifacts/codeql-results
+          wait-for-processing: false
+
+      - name: Enforce zero CodeQL findings
+        run: dotnet run --file scripts/Verify-CodeQl.cs -- artifacts/codeql-results
+
+  analyze-swift:
+    name: Analyze Swift
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Report SDK
+        run: dotnet --info
+
+      - name: Select current installed Xcode
+        run: dotnet run --file scripts/Select-MacToolchain.cs
+
+      - name: Prepare native dependencies and Swift arguments
+        run: dotnet run --file scripts/Build-MacApp.cs -- --prepare-analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          build-mode: manual
+          config-file: ./.github/codeql-config.yml
+          languages: swift
+          queries: security-and-quality
+
+      - name: Build macOS app for analysis
+        # The extractor must parse the C bridge itself, not consume Xcode's compiler-specific PCH. Tracing copies and
+        # re-signs the Xcode compiler before it builds, and every phase scales with the runner's speed: the same
+        # build has taken from 6 to more than 15 minutes, so the limit only guards against a hang.
+        run: xcrun swiftc -disable-bridging-pch @artifacts/macos/swift-analysis.rsp
+        timeout-minutes: 25
+
+      - name: Save Swift extraction logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: swift-extraction-logs
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/codeql_databases/log
+            ${{ runner.temp }}/codeql_databases/swift/log
+            ${{ runner.temp }}/codeql_databases/swift/diagnostic
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:swift
           output: artifacts/codeql-results
           wait-for-processing: false
 

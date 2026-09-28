@@ -19,4 +19,13 @@
     <ProjectReference Include="../../src/Weft.Mcp/Weft.Mcp.csproj" />
     <ProjectReference Include="../../src/Weft.App/Weft.App.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <!-- Tests run this file-based helper as the shell in real pseudo-terminals, so every operating system runs the same scripts. -->
+  <Target Name="WeftBuildTestPrograms" AfterTargets="Build" Inputs="../programs/TestShell.cs" Outputs="$(OutDir)programs/TestShell.dll">
+    <PropertyGroup>
+      <WeftDotnetHost>$(DOTNET_HOST_PATH)</WeftDotnetHost>
+      <WeftDotnetHost Condition="'$(WeftDotnetHost)' == ''">dotnet</WeftDotnetHost>
+    </PropertyGroup>
+    <Exec Command="&quot;$(WeftDotnetHost)&quot; build &quot;$(MSBuildThisFileDirectory)../programs/TestShell.cs&quot; -c $(Configuration) -o &quot;$(OutDir)programs&quot;" />
+  </Target>
 </Project>

@@ -12,11 +12,6 @@ namespace Weft.Core;
 public sealed class WeftConfig
 {
     /// <summary>
-    /// Gets the leader chord text, such as <c>ctrl+b</c>.
-    /// </summary>
-    public string Leader { get; set; } = "ctrl+b";
-
-    /// <summary>
     /// Gets whether blocks draw a one-cell frame with a title.
     /// </summary>
     public bool Frames { get; set; } = true;

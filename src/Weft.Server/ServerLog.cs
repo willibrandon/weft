@@ -3,25 +3,26 @@ using System.Globalization;
 namespace Weft.Server;
 
 /// <summary>
-/// Minimal diagnostic logging to standard error and an optional log file.
+/// Minimal diagnostic logging to standard error and the running server's log file.
 /// </summary>
+/// <remarks>
+/// Each server's work runs in the execution context that opened its file, so servers sharing a process,
+/// as tests do, keep separate logs, and a stopped server's file is closed rather than left to the next one.
+/// </remarks>
 internal static class ServerLog
 {
-    private static readonly Lock s_gate = new();
-    private static StreamWriter? s_file;
+    private static readonly AsyncLocal<ServerLogFile?> s_file = new();
 
     /// <summary>
-    /// Directs log lines to a file in addition to standard error.
+    /// Directs log lines from the calling server's work to a file until the returned file is disposed.
     /// </summary>
     /// <param name="path">The log file path.</param>
-    internal static void UseFile(string path)
+    /// <returns>The open log file, which the server disposes when it stops.</returns>
+    internal static ServerLogFile UseFile(string path)
     {
-        lock (s_gate)
-        {
-            // Every write takes this gate and reads the current writer, so the previous one can close safely.
-            s_file?.Dispose();
-            s_file = new StreamWriter(path, append: true) { AutoFlush = true };
-        }
+        var file = new ServerLogFile(path);
+        s_file.Value = file;
+        return file;
     }
 
     /// <summary>
@@ -30,11 +31,8 @@ internal static class ServerLog
     /// <param name="message">The message.</param>
     internal static void Debug(string message)
     {
-        string line = string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:HH:mm:ss.fff} debug {message}");
-        lock (s_gate)
-        {
-            s_file?.WriteLine(line);
-        }
+        s_file.Value?.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"{DateTimeOffset.Now:HH:mm:ss.fff} debug {message}"));
     }
 
     /// <summary>
@@ -67,11 +65,9 @@ internal static class ServerLog
 
     private static void Write(string level, string message)
     {
-        string line = string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:HH:mm:ss.fff} {level} {message}");
-        lock (s_gate)
-        {
-            Console.Error.WriteLine(line);
-            s_file?.WriteLine(line);
-        }
+        string line = string.Create(CultureInfo.InvariantCulture,
+            $"{DateTimeOffset.Now:HH:mm:ss.fff} {level} {message}");
+        Console.Error.WriteLine(line);
+        s_file.Value?.WriteLine(line);
     }
 }

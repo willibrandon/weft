@@ -39,7 +39,9 @@ keep `docs/design.md` and `docs/progress.md` current as work lands.
 ## Testing
 
 - Use MSTest 4 and Microsoft.Testing.Platform.
-- Run tests with `dotnet test --solution Weft.slnx`; never use `--no-build` and never pass `--nologo`, which the test host rejects.
+- Run tests with `dotnet test --solution Weft.slnx`, and on Windows also
+  `dotnet test --project tests/Weft.Desktop.Windows.Tests`; never use `--no-build` and never pass
+  `--nologo`, which the test host rejects.
 - Never change test parallelization settings to work around test or CI failures.
   Diagnose and fix the underlying product, process-lifecycle, or test-isolation defect.
 - Use real processes, pseudo-terminals, streams, Unix-domain sockets, and files.

@@ -30,3 +30,7 @@ WEFT0028 | CodeQuality | Error | Asserted nullable locals use typed captures bef
 WEFT0029 | CodeQuality | Error | Captured exceptions use explicit guards before rethrowing
 WEFT0030 | CodeQuality | Error | Shared fields are written through static members
 WEFT0031 | CodeQuality | Error | Dictionary guards retrieve values in the same lookup
+WEFT0032 | Performance | Error | Garbage collection is left to the runtime
+WEFT0033 | Reliability | Error | Floating point values are compared within a tolerance
+WEFT0034 | Reliability | Error | Integer division and multiplication are explicit before floating point conversion
+WEFT0035 | Interoperability | Error | Native functions are called through managed wrappers

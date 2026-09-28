@@ -6,6 +6,7 @@
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Weft.Client.Core/Weft.Client.Core.csproj" />
     <InternalsVisibleTo Include="Weft.Tests" />
   </ItemGroup>
   <ItemGroup>

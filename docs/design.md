@@ -1,13 +1,20 @@
 # weft design
 
-weft is a durable-session terminal multiplexer built on Hex1b. It keeps
-terminal blocks alive inside long-lived sessions on a local server, renders them through
-a smart client that owns scrollback viewing, selection, and layout chrome, and exposes every
-action through a structured control protocol so people and software drive it the same way.
+weft is a native terminal workspace built on Hex1b, with durable sessions shared
+by desktop applications, a companion CLI, and terminal attachment. A local server
+keeps shells running when a window closes. Clients own rendering, history viewing,
+selection, and workspace controls; the structured control protocol lets people,
+scripts, and agents work with the same sessions.
 
-This document is the source of truth for architecture and behaviour. Progress lives in
-[progress.md](progress.md). When code and this document disagree, fix one of them in the
-same change.
+This document is the source of truth for architecture and behaviour. The
+[native app design](standalone-app.md) is the main product direction: macOS and
+Windows, then Linux, over a shared client core. Current installation work targets
+local development and testing with ordinary platform packages and no certificate
+setup. Public distribution and stores are outside the current scope.
+Progress lives in [progress.md](progress.md).
+The [native app parity contract](desktop-parity.md) tracks the Mac capabilities,
+Windows and Linux adaptations, and qualification required for equivalent behavior.
+When code and this document disagree, fix one of them in the same change.
 
 ## 1. Positioning
 
@@ -31,8 +38,8 @@ Against tmux, weft matches the command surface that matters (send-keys, capture,
 select, resize, list, wait, hooks) and replaces the parts that show their age: text-only
 control mode, size negotiation by smallest client, a copy mode that fights the mouse, and
 a configuration language of its own. Against zellij, weft keeps the friendly chrome, floating
-blocks, and session resurrection while staying a single native binary with no plugin runtime
-to boot.
+blocks, and session resurrection while keeping the CLI and server in one native executable
+with no plugin runtime to boot. Standalone desktop interfaces ship as separate applications.
 
 ## 2. Concepts
 
@@ -42,7 +49,7 @@ to boot.
 | Session | A named, durable container of tabs. Has a working directory, environment, and metadata. |
 | Tab | An ordered page inside a session holding a layout tree of tiled blocks plus floating blocks. |
 | Block | One terminal: a pseudo-terminal running a command, with its own scrollback, title, and history. |
-| Client | An attached viewer: the `weft attach` TUI, a CLI command, an agent, or a browser later. |
+| Client | A native desktop app, a CLI command, an agent, or the `weft attach` terminal viewer. |
 | Layout | A binary split tree over a tab's tiled blocks, plus geometry computed for the authoritative size. |
 | Authoritative size | The columns and rows the server lays a tab out for, chosen from attached clients by policy. |
 
@@ -97,13 +104,24 @@ Hex1b already provides the pieces a smart-client multiplexer needs, all on its p
 
 weft never modifies Hex1b. Where Hex1b has no host-side hook, weft composes public pieces.
 
-weft's presentation filter projects ordinary cursor restores to the server's applied cursor
-coordinates. A view can attach while a shell is drawing a temporary startup prompt, after
-the shell saved its cursor but before it restores and erases that prompt. Explicit row and
-column positioning keeps that view aligned with captures from the server, including after
-a resize. Saves or restores at the right edge and sequences using origin or horizontal
-margin modes retain their original tokens so positioning cannot discard pending wrap or
-change margin semantics.
+Performance qualification paces its finite output producer against absolute deadlines.
+A blocked write or delayed timer can make a frame late, but cannot add another full
+interval to every subsequent frame. Producer write and sleep timings remain recorded
+separately from input and drawing latency.
+Failed native runs sample the private server before shutdown and retain its memory
+summary with the qualification artifacts, so runner-specific stalls can be diagnosed.
+
+weft observes completed output at the next workload read, after the terminal has applied
+the preceding batch. Ordinary output follows the raw byte path without collecting cell
+change records solely for revision and cursor bookkeeping. A bounded control reader ends
+batches at cursor saves, restores, and relevant mode changes, while treating string and
+graphics payloads as opaque. After a restore, weft sends the server's resulting row and
+column before allowing subsequent workload bytes through. A view that attached after the
+save therefore erases its temporary startup prompt at the same position as the server.
+Saves or restores at the right edge and sequences using origin or horizontal margin modes
+retain their original semantics so positioning cannot discard pending wrap or change margins.
+Oversized or unrecognized control forms disable position projection until modes are known
+again; bytes are never discarded by the observer.
 
 ### 3.2 Resize authority
 
@@ -276,6 +294,137 @@ they do not change the decision to use Hex1b as the terminal engine.
 
 ## 5. Client
 
+Native applications are the primary interactive clients. The [native app design](standalone-app.md)
+defines AppKit on macOS, followed by Microsoft UI Reactor's latest published preview
+on Windows and GTK4 on Linux. The macOS implementation shares
+control connections, server startup, and session mirrors through `Weft.Client.Core`.
+`Weft.Client.Native` exposes a Native AOT C interface to Swift. Visible blocks use
+Hex1b HMP1 terminal snapshots; AppKit draws their cells in a custom view. Native menus
+handle window and clipboard actions while terminal keys retain their normal role.
+The macOS window integrates horizontal tabs and session selection into its native
+toolbar. Every tab keeps a subtle visible boundary, including inactive tabs with the
+same title. Tab widths stay compact, and icons and visible text are centered inside
+the full click target without native button-bezel offsets. Hovering exposes a close button
+without shifting the title. Closing an inactive tab preserves the current selection;
+the same termination confirmation applies to the button, menu, and Commands panel.
+Terminal drawing is confined to its view; bundled symbol fallback preserves
+prompt glyphs. Visual acceptance includes real window captures, native scrolling,
+and readable narrow layouts, alongside measured latency and resource use.
+Mac CI selects the newest installed numbered Xcode release for both native tests
+and Swift analysis. CI preserves native timing samples and compiler extraction
+logs, including failed runs. Analysis prepares native dependencies before enabling the
+tracer, then compiles every Swift source with the app's build arguments. Analysis
+reads the C bridge header directly because precompiled headers cannot be shared
+between Xcode and the extractor's compiler. Native performance checks require
+visible accessory windows and record first-window painting separately from typing.
+The paced output test uses one producer process with timed writes, avoiding a
+new shell child for every frame.
+Swift builds group files into compiler batches based on the host's processor count
+so both native tests and analysis avoid redundant parsing of the entire module.
+Tab-switch timing ends at the selected tab's first paint; background command
+completion is checked separately before sampling loaded memory.
+Producer reports separate time spent writing to the PTY from deliberate pacing
+so output completion failures can be distinguished from presentation delays.
+The executable uses server GC with the runtime's adaptive heap sizing for concurrent
+terminal workloads; the native client retains workstation GC. Server output processing
+admits one newline-containing batch at a time and yields
+after at most eight line breaks, bounding work before other terminals get a turn
+and giving other terminals a turn. Character echo and graphics bytes without line
+breaks bypass that queue. PTY reads, input, and client transport remain independent. Pending
+bytes retain their order; cancellation and terminal failure release the processing
+slot. Each server owns its slot, and process exit waits for already buffered
+output. Producer diagnostics also record formatting and elapsed time.
+AppKit batches ordinary ASCII glyphs by row and style using fixed cell positions.
+Font lookups are retained only for the current font variants. Complex text,
+decorations, and glyphs that need individual clipping retain AppKit text layout.
+The font release lookup uses the job's read-only GitHub token;
+asset and license downloads do not receive that credential.
+The native client honors the configured shell for new terminals even when attaching
+to an older running server; existing terminal processes keep their shell and state.
+The Windows client is a Microsoft UI Reactor app that uses `Weft.Client.Core` directly.
+Reactor renders only the window chrome; the terminal surface is a stable control whose
+frames invalidate changed rows of a Win2D virtual canvas, so output never passes
+through reconciliation. Text drawing, input, composition, UI Automation, preferences,
+and packaging are described in the [native app design](standalone-app.md#windows-implementation).
+The desktop worker coalesces terminal and control events and wakes AppKit through
+the versioned native callback bridge. Frame serialization and decoding run on a
+bounded worker; AppKit receives only the latest immutable result. A main run-loop source delivers frames in common
+modes so native scrollbar tracking continues to receive terminal updates. Queued
+input wakes the worker without waiting for the display cadence or publishing an
+unchanged frame; terminal output or a command error triggers the next display.
+Each pane
+uses an AppKit scroll view confined to the scrollbar gutter, with a virtual document
+sized to its retained rows. AppKit
+owns the scrollbar's thumb, track, and visibility preferences; terminal cells remain
+in the shared canvas. Arriving frames retain pointer control during a drag. Returning
+to live output cancels any native page-scroll animation. Visual
+tests check the painted thumb against the track as well as its history proportion.
+The terminal uses an AppKit backing layer and invalidates changed rows and old/new
+cursor cells. Layout, selection, search, and graphics changes can request a full
+repaint. Ordinary typing does not clear an absent composition or repaint unchanged
+content. Font metrics are cached until the font changes; default cell backgrounds
+reuse the cleared drawing region. Wheel input preserves AppKit's line or precise-point units and carries
+fractional rows forward without queuing capped excess movement.
+An ordinary click focuses the pane and clears any selection while leaving the
+process cursor in place. Selection begins after deliberate pointer movement;
+double and triple clicks select a word or row. Applications that enable terminal
+mouse reporting continue to receive those events, with Shift available for selection.
+History inspection and selection retain one bounded snapshot in the shared client
+core. Selection anchors use its cell coordinates and can span viewports; dragging
+past an edge scrolls until the pointer returns or the button is released. Copy joins
+soft-wrapped rows and preserves hard line breaks. New output cannot change selected
+text. Returning to live output or changing terminal geometry releases the snapshot.
+A shared command catalog supplies
+menus and command search, with native shortcut configuration and confirmation before
+ending processes. Reconnection retains stale content and discards uncertain input.
+A successful close-session reply releases that attachment immediately; shutdown
+of its block sockets cannot trigger a reconnect before the session event arrives.
+Accessible text uses UTF-16 ranges mapped to the displayed cell grid, including wide
+and combining graphemes, line queries, selection, and screen coordinates. Input-method
+composition remains local until commitment; partial replacements preserve unmodified
+marked text, and candidate rectangles follow the marked range.
+Composition is cancelled when its originating pane loses focus. The terminal is an
+accessible text area; external selection highlights output without moving the shell
+cursor or editing terminal contents. The focused cursor blinks by default, honors
+steady styles requested by applications, and remains visible while composing text.
+Input restarts its timer; focus loss, occlusion, and Reduce Motion stop it.
+The native scrollbar maps page clicks to explicit history rows. Page navigation
+does not leave a clip-view animation running into a later drag or Return to Live.
+The native wire format encodes value-type cells as compact arrays and omits default
+styles. The Native AOT client uses speed-focused optimization, matching the server,
+because terminal parsing and raster projection are sustained workloads. ABI 4
+prefixes JSON metadata with its little-endian byte length, then appends
+raw texture buffers in block order. Each unique texture is transferred once, regardless
+of sprite count. The bridge writes directly into its owned buffer; decoded texture
+slices retain that allocation until their last image is released. Sixel placements are composited into a bounded viewport
+plane, resolving newer opaque pixels first. A sprite atlas counts once against the
+decoded budget; placements have a separate 16,384-item bound. Image offsets and native
+sizes preserve fractional coordinates on the session's 10×20 virtual graphics grid.
+Each desktop terminal gives its main and alternate screens separate 64 MiB retained
+graphics budgets, with an 8,388,608-pixel bound that reserves room for both sparse
+and dense raster storage. Sixel projection checks coverage before materializing older images
+and reads cropped rows without allocating another complete raster. An opaque,
+unscaled front image uses vectorized alpha checks and bulk row copies; transparent
+overlays retain the general compositing path.
+Fully covering crops derive their identity from the source instead of hashing the
+entire bitmap again. AppKit draws cached Core Graphics images directly. Its image
+cache releases entries absent from the latest frame and enforces limits of 256
+images and 32 MiB of decoded row storage. These bounds exclude shared frame buffers
+and compositor surfaces; process memory is measured separately. The
+[Mac qualification record](macos-qualification.md) separates checked behavior,
+initial regression limits, and outstanding hardware evidence.
+The desktop retains a completed presentation during synchronized output, with a
+one-second wakeup deadline, so a frame cannot expose the middle of an application's
+redraw or remain held indefinitely when output stops before the update is closed.
+Frame pacing includes projection time within a maximum 120 Hz update rate, leaving
+headroom for asynchronous 60 Hz producers. Native views coalesce display updates;
+idle terminals wait for a change and wake immediately after input. Sixel composition copies uncovered pixels directly and blends only
+where transparent layers overlap. Closing
+a window releases display snapshots, image caches, backing layers, and native content
+immediately, even if the window controller remains referenced. Memory profiles distinguish
+physical footprint, resident mappings, graphics surfaces, and managed allocations.
+The terminal attachment remains supported; its current UI and defaults are described below.
+
 ### 5.1 Attach UI
 
 The client is a Hex1bApp:
@@ -287,7 +436,7 @@ The client is a Hex1bApp:
 │   │    each leaf: Border(title) > Terminal(handle)             │
 │   ├ WindowPanel: floating blocks as resizable windows          │
 │   └ popups: command palette, prompts, confirmations            │
-│  InfoBar: session name · tabs · active block · mode · Help     │
+│  InfoBar: session · tabs · active block · Help · Exit weft     │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -301,64 +450,50 @@ authoritative state. Hidden-tab activity comes from control events. This remains
 
 ### 5.2 Key bindings
 
-Help is discoverable through a clickable button in the bottom bar. `F1` opens it directly;
-no leader sequence is needed. Other actions use a leader model with a single chord table,
-default leader `Ctrl+B`, all rebindable in configuration. Every binding names an action id;
-the palette lists actions with their bindings. The Help button displays its configured
-shortcut and remains available when that shortcut is disabled. Locked mode passes function
-keys through to the block; the Help button remains clickable and omits the shortcut hint.
-Chord keys are limited to what the terminal input path can identify as keys: letters, digits,
-arrows, and the punctuation the key mapper knows (`-`, `,`, `.`, `/`, `?`, `=`). Symbols such as
-`%` and `"` arrive as bare characters and cannot terminate a chord, so tmux's split keys are
-replaced with `v` and `-`.
+The bottom bar has Help and Exit weft buttons. Help lists every action and its configured
+shortcut; users can find and run actions there without memorizing keys. Common actions also
+have direct function keys. Every configurable shortcut is one key with optional modifiers.
+Ordinary terminal keys, including `Ctrl+B` and `Esc`, pass to the focused block.
 
-| Chord | Action |
+| Shortcut | Action |
 | --- | --- |
-| `leader d` | detach |
-| `leader c` | new tab |
-| `leader n` / `leader p` | next / previous tab |
-| `leader 1..9` | select tab |
-| `leader v` / `leader -` | split right / split below |
-| `leader x` | close block (confirm if running) |
-| `leader z` | zoom block |
-| `leader f` | float block / re-tile block |
-| `leader h j k l` and `leader arrows` | focus block by direction |
-| `leader H J K L` | resize block by 5 |
-| `leader space` | next layout preset |
-| `leader ,` | rename block |
-| `leader .` | rename tab |
-| `leader s` | session picker |
-| `leader w` | tab and block picker |
-| `leader PageUp` | copy mode |
-| `leader Insert` | paste the server paste buffer |
-| `F1` | help and command palette |
-| `leader Ctrl+B` | send a literal Ctrl+B |
+| `F1` | open or close Help |
+| `F2` | new tab |
+| `F3` / `F4` | split right / split below |
+| `F5` | zoom block |
+| `F6` / `F7` | next / previous tab |
+| `F8` | pick tab or block |
+| `F9` | switch session |
+| `F10` | exit weft, keeping sessions alive |
+| `F12` | toggle passing shortcuts to the terminal |
 
-The leader is one stroke that arms the next stroke, the way a tmux prefix does; the info bar
-shows the armed leader (`Ctrl+B…`) until the next key arrives. A bound key runs its action,
-Escape cancels, and any other key disarms the leader and goes to the block as typed, so a
-stray prefix never leaves a stale arm behind. A ten second safety timer covers keys the client
-cannot name.
-Arming is client state rather than a router chord, so a redraw or a focus change between the
-two strokes cannot lose it. Chords that do not start with the leader use the toolkit's chord
-matching directly.
-The previous `leader ?` binding remains an alias. Read-only clients retain the Help button
-and direct help shortcut, with server-changing actions omitted from the palette.
+Renaming, closing blocks, resizing, layouts, copy mode, paste, synchronized input, and
+numbered tabs remain available in Help and can receive custom shortcuts. The Help button
+shows its configured shortcut and stays available when that shortcut is disabled. Locked
+mode passes function keys through to the block except its unlock key; Help and Exit weft
+remain clickable. Read-only clients retain Help and Exit weft, with server-changing actions
+omitted from the palette. Bare `Esc` cannot be configured as an application shortcut.
+
+Exit weft detaches this client and returns to its outer terminal. The server, sessions, and
+child processes keep running and can be reattached. It does not shut down the server.
 
 ### 5.3 Command palette
 
-Clicking Help or pressing `F1` opens a `SelectionPrompt` popup titled "Help and commands",
-listing actions with their bindings and descriptions. Typing filters; the window explains
-how to choose and run a command. A visible Close button and `Esc` both dismiss it and return
-typing to the terminal, including when opened with the mouse. Actions that need arguments
-open a follow-up prompt. Accepting raw command lines in CLI syntax, such as
+Clicking Help or pressing `F1` toggles a single `SelectionPrompt` panel titled "Help and
+commands". Its height stays within the viewport, with a visible Close button beneath the
+results. Opening it explicitly focuses the search field; typing filters actions and Enter
+runs the selected one. Close, the Help shortcut, and `Esc` dismiss the panel and restore
+terminal focus. The panel's `Esc` binding takes precedence over text predictions and only
+exists while Help is open. Repeated opening cannot stack panels. Help does not list itself
+as an action. Actions that need arguments open a follow-up prompt. Accepting raw command
+lines in CLI syntax, such as
 `split --right --command htop`, remains planned work.
 
 ### 5.4 Scrollback, selection, and copy
 
 Provided by Hex1b's terminal widget per block: scroll with keys or wheel, copy mode with
 cursor and selection, word motions, and mouse selection. Copied text goes to the system
-clipboard through OSC 52 and to the server's paste buffer so `leader ]` pastes into any block.
+clipboard through OSC 52 and to the server's paste buffer; Help's Paste action inserts it into a block.
 Search in scrollback is client-side over the widget's virtual buffer.
 
 ## 6. Control protocol
@@ -444,7 +579,6 @@ server at start and by the client at attach. `WEFT_CONFIG` overrides the path.
 
 ```json
 {
-  "leader": "ctrl+b",
   "frames": true,
   "sizePolicy": "latest",
   "scrollback": 10000,
@@ -452,13 +586,13 @@ server at start and by the client at attach. `WEFT_CONFIG` overrides the path.
   "theme": "default",
   "defaultWidth": 120,
   "defaultHeight": 36,
-  "bindings": { "leader h": "focus.left", "alt+enter": "block.zoom", "leader x": "none" },
+  "bindings": { "alt+left": "focus.left", "alt+enter": "block.zoom", "f4": "none" },
   "hooks": { "block.exited": "notify-send weft \"$WEFT_TITLE exited $WEFT_EXIT_CODE\"" }
 }
 ```
 
-Chord syntax: modifiers `ctrl`, `alt`, `shift` joined with `+`, key names in lower case,
-strokes separated by spaces, `leader` as a token. A capital letter means shift. Binding values
+Shortcut syntax: modifiers `ctrl`, `alt`, `shift` joined with `+`, followed by one key name.
+A capital letter means shift. Multi-key sequences are rejected. Binding values
 are action ids from the palette (`detach`, `tab.new`, `split.right`, `focus.left`,
 `block.zoom`, `block.float`, `layout.next`, `session.pick`, `lock`, `palette`, and so on);
 `none` unbinds a default. Hooks name an event from section 6.2 and run a shell command with
@@ -526,7 +660,7 @@ working across reconnects. This is shpool's trick and the most common tmux-over-
 | Reactive swap layouts by block count | zellij | `layout.preset` with a per-count table, phase 2 |
 | Floating and pinned blocks | zellij, tmux 3.8 | `block.float` |
 | Session resurrection from a stored layout | zellij | `SessionStore` |
-| Sync input with per-block opt-out | zellij | `leader S` |
+| Sync input with per-block opt-out | zellij | Help's synchronize input action |
 | Read-only watcher attach | zellij, tmux `-r` | `--read-only` |
 | Stable JSON output as a documented contract | wezterm `cli list --format json` | `--json` everywhere |
 | Smart client over a dumb transport | wezterm mux | HMP1 per block |
@@ -636,14 +770,22 @@ No mocking libraries, no hand-written substitutes for production services, no sk
 
 Native AOT per RID (`linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64`,
 `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`) as a `dotnet tool` package `weft` and as
-GitHub release archives. Windows relies on Hex1b's ConPTY proxy and AF_UNIX support and is
-best-effort until its tests run in CI.
+GitHub release archives. Windows relies on Hex1b's ConPTY proxy and AF_UNIX support. The
+server gives shells a real console even when its own standard handles are redirected, and
+the portable suite runs on Windows x64 and ARM64 in CI.
+
+Standalone desktop applications have separate bundles, native dependencies, and platform
+validation. Their [distribution plan](standalone-app.md#builds-and-distribution) covers
+ARM64 and x64 on all three operating systems. Windows desktop support requires real
+Windows test coverage before release; CLI archive publishing alone does not establish it.
+The Windows window tests and installed-package lifecycle test provide that coverage.
 
 ## 15. Phases
 
 See [progress.md](progress.md). Phase 1 is durable sessions end to end with a plain layout;
 Phase 2 is the full multiplexer UX; Phase 3 is the composable control surface and MCP;
-Phase 4 is sharing and operations.
+Phase 4 is sharing and operations. The standalone desktop track covers the shared client
+core, native terminal surfaces, platform interfaces, and desktop packaging.
 
 ## 16. Open questions
 
