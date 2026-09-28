@@ -104,6 +104,11 @@ Hex1b already provides the pieces a smart-client multiplexer needs, all on its p
 
 weft never modifies Hex1b. Where Hex1b has no host-side hook, weft composes public pieces.
 
+Performance qualification uses a finite output producer with a macOS activity assertion
+while it emits paced output. This prevents background timer coalescing from setting the
+workload's duration; it does not change the app or server's scheduling policy. Producer
+write and sleep timings remain recorded separately from input and drawing latency.
+
 weft's presentation filter projects ordinary cursor restores to the server's applied cursor
 coordinates. A view can attach while a shell is drawing a temporary startup prompt, after
 the shell saved its cursor but before it restores and erases that prompt. Explicit row and

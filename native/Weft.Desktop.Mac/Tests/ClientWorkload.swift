@@ -3,6 +3,11 @@ import AppKit
 extension MacSmoke {
     /// Emits the paced terminal workload in one process so shell child startup cannot set its frame rate.
     static func produceOutput(report: String) throws {
+        // This helper has no visible window. Keep macOS from treating its paced
+        // output as idle background work while the measured terminal is busy.
+        let activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+            reason: "Produce the finite terminal qualification workload")
+        defer { ProcessInfo.processInfo.endActivity(activity) }
         guard FileManager.default.createFile(atPath: report, contents: Data("frame\tformat_ms\twrite_ms\tsleep_ms\telapsed_ms\n".utf8)) else {
             throw SmokeFailure.failed("Could not create the output producer report")
         }
@@ -93,6 +98,9 @@ extension MacSmoke {
             controller.terminal.send?(DesktopCommand(operation: "key", target: inputBlock.id, text: "BSpace"))
             _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == inputBlock.id })?.cursorX == inputCursor }
         }
+        print(String(format: "Concurrent output sample: input paint p95 %.1f ms; native draw p95 %.1f ms",
+                     latency.sorted()[37], drawing.sorted()[37]))
+        fflush(stdout)
         _ = try await wait(controller) { $0.blocks.first(where: { $0.id == originalBlock })?.cells.map(\.text).joined().contains("OUTPUT-DONE") == true }
         let elapsed = milliseconds(started.duration(to: .now))
         var switching: [Double] = []
