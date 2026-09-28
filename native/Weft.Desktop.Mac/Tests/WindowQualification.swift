@@ -5,7 +5,14 @@ extension MacSmoke {
     static func exerciseWindows(_ first: TerminalWindow, executable: String) async throws {
         let second = TerminalWindow(executablePath: executable, autosaveName: nil)
         defer { second.close() }
-        let initial = try await wait(second) { $0.blocks.count == 1 }
+        _ = try await wait(second) { $0.blocks.count == 1 }
+        // Connecting hides the new window's status line, which gives its terminal more rows at the next layout. The
+        // session takes the latest client's size, so that resize must land before the first window's below.
+        second.window?.contentView?.layoutSubtreeIfNeeded()
+        let initial = try await wait(second) {
+            $0.blocks.count == 1 && $0.blocks[0].width == second.terminal.columns - 2
+                && $0.blocks[0].height == second.terminal.rows - 2
+        }
         let blockID = initial.blocks[0].id
         for size in [NSSize(width: 620, height: 380), NSSize(width: 1280, height: 820), NSSize(width: 780, height: 500)] {
             first.window?.setContentSize(size)
