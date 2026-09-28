@@ -10,30 +10,42 @@ namespace Weft.Tests;
 public sealed class BindingTableTests
 {
     /// <summary>
-    /// Verifies a lock chord a single-stroke leader can never register is dropped with a warning, so lock mode stays refused.
+    /// Verifies key sequences are rejected rather than reserving a prefix in the terminal.
     /// </summary>
     [TestMethod]
-    public void RejectsChordTheLeaderCannotRegister()
+    public void RejectsKeySequences()
     {
-        var config = new WeftConfig { Leader = "ctrl+b", Bindings = { ["leader g"] = "none", ["leader g h"] = "lock" } };
+        var config = new WeftConfig { Bindings = { ["f12"] = "none", ["ctrl+b g"] = "lock" } };
 
         var table = BindingTable.Build(config);
 
         Assert.AreEqual(string.Empty, table.ChordFor(ClientActions.Lock));
-        Assert.Contains(warning => warning.Contains("leader g h", StringComparison.Ordinal), table.Warnings);
+        Assert.Contains(warning => warning.Contains("ctrl+b g", StringComparison.Ordinal), table.Warnings);
     }
 
     /// <summary>
-    /// Verifies one key after the leader is accepted as a rebinding.
+    /// Verifies direct shortcuts can replace the default function keys.
     /// </summary>
     [TestMethod]
-    public void AcceptsOneKeyAfterTheLeader()
+    public void AcceptsDirectShortcut()
     {
-        var config = new WeftConfig { Leader = "ctrl+b", Bindings = { ["leader g"] = "none", ["leader h"] = "lock" } };
+        var config = new WeftConfig { Bindings = { ["f12"] = "none", ["alt+g"] = "lock" } };
 
         var table = BindingTable.Build(config);
 
-        Assert.AreEqual("Ctrl+B H", table.ChordFor(ClientActions.Lock));
+        Assert.AreEqual("Alt+G", table.ChordFor(ClientActions.Lock));
         Assert.IsEmpty(table.Warnings);
+    }
+
+    /// <summary>
+    /// Verifies configuration cannot turn Esc into an exit shortcut.
+    /// </summary>
+    [TestMethod]
+    public void EscapeCannotExitWeft()
+    {
+        var config = new WeftConfig { Bindings = { ["esc"] = "detach" } };
+        var table = BindingTable.Build(config);
+        Assert.DoesNotContain(binding => binding.Chord.Steps[0].Key == "escape", table.Bindings);
+        Assert.HasCount(1, table.Warnings);
     }
 }

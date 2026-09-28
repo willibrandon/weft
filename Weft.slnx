@@ -10,7 +10,6 @@
     <File Path="Directory.Build.rsp" />
     <File Path="Directory.Build.targets" />
     <File Path="Directory.Packages.props" />
-    <File Path="global.json" />
     <File Path="LICENSE" />
     <File Path="NuGet.Config" />
     <File Path="README.md" />
@@ -20,6 +19,8 @@
   <Folder Name="/src/">
     <Project Path="src/Weft.App/Weft.App.csproj" />
     <Project Path="src/Weft.Client/Weft.Client.csproj" />
+    <Project Path="src/Weft.Client.Core/Weft.Client.Core.csproj" />
+    <Project Path="src/Weft.Client.Native/Weft.Client.Native.csproj" />
     <Project Path="src/Weft.Core/Weft.Core.csproj" />
     <Project Path="src/Weft.Mcp/Weft.Mcp.csproj" />
     <Project Path="src/Weft.Protocol/Weft.Protocol.csproj" />

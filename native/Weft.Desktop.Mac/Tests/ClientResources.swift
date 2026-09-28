@@ -1,0 +1,80 @@
+import AppKit
+
+extension MacSmoke {
+    /// Samples real input delivery, idle CPU, and resident memory while repeatedly releasing native clients.
+    static func exerciseClientResources(executable: String, blockID: String) async throws {
+        var times: [Double] = []
+        var resident: [UInt64] = []
+        var input: [Double] = []
+        var idle = 0.0
+        for iteration in 0..<5 {
+            let start = ContinuousClock.now
+            let controller = TerminalWindow(executablePath: executable, autosaveName: nil)
+            if iteration == 0 { controller.showWindow(nil) }
+            let frame = try await wait(controller, pollEvery: .milliseconds(1)) {
+                $0.blocks.contains(where: { $0.id == blockID })
+                    && $0.blocks.first(where: { $0.active })?.cells.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("$") == true
+            }
+            times.append(milliseconds(start.duration(to: .now)))
+            if iteration == 0 {
+                let block = frame.blocks.first(where: { $0.active }) ?? frame.blocks[0]
+                for _ in 0..<16 {
+                    let beginning = ContinuousClock.now
+                    controller.terminal.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
+                    _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == block.id })?.cursorX == block.cursorX + 1 }
+                    controller.terminal.displayIfNeeded()
+                    input.append(milliseconds(beginning.duration(to: .now)))
+                    controller.terminal.send?(DesktopCommand(operation: "key", target: block.id, text: "BSpace"))
+                    _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == block.id })?.cursorX == block.cursorX }
+                }
+                let before = cpuMilliseconds()
+                try await Task.sleep(for: .milliseconds(750))
+                idle = cpuMilliseconds() - before
+            }
+            controller.close()
+            try await Task.sleep(for: .milliseconds(100))
+            resident.append(try residentBytes())
+        }
+        times.sort()
+        input.sort()
+        print(String(format: "Client sample: warm attach p50 %.1f ms; input to AppKit paint p50 %.1f ms, p95 %.1f ms; idle CPU %.1f ms / 750 ms; resident after first/fifth close %.1f / %.1f MiB",
+                     times[2], input[8], input[15], idle, Double(resident[0]) / 1_048_576, Double(resident[4]) / 1_048_576))
+        if CommandLine.arguments.contains("--profile-memory") {
+            print("Memory profile ready: pid \(ProcessInfo.processInfo.processIdentifier)")
+            fflush(stdout)
+            try await Task.sleep(for: .seconds(30))
+        }
+    }
+
+    static func cpuMilliseconds() -> Double {
+        var usage = rusage()
+        getrusage(RUSAGE_SELF, &usage)
+        return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1_000
+            + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000
+    }
+
+    static func residentBytes() throws -> UInt64 {
+        var info = mach_task_basic_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { throw SmokeFailure.failed("Could not measure client resident memory") }
+        return info.resident_size
+    }
+
+    /// Separates memory charged to the process from resident shared mappings and reusable allocations.
+    static func footprintBytes() throws -> UInt64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { throw SmokeFailure.failed("Could not measure client physical footprint") }
+        return info.phys_footprint
+    }
+}

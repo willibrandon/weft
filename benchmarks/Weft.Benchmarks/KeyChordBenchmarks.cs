@@ -9,24 +9,19 @@ namespace Weft.Benchmarks;
 [MemoryDiagnoser]
 public class KeyChordBenchmarks
 {
-    private KeyChord _leader = new([]);
-
     /// <summary>
-    /// Parses the default leader.
+    /// Gets or sets the shortcut text to parse.
     /// </summary>
-    [GlobalSetup]
-    public void Setup()
-    {
-        _ = KeyChord.TryParse("ctrl+b", null, out _leader);
-    }
+    [Params("alt+shift+h", "f1")]
+    public string Shortcut { get; set; } = "alt+shift+h";
 
     /// <summary>
-    /// Parses a leader-prefixed chord with a shifted letter.
+    /// Parses a direct shortcut with modifiers.
     /// </summary>
     /// <returns>Whether parsing succeeded.</returns>
     [Benchmark]
-    public bool ParseLeaderChord()
+    public bool ParseShortcut()
     {
-        return KeyChord.TryParse("leader shift+h", _leader, out _);
+        return KeyChord.TryParse(Shortcut, out _);
     }
 }

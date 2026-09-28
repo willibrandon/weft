@@ -36,9 +36,9 @@ public sealed class TabInfo
     public required int Blocks { get; init; }
 
     /// <summary>
-    /// Gets the active block id, if any.
+    /// Gets or sets the active block id, including subsequent focus events.
     /// </summary>
-    public string? ActiveBlock { get; init; }
+    public string? ActiveBlock { get; set; }
 
     /// <summary>
     /// Gets the zoomed block id, if any.

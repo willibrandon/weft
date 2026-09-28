@@ -8,7 +8,7 @@ namespace Weft.Core;
 public readonly record struct KeyStroke(KeyModifiers Modifiers, string Key)
 {
     /// <summary>
-    /// Formats the stroke as configuration text such as <c>ctrl+b</c>.
+    /// Formats the stroke as configuration text such as <c>alt+enter</c>.
     /// </summary>
     /// <returns>The text.</returns>
     public override string ToString()

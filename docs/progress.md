@@ -5,7 +5,16 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Now
 
-- Phases 2 and 3 have landed on main, including the MCP server with per-call connection leases and the repository's own analyzers. The .NET 11 preview migration, analyzer cleanup, visible Help controls, and startup prompt synchronization pass local verification; updated GitHub workflows await a run. Next: release pipeline, terminal and client resource baselines, mouse resize, search. The scale requirements are documented; measurements and enforcement remain pending.
+- Phases 2 and 3, the .NET 11 migration, and startup prompt synchronization have landed on main. The current branch has direct TUI shortcuts, one Help panel, and an explicit Exit weft button; the final shortcut design remains under discussion.
+- Native applications are the primary product direction. The `feat/macos-app` branch implements the [desktop app](standalone-app.md) with AppKit, a shared client core, and a Native AOT C interface. Windows and Linux follow later; the CLI and terminal attachment remain companion interfaces.
+- Native visual iteration uses one app instance. The Mac app now has retained history, native scrollbars and Find, selection across scrollback, a shared command catalog, Commands search, configurable Mac shortcuts, pane divider dragging, terminal mouse input, animated Kitty and Sixel graphics, and automatic reconnect. Tabs expose close buttons on hover. Compact widths, persistent tab boundaries, and centered visible glyphs address ambiguous repeated titles and button-cell alignment. Focused Swift DocC comments describe lifetime and input contracts. An original vector icon is included in the bundle.
+- Installation work targets local development and testing. Mac builds produce an ad hoc signed app and DMG without certificates or notarization. CI exercises an app copied out of that DMG. Windows development MSIX and Linux native packages are planned with their frontends. Store distribution, public signing, and update services are deferred.
+- Mac scrolling uses an AppKit scroll view to manage the native thumb and its visibility. A standalone overlay scroller had shown its full-height track without a visible thumb even with the correct history count. Frame delivery continues during thumb tracking, and arriving frames cannot pull the thumb away from the pointer. Page clicks step through history directly so a delayed animation cannot compete with a later drag. Cached font measurements and skipping default background fills reduced median AppKit drawing from 54.9 ms to 4.8 ms in the same 130-column, 37-row history sample. Broader workload and hardware budgets remain open.
+- Selection can span viewports and autoscroll during a held drag. External accessibility exposes a read-only terminal with Unicode selection. Composition replacement and pane-change cancellation, plus installed French/German/Spanish key translation, have real PTY coverage. Interactive VoiceOver, physical keyboards, input-method candidate windows, and movement between physical displays remain manual qualification work. Accessibility tests never enable VoiceOver themselves.
+- Frame conversion runs off the UI thread. ABI 4 separates raw shared textures from compact JSON metadata, writes directly into owned native storage, and retains texture slices without further pixel copies. Closed windows explicitly release snapshots, image caches, backing layers, and content. Earlier five-client profiling reduced physical footprint from 141.5 MiB to 87.6 MiB. Current qualification also measures 16 tabs, sustained output and typing, scrolling, resize, multiple windows, and forced client termination; portable release budgets remain open.
+- Kitty sprite atlases count once against the decoded budget, with a separate placement limit. Sixel composites the newest visible pixels first instead of spending the frame budget on old rasters. Completed synchronized presentations prevent partial flocks; a one-second wakeup releases an unfinished update even when output stops. Fractional placement preserves native-sized sprites. A read-only rbirds workload checks both protocols and records frame rate, drawing time, CPU, memory, and captures.
+- The cursor blinks while focused and visible, honors terminal-requested steady styles, and stays visible during composition. Focus loss, occlusion, and Reduce Motion stop the blink timer. Real shell output and captured caret pixels verify blinking, focus loss, and steady styles.
+- Ordinary Mac clicks leave the process cursor at the prompt, including small pointer jitter. Dragging selects text. AppKit retains terminal pixels in a backing layer, redraws changed rows and cursor cells, and confines the transparent scroll view to its gutter. Real shell echo/erasure tests check that prompt edits preserve other rows and leave no stale cursor pixels. A bounded compositor recording mode supports further redraw investigation.
 
 ## Phase 0: Research and scaffolding
 
@@ -37,8 +46,9 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [x] Layout tree: splits, resize, zoom, presets, even/main layouts
 - [x] Floating blocks (server methods, persistence, client rendering; keyboard move pending)
 - [x] Status bar, block titles, and tab activity markers
-- [x] Leader-key keybinding model with configurable chords, an armed-leader indicator, and a lock mode (repeat pending)
-- [x] Command palette with a clickable Help button, direct F1 shortcut, and mouse-accessible Close button; rename prompts, session and tab pickers
+- [x] Configurable direct shortcuts with a mode that passes shortcuts through to the terminal
+- [x] One bounded Help panel with search focus, an F1 toggle, and visible Close button; rename prompts, session and tab pickers
+- [x] Exit weft button and F10 detach the view while preserving sessions; Esc remains a terminal or dialog key
 - [x] Native scrollback, selection, and copy through the terminal widget; paste from the server buffer (search pending)
 - [ ] Mouse: focus, select, and scroll work through the toolkit; drag to resize pending
 - [x] Themes and configuration file
@@ -69,10 +79,60 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [ ] Session recording and replay
 - [ ] Native AOT release packaging for linux, macOS, windows (linux-x64 publish verified clean)
 
+## Standalone desktop track
+
+- [x] Native frontend architecture, shared core boundary, and release targets documented
+- [x] Microsoft UI Reactor preview package, command model, and AOT guidance reviewed for Windows
+- [x] Extract shared control connections, server startup, logging, and session mirrors without changing TUI behavior
+- [x] Add ordered desktop commands, coalesced frames, and a versioned Native AOT C interface
+- [x] Add the first AppKit terminal window with menus, tab selection, splits, resize, and workload-preserving reattach
+- [x] Create and switch sessions from the native menu while preserving existing shell processes
+- [x] Add a shared desktop command catalog for native menus and command search
+- [ ] Prove real terminal views on Reactor and GTK4
+- [ ] Validate rendering, historical scrollback, selection, graphics, input methods, clipboard, and accessibility
+- [x] Review and implement the Mac shortcut defaults, configurable shortcuts, native menus, command search, tabs, sessions, and splits
+- [ ] Review Windows and Linux shortcut mappings alongside those frontends
+- [x] Add bounded history viewing, Find, retained visible selection, terminal mouse input, and workload-preserving reconnect on macOS
+- [x] Extend selection across scrollback, use current viewport dimensions after resize, and stop edge autoscroll on mouse release
+- [x] Add native hover close controls without switching inactive tabs before confirmation
+- [x] Add accessible Unicode ranges and geometry, and verify local composition and exact committed PTY bytes
+- [x] Verify installed French, German, and Spanish layout translation, external accessibility selection, and composition cancellation on pane changes
+- [x] Verify animated Kitty and Sixel output, shared atlases, cropping, offsets, native-size geometry, and synchronized redraws
+- [x] Add focused cursor blinking with terminal style, composition, and Reduce Motion handling
+- [x] Measure sustained output and typing across 16 tabs; verify resizing, multiple windows, simulated backing scales, and workload-preserving client crash recovery
+- [x] Add an original app icon and focused Swift DocC documentation
+- [x] Add AppKit and published Native AOT bridge smoke tests, plus macOS ARM64 and Intel CI jobs
+- [ ] Add Windows and Linux desktop UI automation and published-app coverage for ARM64 and x64
+- [x] Add a local macOS DMG and installed-bundle smoke coverage without signing credentials
+- [ ] Add Windows unsigned development MSIX and Linux local package installation tests
+- [x] Qualify Mac installation, upgrade, removal, and reinstall with running sessions; defer public signing and distribution until needed
+- [ ] Measure desktop performance and resource budgets separately from the CLI and server; assess optional musl desktop packages after server and CLI validation
+
 ## Verification log
+
+The current macOS work passes all 547 .NET tests. ARM64 and Intel bundles compile
+and pass signature verification. Installed-bundle smoke tests pass on ARM64 and
+for Intel under Rosetta after copying the app from its DMG and unmounting the image.
+They exercise real shells, rendered prompt symbols and raster pixels, retained
+history, scrollbar pixels and proportions, click jitter and drag selection, retained
+pixels after prompt edits, wheel and precise scrolling, Find, Commands,
+narrow layouts, session controls, and reattachment.
+Real window captures verify the toolbar and terminal together;
+offscreen AppKit captures do not reproduce composited toolbar materials.
 
 | Date | What | Result |
 | --- | --- | --- |
+| 2026-09-27 | rbirds graphics and projection cost | The existing rbirds binary, with 800 birds at 165×43 cells, measured 60.1 observed Kitty frames/s and 53.0 Sixel frames/s over 12 seconds per mode. Native drawing p95 was 1.2/0.5 ms; client CPU was 144.5/131.0% of one core and resident memory 140.9/396.6 MiB. Sampled physical footprint was 313–316/492–605 MiB. These client-only measurements exclude the server and rbirds; Sixel preparation remains short of steady 60 fps at this size. Native captures show both protocols inside the viewport. Shared textures, bulk opaque rows, direct Core Graphics drawing, binary texture transfer, bounded retention, and asynchronous pacing remove avoidable copies and per-sprite work |
+| 2026-09-27 | Session-close ordering | A successful close reply now releases the local attachment before interpreting block socket shutdowns. The reconnect test repeats session creation and closure and verifies that transient socket errors cannot appear during an intentional close |
+| 2026-09-27 | Mac workload, windows, input, and installation qualification | All 547 .NET tests pass. Both final DMGs pass installed-app checks, including Intel under Rosetta. A 16-tab, 33,600-line workload measured ARM64 input-to-paint p50/p95 of 26.5/60.5 ms and tab-switch p95 of 75.3 ms; Intel under Rosetta measured 36.2/77.9 ms and 174.2 ms. Private client termination, upgrade, removal, and reinstall preserve the server and every shell. Resize, two attachments, 1×/2× rasterization, French/German/Spanish layout translation, composition, caret blinking, and graphic row orientation pass. The installed ARM64 app was replaced once and visually checked; the existing server and shell process identities were unchanged. Only one physical display was connected; interactive VoiceOver, candidate windows, and physical keyboard layouts remain unverified |
+| 2026-09-27 | Scrollbar navigation during faster presentation | Page-click animation could continue into a later drag. Native scrollbar actions now map directly to history positions while AppKit retains thumb tracking and appearance. Both installed architectures pass page, drag, endpoint, wheel, and Return to Live checks |
+| 2026-09-27 | Tab presentation correction | Confirmed repeated working-directory titles belong to distinct live tabs. Inactive tabs now retain visible boundaries, widths are compact, and glyphs are centered without button-bezel offsets. ARM64 native interaction checks pass; the installed toolbar was inspected at full pixel size |
+| 2026-09-27 | Mac lifecycle memory and frame transfer | Explicit window teardown reduced a five-client physical footprint sample from 141.5 to 93.2 MiB; compact value-type cells and decoding without another buffer copy reduced it to 87.6 MiB. Backing-layer allocations fell from 24.9 MiB to under 0.1 MiB. These are isolated local samples, not universal budgets. The profiling command records native heap and VM reports |
+| 2026-09-27 | Native interaction and installed app lifecycle | Added hover close buttons, consistent toolbar text metrics, scrollback selection with edge autoscroll, Unicode accessibility ranges, and composition replacement. Tests caught and fixed stale viewport clamping, a Find query lost on resize, and page-scroll animation overriding Return to Live. Local package checks preserve server and shell identities through upgrade, removal, and reinstall |
+| 2026-09-27 | Mac click behavior and terminal redraw | Ordinary clicks preserve the process caret; deliberate drags still select. AppKit retains unchanged rows in a backing layer, and scrolling invalidation is confined to the gutter. Installed ARM64 and Intel tests pass, including real shell echo/erasure checks for unchanged rows and stale cursor pixels. A six-second compositor trace verifies repeated Nushell output and provides an optional recording path for further flicker investigation |
+| 2026-09-27 | Native scrollbar rendering and responsiveness | AppKit now manages the scrollbar through a scroll view. Installed ARM64 and Intel tests verify visible thumb pixels, history proportions, hit targets, page clicks, live dragging, endpoints, wheel input, and precise scrolling. The real window shows the expected thumb size after reattachment. The same local history sample draws in about 5 ms instead of 55 ms |
+| 2026-09-27 | Native commands, terminal interaction, and local installers | Added retained history, Find, stable visible selection, mouse reporting, static raster drawing, configurable Mac shortcuts, native command search, and reconnect without uncertain input replay. Added focused Swift DocC comments and an original icon. Both local DMGs pass installed-app smoke checks; Intel ran under Rosetta. All 546 .NET tests pass. Native apps now lead the README; stores and signing credentials are outside the development installation scope |
+| 2026-09-27 | Native desktop visual iteration | Fixed drawing outside terminal bounds, added horizontal tabs and session selection, bundled symbol fallback and font selection, preserved icon counters, and honored the configured shell for new desktop terminals. All 543 .NET tests and both native architecture smoke tests pass; Intel execution used Rosetta. Real app captures reviewed. Scrollback and performance qualification remain pending |
 | 2026-09-08 | `dotnet test --test-modules` on Weft.Tests | 37 passed, 0 failed |
 | 2026-09-08 | `dotnet test --solution` | 37 passed once `--nologo` was dropped; the flag is forwarded to the host and rejected |
 | 2026-09-08 | hex1b tool drives `weft attach`: type, assert, split, zoom, help, detach | all steps observed on screen; session survived detach with 3 shells |
@@ -91,3 +151,4 @@ Living tracker for the weft build. Check items off as they land; keep the
 | 2026-09-27 | Native AOT on macOS arm64 with .NET 11 RC1 | publish and executable version smoke test pass; the native symbol tool reports duplicate debug-map objects and missing module-cache metadata from prebuilt libraries. Those messages remain visible |
 | 2026-09-27 | Discoverable help in the attach UI | clickable Help and Close buttons, F1, and terminal focus restoration verified against real shells and sockets, including read-only input blocking and disabled help shortcuts. All 530 tests pass; build, formatting, and repository checks pass |
 | 2026-09-27 | Startup prompt synchronization | reproduced a view attaching between cursor save and restore with real shells, PTYs, and HMP1 sockets. The weft presentation filter now sends authoritative coordinates for ordinary restores. A fresh zsh attach shows one prompt without the stray `%`; regression coverage includes resize, a view present before the save, and pending wrap at the right edge. All 534 tests pass; build, formatting, and repository checks pass |
+| 2026-09-27 | Direct shortcuts, Help, and exit | removed the prefix system and its configuration. F1 toggles one bounded Help panel, search receives focus on every opening, and Close or Esc dismiss it. Exit weft and F10 detach while retaining sessions. Real PTY tests verify Esc and Ctrl+B bytes reach the process unchanged and reattach preserves its PID. Repeated keyboard and mouse opening, filtering, read-only mode, and 60×12 through 188×51 viewports pass. All 539 tests, repository checks, and formatting checks pass |

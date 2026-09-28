@@ -101,40 +101,4 @@ internal static class KeyMap
         }
     }
 
-    /// <summary>
-    /// Converts a stroke to a Hex1b key event for sending to a block.
-    /// </summary>
-    /// <param name="stroke">The stroke.</param>
-    /// <returns>The event, or null when the key is unknown.</returns>
-    internal static Hex1bKeyEvent? ToKeyEvent(KeyStroke stroke)
-    {
-        if (ToHex1bKey(stroke.Key) is not { } key)
-        {
-            return null;
-        }
-
-        Hex1bModifiers modifiers = Hex1bModifiers.None;
-        if (stroke.Modifiers.HasFlag(KeyModifiers.Control))
-        {
-            modifiers |= Hex1bModifiers.Control;
-        }
-
-        if (stroke.Modifiers.HasFlag(KeyModifiers.Alt))
-        {
-            modifiers |= Hex1bModifiers.Alt;
-        }
-
-        if (stroke.Modifiers.HasFlag(KeyModifiers.Shift))
-        {
-            modifiers |= Hex1bModifiers.Shift;
-        }
-
-        char character = stroke.Key.Length == 1 ? stroke.Key[0] : '\0';
-        if (stroke.Modifiers.HasFlag(KeyModifiers.Control) && char.IsAsciiLetterLower(character))
-        {
-            character = (char)(character - 'a' + 1);
-        }
-
-        return new Hex1bKeyEvent(key, character, modifiers);
-    }
 }

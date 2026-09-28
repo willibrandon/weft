@@ -3,21 +3,11 @@ using Weft.Core;
 namespace Weft.Client;
 
 /// <summary>
-/// The resolved chord to action map: defaults, aliases, and configuration overrides.
+/// The resolved direct shortcuts, including configuration overrides.
 /// </summary>
 internal sealed class BindingTable
 {
     private readonly List<(KeyChord Chord, string Action)> _bindings = [];
-
-    private BindingTable(KeyChord leader)
-    {
-        Leader = leader;
-    }
-
-    /// <summary>
-    /// Gets the leader chord.
-    /// </summary>
-    internal KeyChord Leader { get; }
 
     /// <summary>
     /// Gets every binding.
@@ -36,34 +26,20 @@ internal sealed class BindingTable
     /// <returns>The table.</returns>
     internal static BindingTable Build(WeftConfig config)
     {
-        if (!KeyChord.TryParse(config.Leader, null, out KeyChord leader))
-        {
-            _ = KeyChord.TryParse("ctrl+b", null, out leader);
-        }
-
-        var table = new BindingTable(leader);
+        var table = new BindingTable();
         foreach ((string action, string chord, _) in ClientActions.Defaults)
         {
-            if (string.Equals(action, ClientActions.SendLeader, StringComparison.Ordinal))
+            if (KeyChord.TryParse(chord, out KeyChord parsed))
             {
-                // Sending the leader is always the leader pressed twice, whatever the leader is configured to be.
-                table._bindings.Add((new KeyChord([.. leader.Steps, .. leader.Steps]), action));
-                continue;
+                table._bindings.Add((parsed, action));
             }
-
-            table.Add(chord, action);
-        }
-
-        foreach ((string action, string chord) in ClientActions.Aliases)
-        {
-            table.Add(chord, action);
         }
 
         foreach ((string chordText, string action) in config.Bindings)
         {
-            if (!KeyChord.TryParse(chordText, leader, out KeyChord chord))
+            if (!KeyChord.TryParse(chordText, out KeyChord chord) || chord.Steps.Any(stroke => KeyMap.ToHex1bKey(stroke.Key) is null))
             {
-                table.Warnings.Add("Ignoring binding '" + chordText + "': unknown chord.");
+                table.Warnings.Add("Ignoring binding '" + chordText + "': use one key with optional modifiers.");
                 continue;
             }
 
@@ -79,10 +55,9 @@ internal sealed class BindingTable
                 continue;
             }
 
-            if (!table.IsUsable(chord))
+            if (chord.Steps[0] is { Key: "escape", Modifiers: KeyModifiers.None })
             {
-                // A chord the client could never register must not count as bound, or lock mode would strand it.
-                table.Warnings.Add("Ignoring binding '" + chordText + "': a single-stroke leader takes exactly one key after it.");
+                table.Warnings.Add("Ignoring binding '" + chordText + "': Esc is reserved for the terminal and dialogs.");
                 continue;
             }
 
@@ -90,32 +65,6 @@ internal sealed class BindingTable
         }
 
         return table;
-    }
-
-    // A single-stroke leader arms exactly one key after it, so a longer remainder can never be entered,
-    // and a stroke without a terminal key cannot be matched at all.
-    private bool IsUsable(KeyChord chord)
-    {
-        return chord.Steps.All(stroke => KeyMap.ToHex1bKey(stroke.Key) is not null) &&
-        (Leader.Steps.Count != 1 || !TryStripLeader(chord, out IReadOnlyList<KeyStroke> rest) || rest.Count == 1);
-    }
-
-    /// <summary>
-    /// Splits a chord into the leader prefix and the strokes that follow it.
-    /// </summary>
-    /// <param name="chord">The chord.</param>
-    /// <param name="rest">The strokes after the leader, when the chord starts with it.</param>
-    /// <returns>Whether the chord starts with the leader.</returns>
-    internal bool TryStripLeader(KeyChord chord, out IReadOnlyList<KeyStroke> rest)
-    {
-        if (chord.Steps.Count > Leader.Steps.Count && chord.Steps.Take(Leader.Steps.Count).SequenceEqual(Leader.Steps))
-        {
-            rest = [.. chord.Steps.Skip(Leader.Steps.Count)];
-            return true;
-        }
-
-        rest = [];
-        return false;
     }
 
     /// <summary>
@@ -129,34 +78,11 @@ internal sealed class BindingTable
         {
             if (string.Equals(bound, action, StringComparison.Ordinal))
             {
-                return Describe(chord);
+                return Pretty(chord.Steps[0]);
             }
         }
 
         return string.Empty;
-    }
-
-    /// <summary>
-    /// Formats a chord for people, collapsing the leader prefix.
-    /// </summary>
-    /// <param name="chord">The chord.</param>
-    /// <returns>The text.</returns>
-    internal string Describe(KeyChord chord)
-    {
-        List<string> parts = [];
-        int index = 0;
-        if (chord.Steps.Count > Leader.Steps.Count && chord.Steps.Take(Leader.Steps.Count).SequenceEqual(Leader.Steps))
-        {
-            parts.Add(string.Join(' ', Leader.Steps.Select(Pretty)));
-            index = Leader.Steps.Count;
-        }
-
-        for (; index < chord.Steps.Count; index++)
-        {
-            parts.Add(Pretty(chord.Steps[index]));
-        }
-
-        return string.Join(' ', parts);
     }
 
     private static string Pretty(KeyStroke stroke)
@@ -191,11 +117,4 @@ internal sealed class BindingTable
         return prefix;
     }
 
-    private void Add(string chordText, string action)
-    {
-        if (KeyChord.TryParse(chordText, Leader, out KeyChord chord))
-        {
-            _bindings.Add((chord, action));
-        }
-    }
 }

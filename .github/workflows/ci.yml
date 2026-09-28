@@ -113,6 +113,39 @@ jobs:
       - name: Smoke test
         run: artifacts/publish/Weft.App/release_${{ matrix.rid }}/weft --version
 
+  macos-app:
+    name: macOS app (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-15-intel
+            arch: x64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+      - name: Report SDK
+        run: dotnet --info
+      - name: Report Swift compiler
+        run: xcrun swiftc --version
+      - name: Build app bundle
+        run: dotnet run --file scripts/Build-MacApp.cs -- --arch ${{ matrix.arch }}
+      - name: Package local disk image
+        run: dotnet run --file scripts/Package-MacApp.cs -- --arch ${{ matrix.arch }}
+      - name: Test installed app and native bridge
+        run: dotnet run --file scripts/Test-MacApp.cs -- --arch ${{ matrix.arch }} --package
+
   native-aot-size:
     name: Native AOT size (linux-x64)
     runs-on: ubuntu-latest

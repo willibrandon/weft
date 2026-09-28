@@ -203,6 +203,10 @@ internal sealed class SessionMirror
 
                     bool created = !_blocks.ContainsKey(block.Id);
                     _blocks[block.Id] = block;
+                    if (name == ProtocolEvents.BlockFocused && _tabs.Find(item => item.Id == block.Tab) is { } focusedTab)
+                    {
+                        focusedTab.ActiveBlock = block.Id;
+                    }
                     return (block, created);
                 case ProtocolEvents.BlockClosed:
                     BlockInfo removed = ProtocolCodec.FromElement(message.Data, ProtocolJsonContext.Default.BlockEventData).Block;

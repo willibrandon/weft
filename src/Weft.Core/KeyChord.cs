@@ -1,7 +1,7 @@
 namespace Weft.Core;
 
 /// <summary>
-/// A sequence of key strokes that triggers an action, parsed from text such as <c>leader h</c> or <c>alt+enter</c>.
+/// A direct keyboard shortcut, parsed from text such as <c>f1</c> or <c>alt+enter</c>.
 /// </summary>
 /// <param name="Steps">The strokes in order.</param>
 public sealed record KeyChord(IReadOnlyList<KeyStroke> Steps)
@@ -44,48 +44,20 @@ public sealed record KeyChord(IReadOnlyList<KeyStroke> Steps)
     };
 
     /// <summary>
-    /// Parses chord text, expanding the token <c>leader</c> to the leader chord.
+    /// Parses a single key with optional modifiers.
     /// </summary>
-    /// <param name="text">The chord text, steps separated by spaces, modifiers joined with <c>+</c>.</param>
-    /// <param name="leader">The leader chord, or null when <c>leader</c> is not allowed.</param>
+    /// <param name="text">The key name with modifiers joined by <c>+</c>.</param>
     /// <param name="chord">The parsed chord.</param>
     /// <returns>Whether the text was valid.</returns>
-    public static bool TryParse(string text, KeyChord? leader, out KeyChord chord)
+    public static bool TryParse(string text, out KeyChord chord)
     {
         chord = new KeyChord([]);
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(text) || !TryParseStroke(text.Trim(), out KeyStroke stroke))
         {
             return false;
         }
 
-        List<KeyStroke> steps = [];
-        foreach (string token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (string.Equals(token, "leader", StringComparison.OrdinalIgnoreCase))
-            {
-                if (leader is null)
-                {
-                    return false;
-                }
-
-                steps.AddRange(leader.Steps);
-                continue;
-            }
-
-            if (!TryParseStroke(token, out KeyStroke stroke))
-            {
-                return false;
-            }
-
-            steps.Add(stroke);
-        }
-
-        if (steps.Count == 0)
-        {
-            return false;
-        }
-
-        chord = new KeyChord(steps);
+        chord = new KeyChord([stroke]);
         return true;
     }
 

@@ -1,15 +1,14 @@
 using System.Diagnostics;
 using System.Net.Sockets;
-using Weft.Client;
 using Weft.Core;
 using Weft.Protocol;
 
-namespace Weft.App;
+namespace Weft.Client;
 
 /// <summary>
 /// Connects to a running server or starts one detached and waits for it.
 /// </summary>
-internal static class ServerLauncher
+public static class ServerLauncher
 {
     /// <summary>
     /// Connects when a server is listening.
@@ -17,7 +16,7 @@ internal static class ServerLauncher
     /// <param name="socketPath">The control socket path.</param>
     /// <param name="cancellationToken">Cancels the attempt.</param>
     /// <returns>The client, or null when nothing answers.</returns>
-    internal static async Task<ControlClient?> TryConnectAsync(string socketPath, CancellationToken cancellationToken)
+    public static async Task<ControlClient?> TryConnectAsync(string socketPath, CancellationToken cancellationToken)
     {
         if (!File.Exists(socketPath))
         {
@@ -49,7 +48,19 @@ internal static class ServerLauncher
     /// <param name="cancellationToken">Cancels the attempt.</param>
     /// <returns>The client.</returns>
     /// <exception cref="InvalidOperationException">The server could not be started.</exception>
-    internal static async Task<ControlClient> ConnectOrStartAsync(string runtimeDirectory, CancellationToken cancellationToken)
+    public static Task<ControlClient> ConnectOrStartAsync(string runtimeDirectory, CancellationToken cancellationToken)
+    {
+        return ConnectOrStartAsync(runtimeDirectory, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Connects to the server, starting the supplied executable when needed.
+    /// </summary>
+    /// <param name="runtimeDirectory">The runtime directory.</param>
+    /// <param name="executablePath">The bundled CLI path, or null to use the current CLI.</param>
+    /// <param name="cancellationToken">Cancels the attempt.</param>
+    /// <returns>The connected control client.</returns>
+    public static async Task<ControlClient> ConnectOrStartAsync(string runtimeDirectory, string? executablePath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         string socketPath = WeftPaths.ControlSocketPath(runtimeDirectory);
@@ -60,7 +71,7 @@ internal static class ServerLauncher
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        Start(runtimeDirectory);
+        Start(runtimeDirectory, executablePath);
         long deadline = Environment.TickCount64 + 10_000;
         while (Environment.TickCount64 < deadline)
         {
@@ -75,9 +86,15 @@ internal static class ServerLauncher
         throw new InvalidOperationException("The weft server did not start within ten seconds. Check the server log under " + WeftPaths.ResolveStateDirectory() + ".");
     }
 
-    private static void Start(string runtimeDirectory)
+    private static void Start(string runtimeDirectory, string? executablePath)
     {
-        string executable = Environment.ProcessPath ?? throw new InvalidOperationException("The weft executable path is unknown.");
+        string executable = executablePath ?? Environment.ProcessPath ?? throw new InvalidOperationException("The weft executable path is unknown.");
+        if (executablePath is not null && Environment.ProcessPath is { } current
+            && string.Equals(Path.GetFullPath(executablePath), Path.GetFullPath(current), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The desktop app cannot start itself as the server. Rebuild the app bundle.");
+        }
+
         var start = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,
@@ -87,7 +104,7 @@ internal static class ServerLauncher
             RedirectStandardError = true
         };
         string host = Path.GetFileNameWithoutExtension(executable);
-        if (string.Equals(host, "dotnet", StringComparison.OrdinalIgnoreCase))
+        if (executablePath is null && string.Equals(host, "dotnet", StringComparison.OrdinalIgnoreCase))
         {
             // Framework-dependent launch: the entry assembly must be passed to the dotnet host.
             start.ArgumentList.Add(Environment.GetCommandLineArgs()[0]);

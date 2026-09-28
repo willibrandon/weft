@@ -17,27 +17,25 @@ public sealed class WeftConfigTests
         string path = Path.Join(Path.GetTempPath(), "weft-config-" + Guid.NewGuid().ToString("N")[..8] + ".json");
         File.WriteAllText(path, /*lang=json*/ """
             {
-              // leader key
-              "leader": "ctrl+a",
+              // appearance
               "frames": false,
               "sizePolicy": "smallest",
               "scrollback": 500,
               "shell": "/bin/sh",
               "theme": "ocean",
-              "bindings": { "leader h": "focus.left", "alt+enter": "block.zoom", },
+              "bindings": { "alt+left": "focus.left", "alt+enter": "block.zoom", },
               "hooks": { "block.exited": "true", },
             }
             """);
         try
         {
             Assert.IsTrue(WeftConfigLoader.TryLoad(path, out WeftConfig config, out string? error), error);
-            Assert.AreEqual("ctrl+a", config.Leader);
             Assert.IsFalse(config.Frames);
             Assert.AreEqual(SizePolicy.Smallest, config.SizePolicy);
             Assert.AreEqual(500, config.Scrollback);
             Assert.AreEqual("/bin/sh", config.Shell);
             Assert.AreEqual("ocean", config.Theme);
-            Assert.AreEqual("focus.left", config.Bindings["leader h"]);
+            Assert.AreEqual("focus.left", config.Bindings["alt+left"]);
             Assert.AreEqual("true", config.Hooks["block.exited"]);
         }
         finally
@@ -55,16 +53,15 @@ public sealed class WeftConfigTests
         string missing = Path.Join(Path.GetTempPath(), "weft-missing-" + Guid.NewGuid().ToString("N")[..8] + ".json");
         Assert.IsTrue(WeftConfigLoader.TryLoad(missing, out WeftConfig defaults, out string? none));
         Assert.IsNull(none);
-        Assert.AreEqual("ctrl+b", defaults.Leader);
         Assert.IsTrue(defaults.Frames);
 
         string malformed = missing + ".bad";
-        File.WriteAllText(malformed, "{ \"leader\": ");
+        File.WriteAllText(malformed, "{ \"theme\": ");
         try
         {
             Assert.IsFalse(WeftConfigLoader.TryLoad(malformed, out WeftConfig fallback, out string? error));
             Assert.IsNotNull(error);
-            Assert.AreEqual("ctrl+b", fallback.Leader);
+            Assert.AreEqual("default", fallback.Theme);
         }
         finally
         {
