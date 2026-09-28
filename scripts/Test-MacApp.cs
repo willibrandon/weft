@@ -177,6 +177,7 @@ internal static class TestMacApp
         }
         catch
         {
+            await PreserveFailureProfileAsync(cli, output, environment).ConfigureAwait(false);
             PreserveFailureLog(temporary, output);
             throw;
         }
@@ -206,6 +207,28 @@ internal static class TestMacApp
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine("Could not preserve the private server log: " + exception.Message);
+        }
+    }
+
+    private static async Task PreserveFailureProfileAsync(string cli, string output, Dictionary<string, string> environment)
+    {
+        if (!File.Exists(Path.Join(environment["WEFT_SOCKET_DIR"], "weft.sock")))
+        {
+            return;
+        }
+
+        try
+        {
+            using var info = JsonDocument.Parse(await RunAsync(cli, ["info", "--json"], environment).ConfigureAwait(false));
+            string pid = info.RootElement.GetProperty("pid").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _ = await RunAsync("sample", [pid, "3", "-file", Path.Join(output, "qualification-failure-server-sample.txt")], environment).ConfigureAwait(false);
+            string map = await RunAsync("vmmap", ["-summary", pid], environment).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Join(output, "qualification-failure-server-memory.txt"), map).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or UnauthorizedAccessException
+            or System.ComponentModel.Win32Exception or JsonException or OperationCanceledException)
+        {
+            await Console.Error.WriteLineAsync("Could not profile the private server after failure: " + exception.Message).ConfigureAwait(false);
         }
     }
 

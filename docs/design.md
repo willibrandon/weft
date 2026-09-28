@@ -108,6 +108,8 @@ Performance qualification paces its finite output producer against absolute dead
 A blocked write or delayed timer can make a frame late, but cannot add another full
 interval to every subsequent frame. Producer write and sleep timings remain recorded
 separately from input and drawing latency.
+Failed native runs sample the private server before shutdown and retain its memory
+summary with the qualification artifacts, so runner-specific stalls can be diagnosed.
 
 weft's presentation filter projects ordinary cursor restores to the server's applied cursor
 coordinates. A view can attach while a shell is drawing a temporary startup prompt, after

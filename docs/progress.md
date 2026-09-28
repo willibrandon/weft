@@ -193,6 +193,10 @@ installed-DMG suite pass: loaded input p95 21.4 ms, tab switching p95 6.4 ms. Gr
 limits also pass, with Kitty at 59.9 frames/s and Sixel at 51.8; client CPU measured
 133.6% and 106.5%, resident memory 145.0 and 306.3 MiB. These local measurements do not
 establish native Intel performance; the CI workload remains required.
+ARM64 CI passed the complete installed suite with loaded input p95 102.3 ms and
+tab switching p95 35.2 ms. Native Intel passed input and drawing limits but still
+timed out on output completion. Failed native runs now retain a three-second sample
+and memory summary of the private server before cleanup, to identify that remaining stall.
 A concurrent real-file regression checks that output remains complete and ordered
 as commands exit. Each server owns its processing slot; independent servers do not
 share it. Exit draining also accounts for queued output. All 548 .NET tests pass.
