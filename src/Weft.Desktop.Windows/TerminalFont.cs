@@ -87,7 +87,8 @@ internal sealed partial class TerminalFont : IDisposable
             : new[] { family, "Cascadia Mono", "Consolas" }
                 .OfType<string>()
                 .FirstOrDefault(name => name != BundledFamily && HasSystemFamily(name)) ?? "Consolas";
-        var font = new TerminalFont(resolved, points, bundled ? new Uri(regular).AbsoluteUri + "#" + BundledFamily : resolved);
+        var font = new TerminalFont(resolved, points,
+            bundled ? new Uri(regular).AbsoluteUri + "#" + BundledFamily : resolved);
         try
         {
             if (bundled)
@@ -160,7 +161,9 @@ internal sealed partial class TerminalFont : IDisposable
             FontWeight = (index & 1) != 0 ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = (index & 2) != 0 ? FontStyle.Italic : FontStyle.Normal,
             WordWrapping = CanvasWordWrapping.NoWrap,
-            Options = CanvasDrawTextOptions.EnableColorFont | CanvasDrawTextOptions.Clip
+            // Text drawn at a point has an empty layout box, which clipping would hide entirely. The renderer
+            // clips each cell with a layer instead.
+            Options = CanvasDrawTextOptions.EnableColorFont
         };
         _formats[index] = format;
         return format;
@@ -212,7 +215,8 @@ internal sealed partial class TerminalFont : IDisposable
     private static bool HasSystemFamily(string family)
     {
         using var system = CanvasFontSet.GetSystemFontSet();
-        using CanvasFontSet matches = system.GetMatchingFonts(family, FontWeights.Normal, FontStretch.Normal, FontStyle.Normal);
+        using CanvasFontSet matches = system.GetMatchingFonts(family, FontWeights.Normal, FontStretch.Normal,
+            FontStyle.Normal);
         return matches.Fonts.Any(face =>
             face.FamilyNames.Values.Any(name => string.Equals(name, family, StringComparison.OrdinalIgnoreCase)));
     }
@@ -236,7 +240,8 @@ internal sealed partial class TerminalFont : IDisposable
     {
         var symbols = new CanvasFontSet(new Uri(path));
         _owned.Add(symbols);
-        CanvasFontSet matches = symbols.GetMatchingFonts(BundledFamily, FontWeights.Normal, FontStretch.Normal, FontStyle.Normal);
+        CanvasFontSet matches = symbols.GetMatchingFonts(BundledFamily, FontWeights.Normal, FontStretch.Normal,
+            FontStyle.Normal);
         _owned.Add(matches);
         _symbols = matches.Fonts.Count == 0 ? null : matches.Fonts[0];
     }

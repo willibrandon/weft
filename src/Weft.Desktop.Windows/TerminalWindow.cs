@@ -37,8 +37,10 @@ internal sealed class TerminalWindow : Component
         (string dialogText, Action<string> setDialogText) = UseState(string.Empty);
         (int paletteIndex, Action<int> setPaletteIndex) = UseState(0);
         (string? findTarget, Action<string?> setFindTarget) = UseState<string?>(null);
+        Ref<string?> searching = UseRef<string?>(null);
         (string findText, Action<string> setFindText) = UseState(string.Empty);
         (string? notice, Action<string?> setNotice) = UseState<string?>(null);
+        (bool rejected, Action<bool> setRejected) = UseState(false);
         (ElementRef findField, Action focusFind) = this.UseElementFocus();
         (ElementRef dialogField, Action focusDialog) = this.UseElementFocus();
         (int _, Action<int> setPreferencesVersion) = UseState(0);
@@ -64,16 +66,22 @@ internal sealed class TerminalWindow : Component
             {
                 view.Update(frame);
                 setChrome(ChromeState.From(frame));
+                if (frame.Connected)
+                {
+                    // A rejected input notice lasts until the connection delivers again, as on the Mac.
+                    setRejected(false);
+                }
             };
             view.CommandRequested += command =>
             {
                 if (!created.Send(command))
                 {
-                    setNotice("The input was not sent. The connection is closed or busy.");
+                    setRejected(true);
                 }
             };
             view.ActionRequested += (id, target) => perform.Current(id, target);
-            view.GridChanged += (columns, rows) => created.Send(new DesktopCommand("resize", Width: columns, Height: rows));
+            view.GridChanged += (columns, rows) =>
+                created.Send(new DesktopCommand("resize", Width: columns, Height: rows));
             view.FocusTerminal();
             return () =>
             {
@@ -134,7 +142,7 @@ internal sealed class TerminalWindow : Component
         {
             if (session.Current?.Send(command) != true)
             {
-                setNotice("The input was not sent. The connection is closed or busy.");
+                setRejected(true);
             }
         }
 
@@ -145,7 +153,10 @@ internal sealed class TerminalWindow : Component
                 return;
             }
 
-            previousFocus.Current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(View()?.XamlRoot) as Control;
+            // Typing resumes where it was: a text field such as Find, or otherwise the terminal. Menus and buttons that
+            // opened the dialog are not where the user was typing.
+            previousFocus.Current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(View()?.XamlRoot)
+                is TextBox field and not TerminalInput ? field : null;
             setDialogText(request.Text);
             setPaletteIndex(0);
             setDialog(request);
@@ -154,8 +165,8 @@ internal sealed class TerminalWindow : Component
         void CloseDialog()
         {
             setDialog(null);
-            // Dismissal restores the focus that opened the dialog, which is usually the terminal.
-            if (previousFocus.Current is TerminalInput or null)
+            // Dismissal returns focus to the field that had it, or to the terminal.
+            if (previousFocus.Current is null)
             {
                 View()?.FocusTerminal();
             }
@@ -175,7 +186,8 @@ internal sealed class TerminalWindow : Component
 
         void Perform(string id, string? explicitTarget)
         {
-            if (chrome.Commands.FirstOrDefault(action => action.Id == id) is not { } action || !chrome.CanPerform(action))
+            if (chrome.Commands.FirstOrDefault(action => action.Id == id) is not { } action
+                || !chrome.CanPerform(action))
             {
                 return;
             }
@@ -199,6 +211,7 @@ internal sealed class TerminalWindow : Component
                     OpenDialog(new WindowDialog("commands"));
                     break;
                 case "find":
+                    searching.Current = target;
                     setFindText(string.Empty);
                     setFindTarget(target);
                     focusFind();
@@ -243,7 +256,7 @@ internal sealed class TerminalWindow : Component
             switch (id)
             {
                 case "newWindow":
-                    DesktopWindows.OpenTerminal();
+                    _ = DesktopWindows.OpenTerminal();
                     break;
                 case "settings":
                     DesktopWindows.ShowSettings();
@@ -301,13 +314,20 @@ internal sealed class TerminalWindow : Component
 
         void Search(string query, int direction)
         {
+            // The closing find field reports its text once more as it loses focus; Done has already resumed.
+            if (searching.Current is not { } target)
+            {
+                return;
+            }
+
             View()?.ClearSelection();
-            Send(new DesktopCommand("find", findTarget, query.Length > 1024 ? query[..1024] : query, Y: direction));
+            Send(new DesktopCommand("find", target, query.Length > 1024 ? query[..1024] : query, Y: direction));
         }
 
         void CloseFind()
         {
-            string? target = findTarget;
+            string? target = searching.Current;
+            searching.Current = null;
             setFindTarget(null);
             setFindText(string.Empty);
             View()?.Resume(target);
@@ -315,7 +335,9 @@ internal sealed class TerminalWindow : Component
         }
 
         bool connecting = ReferenceEquals(chrome, ChromeState.Connecting);
-        string? status = chrome.Error ?? notice ?? (connecting ? "Connecting…" : chrome.Connected ? null : "Disconnected");
+        string? status = chrome.Error ?? notice
+            ?? (rejected ? "The input was not sent. The connection is closed or busy." : null)
+            ?? (connecting ? "Connecting…" : chrome.Connected ? null : "Disconnected");
         ChromeItem? findPane = chrome.Blocks.FirstOrDefault(block => block.Id == findTarget);
         Element? find = findTarget is null
             ? null
@@ -343,15 +365,17 @@ internal sealed class TerminalWindow : Component
         var dialogs = new DialogContext(chrome, dialogText, setDialogText, paletteIndex, setPaletteIndex, dialogField,
             CloseDialog, Run, Send);
 
+        // Keys keep each child's identity as the optional rows come and go. Matched by position, opening the
+        // find bar would replace the terminal surface with a new one that has no session.
         return Grid(
             [GridSize.Star()],
             [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
-            TitleBar(chrome, Run, Perform, SelectTab, Send).Grid(row: 0),
-            find,
-            TerminalSurfaceElement.TerminalSurface().Ref(surface).Margin(2).Grid(row: 2),
-            empty,
-            statusLine,
-            Dialog(dialog, dialogs))
+            TitleBar(chrome, Run, Perform, SelectTab, Send).Grid(row: 0).WithKey("title"),
+            find?.WithKey("find"),
+            TerminalSurfaceElement.TerminalSurface().Ref(surface).Margin(2).Grid(row: 2).WithKey("terminal"),
+            empty?.WithKey("empty"),
+            statusLine?.WithKey("status"),
+            Dialog(dialog, dialogs)?.WithKey("dialog"))
             .Background(TerminalAppearance.Format(TerminalAppearance.Background))
             .RequestedTheme(ElementTheme.Dark)
             .OnPreviewKeyDown(OnKey);
@@ -388,7 +412,8 @@ internal sealed class TerminalWindow : Component
             .VAlign(VerticalAlignment.Center);
         TabViewItemData[] items =
         [
-            .. chrome.Tabs.Select(tab => Tab(tab.Name, Empty()) with { Icon = TerminalGlyph, IsClosable = chrome.Connected })
+            .. chrome.Tabs.Select(tab =>
+                Tab(tab.Name, Empty()) with { Icon = TerminalGlyph, IsClosable = chrome.Connected })
         ];
         TabViewElement tabView = TabView((int?)selected, index =>
         {
@@ -438,18 +463,22 @@ internal sealed class TerminalWindow : Component
 
         MenuFlyoutItemBase[] Group(string group)
         {
-            return [.. chrome.Commands.Where(action => action.Group == group).Select(action => Item(chrome, action.Id, perform))];
+            return [.. chrome.Commands.Where(action => action.Group == group)
+                .Select(action => Item(chrome, action.Id, perform))];
         }
 
         List<MenuFlyoutItemBase> items = [Fixed("New Window", "newWindow"), MenuSeparator()];
         items.AddRange(s_menuGroups.Select(group => MenuSubItem(group, Group(group))));
         items.Add(MenuSubItem("Edit",
-            [Fixed("Copy", "copy"), Fixed("Paste", "paste"), Fixed("Select All", "selectAll"), MenuSeparator(), .. Group("Edit")]));
+            [Fixed("Copy", "copy"), Fixed("Paste", "paste"), Fixed("Select All", "selectAll"), MenuSeparator(),
+                .. Group("Edit")]));
         items.Add(MenuSubItem("View",
-            [Fixed("Larger Text", "largerText"), Fixed("Smaller Text", "smallerText"), MenuSeparator(), .. Group("View")]));
+            [Fixed("Larger Text", "largerText"), Fixed("Smaller Text", "smallerText"), MenuSeparator(),
+                .. Group("View")]));
         items.Add(MenuSeparator());
         items.Add(Fixed("Settings", "settings"));
-        items.Add(MenuSubItem("Help", [MenuItem("Weft Help", () => run("help")), MenuItem("About Weft", () => run("about"))]));
+        items.Add(MenuSubItem("Help",
+            [MenuItem("Weft Help", () => run("help")), MenuItem("About Weft", () => run("about"))]));
         items.Add(MenuSeparator());
         items.Add(MenuItem("Close Window", () => run("closeWindow")) with
         {
@@ -466,7 +495,10 @@ internal sealed class TerminalWindow : Component
             return MenuSeparator();
         }
 
-        MenuFlyoutItemData item = MenuItem(action.Label, () => perform(id, null)) with { IsEnabled = chrome.CanPerform(action) };
+        MenuFlyoutItemData item = MenuItem(action.Label, () => perform(id, null)) with
+        {
+            IsEnabled = chrome.CanPerform(action)
+        };
         return Shortcut(item, id);
     }
 
@@ -478,8 +510,8 @@ internal sealed class TerminalWindow : Component
             : item;
     }
 
-    private static FlexElement FindBar(string text, ChromeItem? pane, ElementRef field, Action<string> changed, Action<int> search,
-        Action close)
+    private static FlexElement FindBar(string text, ChromeItem? pane, ElementRef field, Action<string> changed,
+        Action<int> search, Action close)
     {
         string count = pane is { SearchQuery.Length: > 0 } ? pane.SearchMatches + " matching lines" : string.Empty;
         return FlexRow(
@@ -500,7 +532,8 @@ internal sealed class TerminalWindow : Component
                 })
                 .Width(260)
                 .Ref(field),
-            TextBlock(count).FontSize(12).Opacity(0.7).VAlign(VerticalAlignment.Center).Margin(8, 0, 8, 0).Flex(grow: 1),
+            TextBlock(count).FontSize(12).Opacity(0.7).VAlign(VerticalAlignment.Center).Margin(8, 0, 8, 0)
+                .Flex(grow: 1),
             Button("Previous", () => search(-1)),
             Button("Next", () => search(1)).Margin(6, 0, 0, 0),
             Button("Done", close).Margin(6, 0, 0, 0))
@@ -514,14 +547,14 @@ internal sealed class TerminalWindow : Component
             "commands" => CommandPalette.Render(context),
             "newSession" => NameDialog("New Session", "Create", "Session name", context, text =>
                 context.Send(new DesktopCommand("newSession", Text: text.Trim().Length == 0 ? null : text.Trim()))),
-            "rename" => NameDialog(Label(context.Chrome, dialog.Action).TrimEnd('…'), "Rename", "Name", context, text =>
-                context.Send(new DesktopCommand(dialog.Action!, dialog.Target, text))),
+            "rename" => NameDialog(Label(context.Chrome, dialog.Action).TrimEnd('…'), "Rename", "Name", context,
+                text => context.Send(new DesktopCommand(dialog.Action!, dialog.Target, text))),
             "confirm" => ConfirmDialog(dialog, context),
             "help" => Message("Weft Help",
-                "Click + for a tab, or open Commands from the … menu to find an action. Scroll to read earlier output; "
-                + "Find searches it. Drag to select text, then copy with Ctrl+Shift+C. Hold Shift to select inside an app "
-                + "that uses the mouse, and Ctrl+click a link to open it. Change shortcuts in Settings. Closing a window or "
-                + "exiting Weft leaves your sessions running.", context),
+                "Click + for a tab, or open Commands from the … menu to find an action. Scroll to read earlier "
+                + "output; Find searches it. Drag to select text, then copy with Ctrl+Shift+C. Hold Shift to select "
+                + "inside an app that uses the mouse, and Ctrl+click a link to open it. Change shortcuts in Settings. "
+                + "Closing a window or exiting Weft leaves your sessions running.", context),
             "about" => Message("About Weft",
                 "Version " + (typeof(TerminalWindow).Assembly.GetName().Version?.ToString(3) ?? "0.0.0")
                 + ". Durable terminal sessions that keep running when every window closes.", context),
@@ -529,7 +562,8 @@ internal sealed class TerminalWindow : Component
         };
     }
 
-    private static Element NameDialog(string title, string primary, string placeholder, DialogContext context, Action<string> submit)
+    private static Element NameDialog(string title, string primary, string placeholder, DialogContext context,
+        Action<string> submit)
     {
         Element field = TextBox(context.Text, context.SetText, placeholderText: placeholder)
             .AutomationName(placeholder)
@@ -558,7 +592,8 @@ internal sealed class TerminalWindow : Component
         string message = sync
             ? "When enabled, typing goes to every included pane in this tab."
             : "This ends the running processes inside it. Closing the window instead keeps them running.";
-        return ContentDialog(title, TextBlock(message).TextWrapping(TextWrapping.Wrap), sync ? "Change Broadcasting" : "End Processes and Close") with
+        return ContentDialog(title, TextBlock(message).TextWrapping(TextWrapping.Wrap),
+            sync ? "Change Broadcasting" : "End Processes and Close") with
         {
             IsOpen = true,
             CloseButtonText = "Cancel",

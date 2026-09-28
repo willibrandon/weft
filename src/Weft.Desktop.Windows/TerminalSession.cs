@@ -30,9 +30,10 @@ internal sealed partial class TerminalSession : IDisposable
         // The configured shell is read when a window opens and applies to terminals it creates.
         WeftConfig config = WeftConfigLoader.LoadDefault(out string? error);
         ConfigurationError = error;
-        string server = serverPath ?? Environment.GetEnvironmentVariable("WEFT_DESKTOP_SERVER") ?? DefaultServer;
-        _client = new DesktopClient(WeftPaths.ResolveRuntimeDirectory(), server, Math.Clamp(columns, 4, 500), Math.Clamp(rows, 4, 300),
-            error is null ? config.Shell : null);
+        string server = serverPath ?? Environment.GetEnvironmentVariable("WEFT_DESKTOP_SERVER")
+            ?? PackagedServer.Resolve(DefaultServer);
+        _client = new DesktopClient(WeftPaths.ResolveRuntimeDirectory(), server, Math.Clamp(columns, 4, 500),
+            Math.Clamp(rows, 4, 300), error is null ? config.Shell : null);
         _client.SetFrameReady(Schedule);
     }
 
@@ -100,7 +101,8 @@ internal sealed partial class TerminalSession : IDisposable
         {
             await client.DisposeAsync().ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or OperationCanceledException)
+        catch (Exception exception) when (exception is IOException or InvalidOperationException
+            or OperationCanceledException)
         {
             ClientLog.Debug(exception.ToString());
         }

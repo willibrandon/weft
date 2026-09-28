@@ -66,7 +66,8 @@ internal sealed partial class TerminalRenderer : IDisposable
     /// <returns>The pane rectangle.</returns>
     internal Rect PaneRect(Rect content)
     {
-        return new Rect(content.X - 5, content.Y - Font.CellHeight + 3, content.Width + 10, content.Height + Font.CellHeight + 1);
+        return new Rect(content.X - 5, content.Y - Font.CellHeight + 3, content.Width + 10,
+            content.Height + Font.CellHeight + 1);
     }
 
     /// <summary>
@@ -188,7 +189,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         return result;
     }
 
-    private void DrawBlock(CanvasDrawingSession session, Rect region, TerminalScene scene, DesktopBlockFrame block, Rect content)
+    private void DrawBlock(CanvasDrawingSession session, Rect region, TerminalScene scene, DesktopBlockFrame block,
+        Rect content)
     {
         float cellHeight = Font.CellHeight;
         int first = Math.Max(0, (int)Math.Floor((region.Y - content.Y) / cellHeight));
@@ -218,8 +220,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         }
     }
 
-    private void DrawBackgrounds(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content,
-        int row, HashSet<int> matches)
+    private void DrawBackgrounds(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block,
+        Rect content, int row, HashSet<int> matches)
     {
         float cellWidth = Font.CellWidth;
         float top = (float)content.Y + (row * Font.CellHeight);
@@ -233,16 +235,19 @@ internal sealed partial class TerminalRenderer : IDisposable
                 int index = (row * block.Width) + column;
                 DesktopCell cell = block.Cells[index];
                 bool reverse = (cell.Attributes & 32) != 0;
-                color = block.Selection is { } selection && index >= selection.Start && index <= selection.End ? scene.Selection
+                color = block.Selection is { } selection && index >= selection.Start && index <= selection.End
+                    ? scene.Selection
                     : matches.Contains(index) ? s_match
-                    : reverse ? (cell.Foreground is int foreground ? TerminalAppearance.FromRgb(foreground) : scene.Foreground)
+                    : reverse
+                    ? (cell.Foreground is int foreground ? TerminalAppearance.FromRgb(foreground) : scene.Foreground)
                     : cell.Background is int background ? TerminalAppearance.FromRgb(background) : null;
             }
 
             if (runStart >= 0 && color != runColor)
             {
                 // The surface was cleared to the default background; only other colors are painted.
-                var rect = new Rect(content.X + (runStart * cellWidth), top, (column - runStart) * cellWidth, Font.CellHeight);
+                var rect = new Rect(content.X + (runStart * cellWidth), top, (column - runStart) * cellWidth,
+                    Font.CellHeight);
                 session.FillRectangle(rect, runColor);
                 runStart = -1;
             }
@@ -255,7 +260,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         }
     }
 
-    private void DrawText(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content, int row)
+    private void DrawText(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content,
+        int row)
     {
         float cellWidth = Font.CellWidth;
         float top = (float)content.Y + (row * Font.CellHeight);
@@ -277,7 +283,9 @@ internal sealed partial class TerminalRenderer : IDisposable
 
             bool reverse = (attributes & 32) != 0;
             int? rgb = reverse ? cell.Background : cell.Foreground;
-            Color color = rgb is int value ? TerminalAppearance.FromRgb(value) : reverse ? scene.Background : scene.Foreground;
+            Color color = rgb is int value
+                ? TerminalAppearance.FromRgb(value)
+                : reverse ? scene.Background : scene.Foreground;
             if ((attributes & 2) != 0)
             {
                 color.A = 140;
@@ -286,7 +294,9 @@ internal sealed partial class TerminalRenderer : IDisposable
             bool wide = column + 1 < block.Width && block.Cells[(row * block.Width) + column + 1].Text.Length == 0;
             int glyph = 0;
             CanvasFontFace? face = null;
-            if (!wide && Rune.DecodeFromUtf16(cell.Text, out Rune rune, out int consumed) == System.Buffers.OperationStatus.Done
+            if (!wide
+                && Rune.DecodeFromUtf16(cell.Text, out Rune rune, out int consumed)
+                    == System.Buffers.OperationStatus.Done
                 && consumed == cell.Text.Length)
             {
                 glyph = Font.Glyph(attributes, rune.Value, out face);
@@ -294,7 +304,8 @@ internal sealed partial class TerminalRenderer : IDisposable
 
             if (glyph != 0 && face is not null)
             {
-                if (runStart < 0 || !ReferenceEquals(face, runFace) || color != runColor || runStart + _glyphs.Count != column)
+                if (runStart < 0 || !ReferenceEquals(face, runFace) || color != runColor
+                    || runStart + _glyphs.Count != column)
                 {
                     FlushRun(session, content, baseline, ref runStart, runFace, runColor);
                     runStart = column;
@@ -307,10 +318,12 @@ internal sealed partial class TerminalRenderer : IDisposable
             else
             {
                 FlushRun(session, content, baseline, ref runStart, runFace, runColor);
-                var cellRect = new Rect(content.X + (column * cellWidth), top, cellWidth * (wide ? 2 : 1), Font.CellHeight);
+                var cellRect = new Rect(content.X + (column * cellWidth), top, cellWidth * (wide ? 2 : 1),
+                    Font.CellHeight);
                 using (session.CreateLayer(1, cellRect))
                 {
-                    session.DrawText(cell.Text, new Vector2((float)cellRect.X, top + 1), color, Font.Format(attributes));
+                    session.DrawText(cell.Text, new Vector2((float)cellRect.X, top + 1), color,
+                        Font.Format(attributes));
                 }
             }
 
@@ -334,7 +347,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         FlushRun(session, content, baseline, ref runStart, runFace, runColor);
     }
 
-    private void FlushRun(CanvasDrawingSession session, Rect content, float baseline, ref int runStart, CanvasFontFace? face, Color color)
+    private void FlushRun(CanvasDrawingSession session, Rect content, float baseline, ref int runStart,
+        CanvasFontFace? face, Color color)
     {
         if (runStart < 0 || _glyphs.Count == 0)
         {
@@ -353,7 +367,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         _glyphs.Clear();
     }
 
-    private void DrawImages(CanvasDrawingSession session, DesktopBlockFrame block, Rect content, Rect region, bool behindText)
+    private void DrawImages(CanvasDrawingSession session, DesktopBlockFrame block, Rect content, Rect region,
+        bool behindText)
     {
         if (block.Images.Count == 0 || _device is null)
         {
@@ -390,7 +405,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         }
     }
 
-    private void DrawCursor(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content, int first, int last)
+    private void DrawCursor(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content,
+        int first, int last)
     {
         if (!block.Active || !block.CursorVisible || block.Selection is not null || !scene.CursorLit
             || block.CursorY < first || block.CursorY > last)
@@ -400,7 +416,8 @@ internal sealed partial class TerminalRenderer : IDisposable
 
         float cellWidth = Font.CellWidth;
         float cellHeight = Font.CellHeight;
-        var cell = new Rect(content.X + (block.CursorX * cellWidth), content.Y + (block.CursorY * cellHeight), cellWidth, cellHeight);
+        var cell = new Rect(content.X + (block.CursorX * cellWidth), content.Y + (block.CursorY * cellHeight),
+            cellWidth, cellHeight);
         if (block.CursorShape is 3 or 4)
         {
             session.FillRectangle(new Rect(cell.X, cell.Bottom - 2, cellWidth, 2), scene.Cursor);
@@ -417,7 +434,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         }
     }
 
-    private void DrawChrome(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content, Rect pane)
+    private void DrawChrome(CanvasDrawingSession session, TerminalScene scene, DesktopBlockFrame block, Rect content,
+        Rect pane)
     {
         var border = Color.FromArgb(block.Active ? (byte)41 : (byte)18, 255, 255, 255);
         session.DrawRoundedRectangle(pane, 6, 6, border, 1);
@@ -435,7 +453,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         Color secondary = scene.Foreground;
         secondary.A = 150;
         bool inspecting = block.ViewVersion != 0;
-        var title = new Rect(content.X + 5, pane.Y + 1, Math.Max(0, content.Width - (inspecting ? 145 : 10)), Font.CellHeight - 2);
+        var title = new Rect(content.X + 5, pane.Y + 1, Math.Max(0, content.Width - (inspecting ? 145 : 10)),
+            Font.CellHeight - 2);
         if (title.Width > 0)
         {
             session.DrawText(block.Title, title, secondary, _chrome);
@@ -444,7 +463,8 @@ internal sealed partial class TerminalRenderer : IDisposable
         if (inspecting)
         {
             string label = block.Selection is not null ? "Selection · Resume ↓" : "History · Resume ↓";
-            session.DrawText(label, new Rect(content.Right - 135, pane.Y + 1, 130, Font.CellHeight - 2), secondary, _chrome);
+            session.DrawText(label, new Rect(content.Right - 135, pane.Y + 1, 130, Font.CellHeight - 2),
+                secondary, _chrome);
         }
     }
 

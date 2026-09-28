@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest, windows-11-arm]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -94,6 +94,10 @@ jobs:
             rid: linux-arm64
           - os: macos-latest
             rid: osx-arm64
+          - os: windows-latest
+            rid: win-x64
+          - os: windows-11-arm
+            rid: win-arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -111,6 +115,7 @@ jobs:
         env:
           CI: true
       - name: Smoke test
+        shell: bash
         run: artifacts/publish/Weft.App/release_${{ matrix.rid }}/weft --version
 
   macos-app:
@@ -159,6 +164,57 @@ jobs:
             artifacts/macos/osx-${{ matrix.arch }}/native-smoke*.png
             artifacts/macos/osx-${{ matrix.arch }}/native-smoke*.json
             artifacts/macos/osx-${{ matrix.arch }}/failed-server.log
+
+  windows-app:
+    name: Windows app (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            arch: x64
+          - os: windows-11-arm
+            arch: arm64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+      - name: Report SDK
+        run: dotnet --info
+      - name: Verify Windows formatting
+        run: |
+          dotnet format Weft.Windows.slnx whitespace --verify-no-changes
+          dotnet format Weft.Windows.slnx style --verify-no-changes
+        env:
+          DOTNET_CLI_ENABLEAOT: false
+      - name: Build app
+        run: dotnet run --file scripts/Build-WindowsApp.cs -- --arch ${{ matrix.arch }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Package development MSIX
+        run: dotnet run --file scripts/Package-WindowsApp.cs -- --arch ${{ matrix.arch }}
+      - name: Test app, package lifecycle, and native windows
+        run: dotnet run --file scripts/Test-WindowsApp.cs -- --arch ${{ matrix.arch }} --package
+        env:
+          CI: true
+      - name: Save Windows test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-app-${{ matrix.arch }}
+          retention-days: 14
+          path: |
+            artifacts/test-results/**
+            artifacts/windows/win-${{ matrix.arch }}/*.txt
+            artifacts/windows/win-${{ matrix.arch }}/failed-server.log
 
   native-aot-size:
     name: Native AOT size (linux-x64)

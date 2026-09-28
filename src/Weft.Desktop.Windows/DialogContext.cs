@@ -15,5 +15,5 @@ namespace Weft.Desktop.Windows;
 /// <param name="Close">Dismisses the dialog and restores the previous focus.</param>
 /// <param name="Run">Runs an app command or catalog action.</param>
 /// <param name="Send">Sends a command to the session.</param>
-internal sealed record DialogContext(ChromeState Chrome, string Text, Action<string> SetText, int Selected, Action<int> SetSelected,
-    ElementRef Field, Action Close, Action<string> Run, Action<DesktopCommand> Send);
+internal sealed record DialogContext(ChromeState Chrome, string Text, Action<string> SetText, int Selected,
+    Action<int> SetSelected, ElementRef Field, Action Close, Action<string> Run, Action<DesktopCommand> Send);

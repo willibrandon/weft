@@ -122,7 +122,8 @@ internal readonly record struct ShortcutChord(VirtualKey Key, VirtualKeyModifier
     private static string? NameOf(VirtualKey key)
     {
         return key is >= VirtualKey.A and <= VirtualKey.Z ? ((char)('a' + (key - VirtualKey.A))).ToString()
-            : key is >= VirtualKey.Number0 and <= VirtualKey.Number9 ? ((char)('0' + (key - VirtualKey.Number0))).ToString()
+            : key is >= VirtualKey.Number0 and <= VirtualKey.Number9
+            ? ((char)('0' + (key - VirtualKey.Number0))).ToString()
             : key is >= VirtualKey.F1 and <= VirtualKey.F24
             ? "f" + (key - VirtualKey.F1 + 1).ToString(CultureInfo.InvariantCulture)
             : s_named.FirstOrDefault(entry => entry.Key == key).Name;

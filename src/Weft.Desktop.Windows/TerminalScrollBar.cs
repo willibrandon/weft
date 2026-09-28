@@ -27,6 +27,7 @@ internal sealed class TerminalScrollBar
     {
         _scroll = scroll;
         Control.Scroll += OnScroll;
+        Control.ValueChanged += OnValueChanged;
         AutomationProperties.SetName(Control, "Terminal history");
     }
 
@@ -52,7 +53,9 @@ internal sealed class TerminalScrollBar
         Canvas.SetLeft(Control, content.Right - BarWidth);
         Canvas.SetTop(Control, content.Y);
         Control.Height = Math.Max(0, content.Height);
-        Control.Visibility = block.HistoryLines == 0 || block.AlternateScreen ? Visibility.Collapsed : Visibility.Visible;
+        Control.Visibility = block.HistoryLines == 0 || block.AlternateScreen
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         if (_requested == block.ScrollOffset || _history != block.HistoryLines)
         {
             _requested = null;
@@ -86,18 +89,18 @@ internal sealed class TerminalScrollBar
 
     private void OnScroll(object sender, ScrollEventArgs e)
     {
+        // Only a dragged thumb holds its position against arriving frames.
+        _tracking = !_applying && e.ScrollEventType == ScrollEventType.ThumbTrack;
+    }
+
+    private void OnValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        // Pointer input and UI Automation both change the value; frames applied here do not request scrolling.
         if (_applying)
         {
             return;
         }
 
-        if (e.ScrollEventType == ScrollEventType.EndScroll)
-        {
-            _tracking = false;
-            return;
-        }
-
-        _tracking = e.ScrollEventType == ScrollEventType.ThumbTrack;
         int offset = Math.Clamp(_history - (int)Math.Round(e.NewValue), 0, _history);
         if (_requested == offset)
         {

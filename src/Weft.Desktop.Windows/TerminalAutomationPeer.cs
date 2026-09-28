@@ -82,7 +82,7 @@ internal sealed partial class TerminalAutomationPeer : FrameworkElementAutomatio
             return;
         }
 
-        _surface.SelectCells(text.CellAt(start), text.CellAt(end - 1));
+        _surface.SelectCells(text.CellAt(start), text.LastCellAt(end - 1));
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ internal sealed partial class TerminalAutomationPeer : FrameworkElementAutomatio
         double scale = root.RasterizationScale;
         Point origin = ClientOrigin(root);
         int first = text.CellAt(start);
-        int last = end > start ? text.CellAt(end - 1) : first;
+        int last = end > start ? text.LastCellAt(end - 1) : first;
         for (int row = first / text.Block.Width; row <= last / text.Block.Width; row++)
         {
             int left = row == first / text.Block.Width ? first : row * text.Block.Width;

@@ -13,13 +13,15 @@ internal static class DesktopWindows
     /// <summary>
     /// Gets whether windows run in isolation for tests, without saving placement or reading user preferences.
     /// </summary>
-    internal static bool Isolated { get; } = Environment.GetEnvironmentVariable("WEFT_DESKTOP_PREFERENCES") is { Length: > 0 };
+    internal static bool Isolated { get; } =
+        Environment.GetEnvironmentVariable("WEFT_DESKTOP_PREFERENCES") is { Length: > 0 };
 
     /// <summary>
     /// Gets the window description for a terminal; the first window restores the saved placement.
     /// </summary>
+    /// <param name="background">Whether the window opens behind the active window without taking the keyboard.</param>
     /// <returns>The window description.</returns>
-    internal static WindowSpec TerminalSpec()
+    internal static WindowSpec TerminalSpec(bool background = false)
     {
         var spec = new WindowSpec
         {
@@ -29,20 +31,32 @@ internal static class DesktopWindows
             MinWidth = 520,
             MinHeight = 280,
             ExtendsContentIntoTitleBar = true,
-            TitleBarHeight = WindowTitleBarHeight.Tall
+            TitleBarHeight = WindowTitleBarHeight.Tall,
+            ActivateOnOpen = !background
         };
-        return Isolated || ReactorApp.Windows.Count != 0 ? spec : spec.WithPersistence("weft-terminal", WindowStartPosition.CenterOnCurrent);
+        return Isolated || ReactorApp.Windows.Count != 0
+            ? spec
+            : spec.WithPersistence("weft-terminal", WindowStartPosition.CenterOnCurrent);
     }
 
     /// <summary>
     /// Opens another terminal window attached to the most recent session.
     /// </summary>
-    internal static void OpenTerminal()
+    /// <param name="background">Whether the window opens behind the active window without taking the keyboard.</param>
+    /// <returns>The window.</returns>
+    internal static ReactorWindow OpenTerminal(bool background = false)
     {
         // Reactor disposes each window when it closes; the list only records which windows are open.
-        ReactorWindow window = ReactorApp.OpenWindow(TerminalSpec(), static () => new TerminalWindow());
+        ReactorWindow window = ReactorApp.OpenWindow(TerminalSpec(background), static () => new TerminalWindow());
+        if (background)
+        {
+            // Windows show when activated, so a background window is shown without activation instead.
+            window.AppWindow.Show(activateWindow: false);
+        }
+
         s_terminals.Add(window);
         window.Closed += (_, _) => s_terminals.Remove(window);
+        return window;
     }
 
     /// <summary>

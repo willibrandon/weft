@@ -18,7 +18,8 @@ internal sealed partial class TerminalImages : IDisposable
 {
     private const int ByteLimit = 32 * 1024 * 1024;
     private const int CountLimit = 256;
-    private readonly Dictionary<string, (CanvasBitmap Bitmap, int Cost, ulong Used)> _cache = [with(StringComparer.Ordinal)];
+    private readonly Dictionary<string, (CanvasBitmap Bitmap, int Cost, ulong Used)> _cache =
+        [with(StringComparer.Ordinal)];
     private readonly HashSet<string> _decoding = [with(StringComparer.Ordinal)];
     private readonly Action _invalidate;
     private ulong _clock;
@@ -186,7 +187,8 @@ internal sealed partial class TerminalImages : IDisposable
             _ = await stream.WriteAsync(texture.Data.ToArray().AsBuffer());
             stream.Seek(0);
             CanvasBitmap bitmap = await CanvasBitmap.LoadAsync(device, stream, 96, CanvasAlphaMode.Premultiplied);
-            bool matches = bitmap.SizeInPixels.Width == texture.PixelWidth && bitmap.SizeInPixels.Height == texture.PixelHeight;
+            bool matches = bitmap.SizeInPixels.Width == texture.PixelWidth
+                && bitmap.SizeInPixels.Height == texture.PixelHeight;
             if (_disposed || !matches || !_decoding.Contains(key))
             {
                 bitmap.Dispose();

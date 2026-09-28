@@ -16,6 +16,7 @@ using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue;
+using DispatcherQueuePriority = Microsoft.UI.Dispatching.DispatcherQueuePriority;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace Weft.Desktop.Windows;
@@ -66,7 +67,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     public TerminalSurface()
     {
         _images = new TerminalImages(Invalidate);
-        Font = TerminalFont.Create(CanvasDevice.GetSharedDevice(), PreferencesStore.Current.FontFamily, PreferencesStore.Current.FontSize);
+        Font = TerminalFont.Create(CanvasDevice.GetSharedDevice(), PreferencesStore.Current.FontFamily,
+            PreferencesStore.Current.FontSize);
         _renderer = new TerminalRenderer(Font, _images);
         _input = new TerminalInput(this);
         _canvas.UseSharedDevice = true;
@@ -140,7 +142,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     /// Gets the active block, or the first block when none is active.
     /// </summary>
     internal DesktopBlockFrame? ActiveBlock =>
-        Frame?.Blocks.FirstOrDefault(block => block.Active) ?? (Frame is { Blocks.Count: > 0 } frame ? frame.Blocks[0] : null);
+        Frame?.Blocks.FirstOrDefault(block => block.Active)
+            ?? (Frame is { Blocks.Count: > 0 } frame ? frame.Blocks[0] : null);
 
     /// <summary>
     /// Gets the font used for the grid.
@@ -165,7 +168,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     /// <summary>
     /// Gets the selected text in any visible pane.
     /// </summary>
-    internal string SelectedText => Frame?.Blocks.FirstOrDefault(block => block.Selection is not null)?.Selection?.Text ?? string.Empty;
+    internal string SelectedText =>
+        Frame?.Blocks.FirstOrDefault(block => block.Selection is not null)?.Selection?.Text ?? string.Empty;
 
     /// <summary>
     /// Applies a frame without changing text covered by an existing selection.
@@ -189,14 +193,15 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
             CancelComposition();
         }
 
-        _images.Retain(frame.Blocks.SelectMany(block => block.Textures).Select(TerminalImages.KeyOf).ToHashSet(StringComparer.Ordinal));
+        _images.Retain(frame.Blocks.SelectMany(block => block.Textures).Select(TerminalImages.KeyOf)
+            .ToHashSet(StringComparer.Ordinal));
         if (_selectionBlock is not null && !frame.Blocks.Any(block => block.Id == _selectionBlock))
         {
             EndGesture();
         }
 
-        bool cursorMoved = before?.Id != after?.Id || before?.CursorX != after?.CursorX || before?.CursorY != after?.CursorY
-            || before?.CursorShape != after?.CursorShape;
+        bool cursorMoved = before?.Id != after?.Id || before?.CursorX != after?.CursorX
+            || before?.CursorY != after?.CursorY || before?.CursorShape != after?.CursorShape;
         UpdateBlink(reset: cursorMoved);
         UpdateScrollers();
         PositionInput();
@@ -258,7 +263,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     {
         EndGesture();
         IReadOnlyList<DesktopBlockFrame> blocks = Frame?.Blocks ?? [];
-        foreach (DesktopBlockFrame block in blocks.Where(block => block.Selection is not null || _pendingSelections.Contains(block.Id)))
+        foreach (DesktopBlockFrame block in blocks.Where(block =>
+            block.Selection is not null || _pendingSelections.Contains(block.Id)))
         {
             Send(new DesktopCommand("select", block.Id, "clear"));
         }
@@ -301,16 +307,28 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
                 return;
             }
 
-            // Windows line endings would otherwise enter two newlines per line.
-            string text = (await content.GetTextAsync()).ReplaceLineEndings("\n");
-            string? pane = target ?? ActiveBlock?.Id;
-            Resume(pane);
-            Send(new DesktopCommand("paste", pane, text));
+            PasteText(await content.GetTextAsync(), target);
         }
-        catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException
+            or UnauthorizedAccessException)
         {
             ClientLog.Debug("The clipboard could not be read: " + exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Pastes text into a pane after returning it to live output.
+    /// </summary>
+    /// <param name="text">The text, with any line endings.</param>
+    /// <param name="target">The pane, or null for the active pane.</param>
+    internal void PasteText(string text, string? target = null)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        string? pane = target ?? ActiveBlock?.Id;
+        Resume(pane);
+        // Each line ends with Enter, as terminals paste. Windows consoles, unlike Unix terminal drivers, do not
+        // take a line feed as Enter, and a Windows line ending would otherwise press it twice.
+        Send(new DesktopCommand("paste", pane, text.ReplaceLineEndings("\r")));
     }
 
     /// <summary>
@@ -358,8 +376,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     {
         ArgumentNullException.ThrowIfNull(block);
         Rect content = _renderer.ContentRect(block, Inset);
-        return new Rect(content.X + (index % block.Width * Font.CellWidth), content.Y + (index / block.Width * Font.CellHeight),
-            Font.CellWidth, Font.CellHeight);
+        return new Rect(content.X + (index % block.Width * Font.CellWidth),
+            content.Y + (index / block.Width * Font.CellHeight), Font.CellWidth, Font.CellHeight);
     }
 
     /// <summary>
@@ -470,8 +488,9 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         {
             DesktopBlockFrame old = previous.Blocks[blockIndex];
             DesktopBlockFrame block = frame.Blocks[blockIndex];
-            if (old.Id != block.Id || old.X != block.X || old.Y != block.Y || old.Width != block.Width || old.Height != block.Height
-                || old.Title != block.Title || old.Active != block.Active || old.ViewVersion != block.ViewVersion
+            if (old.Id != block.Id || old.X != block.X || old.Y != block.Y || old.Width != block.Width
+                || old.Height != block.Height || old.Title != block.Title || old.Active != block.Active
+                || old.ViewVersion != block.ViewVersion
                 || old.SearchQuery != block.SearchQuery || old.Selection != block.Selection
                 || !old.Images.SequenceEqual(block.Images) || old.Cells.Count != block.Cells.Count)
             {
@@ -487,7 +506,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
                 {
                     if (old.Cells[start + column] != block.Cells[start + column])
                     {
-                        _canvas.Invalidate(new Rect(content.X, content.Y + (row * Font.CellHeight), content.Width, Font.CellHeight));
+                        _canvas.Invalidate(new Rect(content.X, content.Y + (row * Font.CellHeight), content.Width,
+                            Font.CellHeight));
                         break;
                     }
                 }
@@ -514,7 +534,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     {
         double width = ActualWidth - (Inset * 2);
         double height = ActualHeight - (Inset * 2);
-        (int Columns, int Rows) grid = (Math.Clamp((int)(width / Font.CellWidth), 4, 500), Math.Clamp((int)(height / Font.CellHeight), 4, 300));
+        (int Columns, int Rows) grid = (Math.Clamp((int)(width / Font.CellWidth), 4, 500),
+            Math.Clamp((int)(height / Font.CellHeight), 4, 300));
         if (width <= 0 || height <= 0 || grid == CellGrid)
         {
             return;
@@ -528,7 +549,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     private void RefreshPreferences()
     {
         TerminalFont previous = Font;
-        Font = TerminalFont.Create(CanvasDevice.GetSharedDevice(), PreferencesStore.Current.FontFamily, PreferencesStore.Current.FontSize);
+        Font = TerminalFont.Create(CanvasDevice.GetSharedDevice(), PreferencesStore.Current.FontFamily,
+            PreferencesStore.Current.FontSize);
         _renderer.Font = Font;
         previous.Dispose();
         _canvas.ClearColor = TerminalAppearance.Background;
@@ -613,37 +635,47 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
 
     private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        VirtualKeyModifiers modifiers = Modifiers();
+        bool altGraph = IsDown(VirtualKey.RightMenu) && modifiers.HasFlag(VirtualKeyModifiers.Control);
+        e.Handled = HandleKey(e.Key, modifiers, altGraph);
+    }
+
+    /// <summary>
+    /// Sends a key that produces no text, leaving printable keys to the text input.
+    /// </summary>
+    /// <param name="key">The key.</param>
+    /// <param name="modifiers">The Ctrl, Alt, and Shift state.</param>
+    /// <param name="altGraph">Whether the right Alt key is down as AltGr.</param>
+    /// <returns>Whether the key was consumed.</returns>
+    internal bool HandleKey(VirtualKey key, VirtualKeyModifiers modifiers, bool altGraph)
+    {
         if (_composing)
         {
             // An input method owns Enter, Backspace, and arrows until it commits or cancels.
-            return;
+            return false;
         }
 
-        VirtualKeyModifiers modifiers = Modifiers();
-        bool altGraph = IsDown(VirtualKey.RightMenu) && modifiers.HasFlag(VirtualKeyModifiers.Control);
-        if (e.Key == VirtualKey.Insert && modifiers == VirtualKeyModifiers.Control)
+        if (key == VirtualKey.Insert && modifiers == VirtualKeyModifiers.Control)
         {
             Copy();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == VirtualKey.Insert && modifiers == VirtualKeyModifiers.Shift)
+        if (key == VirtualKey.Insert && modifiers == VirtualKeyModifiers.Shift)
         {
             Paste();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (TerminalKeys.Name(e.Key, modifiers, altGraph) is not { } name)
+        if (TerminalKeys.Name(key, modifiers, altGraph) is not { } name)
         {
-            return;
+            return false;
         }
 
         ReturnToLive();
         UpdateBlink(reset: true);
         Send(new DesktopCommand("key", ActiveBlock?.Id, name));
-        e.Handled = true;
+        return true;
     }
 
     private void OnInputTextChanged(object sender, TextChangedEventArgs e)
@@ -657,7 +689,6 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         ClearInputText();
         if (_discardComposition)
         {
-            _discardComposition = false;
             return;
         }
 
@@ -666,7 +697,10 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         Send(new DesktopCommand("text", ActiveBlock?.Id, text));
     }
 
-    private void BeginComposition()
+    /// <summary>
+    /// Starts an input method composition, holding its text until it commits.
+    /// </summary>
+    internal void BeginComposition()
     {
         _composing = true;
         _discardComposition = false;
@@ -676,13 +710,25 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         UpdateBlink(reset: true);
     }
 
-    private void EndComposition()
+    /// <summary>
+    /// Ends a composition and sends its committed text once, unless a pane change cancelled it.
+    /// </summary>
+    internal void EndComposition()
     {
         _composing = false;
         _compositionBlock = null;
         _input.Opacity = 0;
         _input.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         UpdateBlink(reset: true);
+        if (_discardComposition)
+        {
+            // An input method may report cancelled text just before or after it ends the composition, so
+            // text is discarded until input already queued has been handled, whether or not any arrives.
+            ClearInputText();
+            _ = DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => _discardComposition = false);
+            return;
+        }
+
         OnInputTextChanged(_input, null!);
     }
 
@@ -739,61 +785,81 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         PointerPoint current = e.GetCurrentPoint(this);
-        Point point = current.Position;
         PointerPointProperties properties = current.Properties;
-        VirtualKeyModifiers modifiers = e.KeyModifiers;
-        FocusTerminal();
+        int button = properties.IsLeftButtonPressed ? 1
+            : properties.IsMiddleButtonPressed ? 2
+            : properties.IsRightButtonPressed ? 3
+            : 0;
         e.Handled = true;
-        if (properties.IsRightButtonPressed || properties.IsMiddleButtonPressed)
+        if (PointerDown(current.Position, button, e.KeyModifiers))
         {
-            int button = properties.IsRightButtonPressed ? 3 : 2;
+            _ = CapturePointer(e.Pointer);
+        }
+    }
+
+    /// <summary>
+    /// Starts a selection, pane resize, link activation, context menu, or reported mouse press.
+    /// </summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="button">The button: 1 left, 2 middle, or 3 right.</param>
+    /// <param name="modifiers">The Ctrl, Alt, and Shift state.</param>
+    /// <returns>Whether the gesture continues and needs the pointer captured.</returns>
+    internal bool PointerDown(Point point, int button, VirtualKeyModifiers modifiers)
+    {
+        FocusTerminal();
+        if (button is 2 or 3)
+        {
             if (BlockAt(point) is not { } target)
             {
-                return;
+                return false;
             }
 
             if (target.MouseTracking && !modifiers.HasFlag(VirtualKeyModifiers.Shift))
             {
                 _pointerBlock = target.Id;
                 _pointerButton = button;
-                _ = CapturePointer(e.Pointer);
                 SendMouse(point, target, "down", button, modifiers);
+                return true;
             }
-            else if (button == 3)
+
+            if (button == 3)
             {
                 ShowContextMenu(target, point);
             }
 
-            return;
+            return false;
         }
 
-        if (!properties.IsLeftButtonPressed)
+        if (button != 1)
         {
-            return;
+            return false;
         }
 
         long now = Environment.TickCount64;
-        _clicks = now - _lastClick <= 500 && Math.Abs(point.X - _lastClickPoint.X) < 4 && Math.Abs(point.Y - _lastClickPoint.Y) < 4 ? _clicks + 1 : 1;
+        _clicks = now - _lastClick <= 500 && Math.Abs(point.X - _lastClickPoint.X) < 4
+            && Math.Abs(point.Y - _lastClickPoint.Y) < 4
+            ? _clicks + 1
+            : 1;
         _lastClick = now;
         _lastClickPoint = point;
-        _ = CapturePointer(e.Pointer);
         ClearSelection();
         _dragged = false;
         if (ResizeEdge(point) is { } edge)
         {
             _resizing = (edge.Block, edge.Edge, point, 0);
-            return;
+            return true;
         }
 
-        if (Frame?.Blocks.FirstOrDefault(item => item.ViewVersion != 0 && Contains(_renderer.ResumeRect(_renderer.ContentRect(item, Inset)), point)) is { } inspecting)
+        if (Frame?.Blocks.FirstOrDefault(item => item.ViewVersion != 0
+            && Contains(_renderer.ResumeRect(_renderer.ContentRect(item, Inset)), point)) is { } inspecting)
         {
             Resume(inspecting.Id);
-            return;
+            return true;
         }
 
         if (BlockAt(point) is not { } block)
         {
-            return;
+            return true;
         }
 
         if (!block.Active)
@@ -805,7 +871,7 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         if (modifiers.HasFlag(VirtualKeyModifiers.Control) && block.Cells[index].Link is { } link)
         {
             OpenLink(link);
-            return;
+            return true;
         }
 
         if (block.MouseTracking && block.ScrollOffset == 0 && !modifiers.HasFlag(VirtualKeyModifiers.Shift))
@@ -813,7 +879,7 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
             _pointerBlock = block.Id;
             _pointerButton = 1;
             SendMouse(point, block, "down", 1, modifiers);
-            return;
+            return true;
         }
 
         // A single press only records an anchor; selection starts after deliberate movement.
@@ -821,22 +887,34 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         if (_clicks == 1)
         {
             _anchor = (block, index, point);
-            return;
+            return true;
         }
 
         BeginSelection(block, index, _clicks >= 3 ? "line" : "word");
         _selectionPoint = point;
+        return true;
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         PointerPoint current = e.GetCurrentPoint(this);
-        Point point = current.Position;
-        VirtualKeyModifiers modifiers = e.KeyModifiers;
+        PointerMove(current.Position, current.Properties.IsLeftButtonPressed, current.IsInContact, e.KeyModifiers);
+    }
+
+    /// <summary>
+    /// Continues a drag or reports hover motion to an application that tracks the mouse.
+    /// </summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="leftButton">Whether the left button is down.</param>
+    /// <param name="contact">Whether any button, pen, or touch is in contact.</param>
+    /// <param name="modifiers">The Ctrl, Alt, and Shift state.</param>
+    internal void PointerMove(Point point, bool leftButton, bool contact, VirtualKeyModifiers modifiers)
+    {
         if (_resizing is { } drag)
         {
             bool right = drag.Edge == "right";
-            int cells = (int)((right ? point.X - drag.Origin.X : point.Y - drag.Origin.Y) / (right ? Font.CellWidth : Font.CellHeight));
+            int cells = (int)((right ? point.X - drag.Origin.X : point.Y - drag.Origin.Y)
+                / (right ? Font.CellWidth : Font.CellHeight));
             if (cells != drag.Sent)
             {
                 Send(new DesktopCommand("resizePane", drag.Block, drag.Edge, X: cells - drag.Sent));
@@ -846,22 +924,26 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
             return;
         }
 
-        if (_pointerBlock is not null && Frame?.Blocks.FirstOrDefault(block => block.Id == _pointerBlock) is { } tracked)
+        if (_pointerBlock is not null
+            && Frame?.Blocks.FirstOrDefault(block => block.Id == _pointerBlock) is { } tracked)
         {
             SendMouse(point, tracked, "drag", _pointerButton, modifiers);
             return;
         }
 
-        if (current.Properties.IsLeftButtonPressed && (_anchor is not null || _selectionBlock is not null))
+        if (leftButton && (_anchor is not null || _selectionBlock is not null))
         {
             ExtendSelectionGesture(point);
             return;
         }
 
         ProtectedCursor = ResizeEdge(point) is { } edge
-            ? InputSystemCursor.Create(edge.Edge == "right" ? InputSystemCursorShape.SizeWestEast : InputSystemCursorShape.SizeNorthSouth)
+            ? InputSystemCursor.Create(edge.Edge == "right"
+                ? InputSystemCursorShape.SizeWestEast
+                : InputSystemCursorShape.SizeNorthSouth)
             : InputSystemCursor.Create(InputSystemCursorShape.IBeam);
-        if (BlockAt(point) is { MouseTracking: true } hovered && !modifiers.HasFlag(VirtualKeyModifiers.Shift) && !current.IsInContact)
+        if (BlockAt(point) is { MouseTracking: true } hovered && !modifiers.HasFlag(VirtualKeyModifiers.Shift)
+            && !contact)
         {
             SendMouse(point, hovered, "move", 0, modifiers);
         }
@@ -869,16 +951,26 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        Point point = e.GetCurrentPoint(this).Position;
+        PointerUp(e.GetCurrentPoint(this).Position, e.KeyModifiers);
+        ReleasePointerCapture(e.Pointer);
+    }
+
+    /// <summary>
+    /// Ends a gesture; a click without deliberate movement clears any selection.
+    /// </summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="modifiers">The Ctrl, Alt, and Shift state.</param>
+    internal void PointerUp(Point point, VirtualKeyModifiers modifiers)
+    {
         _resizing = null;
         EndGesture();
-        if (_pointerBlock is not null && Frame?.Blocks.FirstOrDefault(block => block.Id == _pointerBlock) is { } tracked)
+        if (_pointerBlock is not null
+            && Frame?.Blocks.FirstOrDefault(block => block.Id == _pointerBlock) is { } tracked)
         {
-            SendMouse(point, tracked, "up", _pointerButton, e.KeyModifiers);
+            SendMouse(point, tracked, "up", _pointerButton, modifiers);
         }
 
         _pointerBlock = null;
-        ReleasePointerCapture(e.Pointer);
         if (!_dragged && _clicks <= 1)
         {
             ClearSelection();
@@ -899,7 +991,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
             _anchor = null;
         }
 
-        if (_selectionBlock is null || Frame?.Blocks.FirstOrDefault(block => block.Id == _selectionBlock) is not { } block)
+        if (_selectionBlock is null
+            || Frame?.Blocks.FirstOrDefault(block => block.Id == _selectionBlock) is not { } block)
         {
             return;
         }
@@ -938,7 +1031,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     private void ScrollSelection()
     {
         if (_selectionBlock is null || _selectionPoint is not { } point
-            || Frame?.Blocks.FirstOrDefault(block => block.Id == _selectionBlock) is not { AlternateScreen: false } block)
+            || Frame?.Blocks.FirstOrDefault(block => block.Id == _selectionBlock)
+                is not { AlternateScreen: false } block)
         {
             EndGesture();
             return;
@@ -946,7 +1040,9 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
 
         Rect content = _renderer.ContentRect(block, Inset);
         double distance = point.Y < content.Y ? content.Y - point.Y : content.Bottom - point.Y;
-        int amount = distance > 0 ? Math.Clamp((int)(distance / Font.CellHeight), 1, 4) : Math.Clamp((int)(distance / Font.CellHeight), -4, -1);
+        int amount = distance > 0
+            ? Math.Clamp((int)(distance / Font.CellHeight), 1, 4)
+            : Math.Clamp((int)(distance / Font.CellHeight), -4, -1);
         if ((amount > 0 && block.ScrollOffset < block.HistoryLines) || (amount < 0 && block.ScrollOffset > 0))
         {
             Send(new DesktopCommand("scroll", block.Id, Y: amount));
@@ -968,7 +1064,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         foreach (DesktopBlockFrame left in blocks)
         {
             Rect first = _renderer.ContentRect(left, Inset);
-            foreach (Rect second in blocks.Where(block => block.Id != left.Id).Select(block => _renderer.ContentRect(block, Inset)))
+            foreach (Rect second in blocks.Where(block => block.Id != left.Id)
+                .Select(block => _renderer.ContentRect(block, Inset)))
             {
                 if (Math.Abs(first.Right - second.X) <= Font.CellWidth * 2.5 && first.X < second.X
                     && Math.Abs(point.X - ((first.Right + second.X) / 2)) < 5
@@ -992,38 +1089,55 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     /// <summary>
     /// Converts surface points to block cells; the core encodes the negotiated mouse protocol.
     /// </summary>
-    private void SendMouse(Point point, DesktopBlockFrame block, string action, int button, VirtualKeyModifiers modifiers)
+    private void SendMouse(Point point, DesktopBlockFrame block, string action, int button,
+        VirtualKeyModifiers modifiers)
     {
         int index = CellIndex(block, point);
-        int encoded = (modifiers.HasFlag(VirtualKeyModifiers.Shift) ? 1 : 0) | (modifiers.HasFlag(VirtualKeyModifiers.Menu) ? 2 : 0)
+        int encoded = (modifiers.HasFlag(VirtualKeyModifiers.Shift) ? 1 : 0)
+            | (modifiers.HasFlag(VirtualKeyModifiers.Menu) ? 2 : 0)
             | (modifiers.HasFlag(VirtualKeyModifiers.Control) ? 4 : 0);
-        Send(new DesktopCommand("mouse", block.Id, action, X: index % block.Width, Y: index / block.Width, Button: button, Modifiers: encoded));
+        Send(new DesktopCommand("mouse", block.Id, action, X: index % block.Width, Y: index / block.Width,
+            Button: button, Modifiers: encoded));
     }
 
     private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
         PointerPoint current = e.GetCurrentPoint(this);
-        if (current.Properties.IsHorizontalMouseWheel || BlockAt(current.Position) is not { } block)
+        if (!current.Properties.IsHorizontalMouseWheel)
         {
-            return;
+            e.Handled = Wheel(current.Position, current.Properties.MouseWheelDelta, e.KeyModifiers);
+        }
+    }
+
+    /// <summary>
+    /// Scrolls history, or reports the wheel to an application that tracks the mouse or uses the alternate screen.
+    /// </summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="delta">The vertical wheel delta; one detent is 120 and positive scrolls toward history.</param>
+    /// <param name="modifiers">The Ctrl, Alt, and Shift state.</param>
+    /// <returns>Whether a pane was under the point.</returns>
+    internal bool Wheel(Point point, int delta, VirtualKeyModifiers modifiers)
+    {
+        if (BlockAt(point) is not { } block)
+        {
+            return false;
         }
 
-        e.Handled = true;
         // One detent is 120 units and scrolls three rows; precision touchpads report smaller steps.
-        double accumulated = _wheelRemainders.GetValueOrDefault(block.Id) + (current.Properties.MouseWheelDelta / 40.0);
+        double accumulated = _wheelRemainders.GetValueOrDefault(block.Id) + (delta / 40.0);
         double whole = Math.Truncate(accumulated);
         _wheelRemainders[block.Id] = accumulated - whole;
         int lines = (int)Math.Clamp(whole, -120, 120);
         if (lines == 0)
         {
-            return;
+            return true;
         }
 
-        if (block.MouseTracking && block.ScrollOffset == 0 && !e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
+        if (block.MouseTracking && block.ScrollOffset == 0 && !modifiers.HasFlag(VirtualKeyModifiers.Shift))
         {
             for (int step = 0; step < Math.Abs(lines); step++)
             {
-                SendMouse(current.Position, block, "down", lines > 0 ? 4 : 5, e.KeyModifiers);
+                SendMouse(point, block, "down", lines > 0 ? 4 : 5, modifiers);
             }
         }
         else if (block.AlternateScreen)
@@ -1037,6 +1151,8 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         {
             Send(new DesktopCommand("scroll", block.Id, Y: lines));
         }
+
+        return true;
     }
 
     private void ShowContextMenu(DesktopBlockFrame block, Point point)
@@ -1059,8 +1175,10 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
         Add("Paste", () => Paste(id), shortcut: WindowsShortcuts.Display("paste"));
         Add("Find…", () => ActionRequested?.Invoke("find", id), shortcut: WindowsShortcuts.Display("find"));
         menu.Items.Add(new MenuFlyoutSeparator());
-        Add("Split Right", () => ActionRequested?.Invoke("splitRight", id), shortcut: WindowsShortcuts.Display("splitRight"));
-        Add("Split Below", () => ActionRequested?.Invoke("splitBelow", id), shortcut: WindowsShortcuts.Display("splitBelow"));
+        Add("Split Right", () => ActionRequested?.Invoke("splitRight", id),
+            shortcut: WindowsShortcuts.Display("splitRight"));
+        Add("Split Below", () => ActionRequested?.Invoke("splitBelow", id),
+            shortcut: WindowsShortcuts.Display("splitBelow"));
         Add("Rename Pane…", () => ActionRequested?.Invoke("renameBlock", id));
         Add("Close Pane…", () => ActionRequested?.Invoke("closeBlock", id));
         menu.ShowAt(this, new FlyoutShowOptions { Position = point });

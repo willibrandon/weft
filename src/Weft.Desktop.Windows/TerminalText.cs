@@ -127,4 +127,20 @@ internal sealed class TerminalText
 
         return Math.Max(0, Cells.Count - 1);
     }
+
+    /// <summary>
+    /// Gets the last cell that draws the character at an offset, which is a wide character's continuation.
+    /// </summary>
+    /// <param name="offset">The UTF-16 offset.</param>
+    /// <returns>The cell index.</returns>
+    internal int LastCellAt(int offset)
+    {
+        int index = CellAt(offset);
+        while (index + 1 < Cells.Count && (index + 1) % Block.Width != 0 && Block.Cells[index + 1].Text.Length == 0)
+        {
+            index++;
+        }
+
+        return index;
+    }
 }

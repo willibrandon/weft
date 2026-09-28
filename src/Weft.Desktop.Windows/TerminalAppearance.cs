@@ -62,7 +62,8 @@ internal static class TerminalAppearance
     {
         string trimmed = text?.Trim().TrimStart('#') ?? string.Empty;
         int rgb = fallback;
-        if (trimmed.Length == 6 && int.TryParse(trimmed, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int parsed))
+        if (trimmed.Length == 6
+            && int.TryParse(trimmed, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int parsed))
         {
             rgb = parsed;
         }

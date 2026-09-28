@@ -13,5 +13,5 @@ namespace Weft.Desktop.Windows;
 /// <param name="Selection">The selection highlight.</param>
 /// <param name="CursorLit">Whether a blinking cursor is in its visible phase.</param>
 /// <param name="Inset">The margin around the cell grid.</param>
-internal sealed record TerminalScene(DesktopFrame Frame, Color Background, Color Foreground, Color Cursor, Color Selection,
-    bool CursorLit, float Inset);
+internal sealed record TerminalScene(DesktopFrame Frame, Color Background, Color Foreground, Color Cursor,
+    Color Selection, bool CursorLit, float Inset);

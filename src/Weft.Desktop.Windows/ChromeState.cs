@@ -15,9 +15,9 @@ namespace Weft.Desktop.Windows;
 /// <param name="Sessions">The server's sessions.</param>
 /// <param name="Blocks">The visible panes.</param>
 /// <param name="Commands">The shared action catalog.</param>
-internal sealed record ChromeState(bool Connected, string Title, string? Error, string? ActiveSession, string? ActiveTab,
-    string? ActiveBlock, IReadOnlyList<ChromeItem> Tabs, IReadOnlyList<ChromeItem> Sessions, IReadOnlyList<ChromeItem> Blocks,
-    IReadOnlyList<DesktopAction> Commands)
+internal sealed record ChromeState(bool Connected, string Title, string? Error, string? ActiveSession,
+    string? ActiveTab, string? ActiveBlock, IReadOnlyList<ChromeItem> Tabs, IReadOnlyList<ChromeItem> Sessions,
+    IReadOnlyList<ChromeItem> Blocks, IReadOnlyList<DesktopAction> Commands)
 {
     /// <summary>
     /// Gets the state shown before the first frame.
@@ -37,7 +37,8 @@ internal sealed record ChromeState(bool Connected, string Title, string? Error, 
             frame.Blocks.FirstOrDefault(block => block.Active)?.Id,
             frame.Tabs.Select(tab => new ChromeItem(tab.Id, tab.Name)).ToArray(),
             frame.Sessions.Select(session => new ChromeItem(session.Id, session.Name)).ToArray(),
-            frame.Blocks.Select(block => new ChromeItem(block.Id, block.Title, block.SearchQuery, block.SearchMatches)).ToArray(),
+            frame.Blocks.Select(block => new ChromeItem(block.Id, block.Title, block.SearchQuery, block.SearchMatches))
+                .ToArray(),
             frame.Commands);
     }
 
@@ -63,13 +64,14 @@ internal sealed record ChromeState(bool Connected, string Title, string? Error, 
     {
         return other is not null && Connected == other.Connected && Title == other.Title && Error == other.Error
             && ActiveSession == other.ActiveSession && ActiveTab == other.ActiveTab && ActiveBlock == other.ActiveBlock
-            && Tabs.SequenceEqual(other.Tabs) && Sessions.SequenceEqual(other.Sessions) && Blocks.SequenceEqual(other.Blocks)
-            && Commands.SequenceEqual(other.Commands);
+            && Tabs.SequenceEqual(other.Tabs) && Sessions.SequenceEqual(other.Sessions)
+            && Blocks.SequenceEqual(other.Blocks) && Commands.SequenceEqual(other.Commands);
     }
 
     /// <inheritdoc />
     public override int GetHashCode()
     {
-        return HashCode.Combine(Connected, Title, Error, ActiveSession, ActiveTab, ActiveBlock, Tabs.Count, Sessions.Count);
+        return HashCode.Combine(Connected, Title, Error, ActiveSession, ActiveTab, ActiveBlock, Tabs.Count,
+            Sessions.Count);
     }
 }

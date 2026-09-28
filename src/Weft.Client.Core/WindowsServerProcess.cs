@@ -37,17 +37,18 @@ internal static class WindowsServerProcess
         nint commandLine = Marshal.StringToHGlobalUni(line.ToString());
         try
         {
-            var startup = new StartupInformation(Marshal.SizeOf<StartupInformation>());
             const int Flags = NativeMethods.CreateNoWindow | NativeMethods.CreateNewProcessGroup;
-            if (!NativeMethods.CreateProcess(executable, commandLine, 0, 0, false, Flags | NativeMethods.CreateBreakawayFromJob, 0, null, startup, out ProcessInformation created))
+            int error = Create(executable, commandLine, Flags | NativeMethods.CreateBreakawayFromJob,
+                out ProcessInformation created);
+            // A job that forbids breakaway still lets the server outlive its caller unless it kills on close.
+            if (error == NativeMethods.ErrorAccessDenied)
             {
-                int error = Marshal.GetLastPInvokeError();
-                // A job that forbids breakaway still lets the server outlive its caller unless it kills on close.
-                if (error != NativeMethods.ErrorAccessDenied
-                    || !NativeMethods.CreateProcess(executable, commandLine, 0, 0, false, Flags, 0, null, startup, out created))
-                {
-                    throw new Win32Exception(error == NativeMethods.ErrorAccessDenied ? Marshal.GetLastPInvokeError() : error);
-                }
+                error = Create(executable, commandLine, Flags, out created);
+            }
+
+            if (error != 0)
+            {
+                throw new Win32Exception(error);
             }
 
             _ = NativeMethods.CloseHandle(created.Thread);
@@ -57,6 +58,64 @@ internal static class WindowsServerProcess
         finally
         {
             Marshal.FreeHGlobal(commandLine);
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the calling process runs from an installed package.
+    /// </summary>
+    internal static bool IsPackaged
+    {
+        get
+        {
+            int length = 0;
+            return NativeMethods.GetCurrentPackageFullName(ref length, 0) != NativeMethods.AppModelErrorNoPackage;
+        }
+    }
+
+    private static int Create(string executable, nint commandLine, int flags, out ProcessInformation created)
+    {
+        if (!IsPackaged)
+        {
+            var startup = new StartupInformation(Marshal.SizeOf<StartupInformation>());
+            return NativeMethods.CreateProcess(executable, commandLine, 0, 0, false, flags, 0, null, startup, out created)
+                ? 0
+                : Marshal.GetLastPInvokeError();
+        }
+
+        // Windows ends a package's processes when it updates or removes the package. The server and the shells it
+        // starts leave the package instead, so sessions keep running through an upgrade or uninstall.
+        nint size = 0;
+        _ = NativeMethods.InitializeProcThreadAttributeList(0, 1, 0, ref size);
+        nint attributes = Marshal.AllocHGlobal(size);
+        nint policy = Marshal.AllocHGlobal(sizeof(int));
+        bool initialized = false;
+        try
+        {
+            Marshal.WriteInt32(policy, NativeMethods.DesktopAppBreakawayEnableProcessTree);
+            initialized = NativeMethods.InitializeProcThreadAttributeList(attributes, 1, 0, ref size);
+            if (!initialized || !NativeMethods.UpdateProcThreadAttribute(attributes, 0,
+                NativeMethods.DesktopAppPolicyAttribute, policy, sizeof(int), 0, 0))
+            {
+                created = default;
+                return Marshal.GetLastPInvokeError();
+            }
+
+            var startup = new StartupInformationEx(attributes);
+            return NativeMethods.CreateProcessExtended(executable, commandLine, 0, 0, false,
+                flags | NativeMethods.ExtendedStartupInfoPresent, 0, null, startup, out created)
+                ? 0
+                : Marshal.GetLastPInvokeError();
+        }
+        finally
+        {
+            if (initialized)
+            {
+                NativeMethods.DeleteProcThreadAttributeList(attributes);
+            }
+
+            Marshal.FreeHGlobal(policy);
+            Marshal.FreeHGlobal(attributes);
         }
     }
 

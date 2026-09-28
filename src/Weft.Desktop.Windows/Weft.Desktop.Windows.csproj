@@ -27,10 +27,15 @@
     <PackageReference Include="Hex1b" ExcludeAssets="native" />
     <PackageReference Include="Microsoft.Graphics.Win2D" />
     <PackageReference Include="Microsoft.UI.Reactor" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- Only the WinUI and windowing components ship; the rest of the Windows App SDK is unused. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Weft.Client.Core/Weft.Client.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Weft.Desktop.Windows.Tests" />
   </ItemGroup>
   <!-- Development builds render the icon beside the app, where windows and the taskbar pick it up. -->
   <Target Name="WeftRenderIcon" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'"

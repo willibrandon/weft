@@ -54,6 +54,53 @@ jobs:
       - name: Enforce zero CodeQL findings
         run: dotnet run --file scripts/Verify-CodeQl.cs -- artifacts/codeql-results
 
+  analyze-windows:
+    name: Analyze Windows C#
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Report SDK
+        run: dotnet --info
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          build-mode: manual
+          config-file: ./.github/codeql-config.yml
+          languages: csharp
+          queries: security-and-quality
+
+      - name: Build Windows app and tests for analysis
+        # A real build resolves the WinUI, Reactor, and Win2D types the Linux job can only approximate.
+        run: dotnet build Weft.Windows.slnx
+        env:
+          CI: true
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:csharp-windows
+          output: artifacts/codeql-results
+          wait-for-processing: false
+
+      - name: Enforce zero CodeQL findings
+        run: dotnet run --file scripts/Verify-CodeQl.cs -- artifacts/codeql-results
+
   analyze-swift:
     name: Analyze Swift
     runs-on: macos-latest

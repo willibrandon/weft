@@ -43,7 +43,8 @@ internal sealed partial class TerminalTextRange : ITextRangeProvider
     }
 
     /// <inheritdoc />
-    public int CompareEndpoints(TextPatternRangeEndpoint endpoint, ITextRangeProvider textRangeProvider, TextPatternRangeEndpoint targetEndpoint)
+    public int CompareEndpoints(TextPatternRangeEndpoint endpoint, ITextRangeProvider textRangeProvider,
+        TextPatternRangeEndpoint targetEndpoint)
     {
         var target = (TerminalTextRange)textRangeProvider;
         int mine = endpoint == TextPatternRangeEndpoint.Start ? _start : _end;
@@ -140,7 +141,8 @@ internal sealed partial class TerminalTextRange : ITextRangeProvider
     }
 
     /// <inheritdoc />
-    public void MoveEndpointByRange(TextPatternRangeEndpoint endpoint, ITextRangeProvider textRangeProvider, TextPatternRangeEndpoint targetEndpoint)
+    public void MoveEndpointByRange(TextPatternRangeEndpoint endpoint, ITextRangeProvider textRangeProvider,
+        TextPatternRangeEndpoint targetEndpoint)
     {
         var target = (TerminalTextRange)textRangeProvider;
         int offset = targetEndpoint == TextPatternRangeEndpoint.Start ? target._start : target._end;

@@ -15,30 +15,32 @@ internal static class WindowsShortcuts
     /// <summary>
     /// Gets the default catalog shortcuts by action identifier.
     /// </summary>
-    internal static IReadOnlyDictionary<string, string> Defaults { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["commands"] = "ctrl+shift+p",
-        ["find"] = "ctrl+shift+f",
-        ["newTab"] = "ctrl+shift+t",
-        ["splitRight"] = "alt+shift+plus",
-        ["splitBelow"] = "alt+shift+minus",
-        ["nextTab"] = "ctrl+tab",
-        ["previousTab"] = "ctrl+shift+tab"
-    };
+    internal static IReadOnlyDictionary<string, string> Defaults { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["commands"] = "ctrl+shift+p",
+            ["find"] = "ctrl+shift+f",
+            ["newTab"] = "ctrl+shift+t",
+            ["splitRight"] = "alt+shift+plus",
+            ["splitBelow"] = "alt+shift+minus",
+            ["nextTab"] = "ctrl+tab",
+            ["previousTab"] = "ctrl+shift+tab"
+        };
 
     /// <summary>
     /// Gets the app commands whose shortcuts are fixed and cannot be assigned to catalog actions.
     /// </summary>
-    internal static IReadOnlyDictionary<string, string> Fixed { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["newWindow"] = "ctrl+shift+n",
-        ["settings"] = "ctrl+comma",
-        ["copy"] = "ctrl+shift+c",
-        ["paste"] = "ctrl+shift+v",
-        ["selectAll"] = "ctrl+shift+a",
-        ["largerText"] = "ctrl+plus",
-        ["smallerText"] = "ctrl+minus"
-    };
+    internal static IReadOnlyDictionary<string, string> Fixed { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["newWindow"] = "ctrl+shift+n",
+            ["settings"] = "ctrl+comma",
+            ["copy"] = "ctrl+shift+c",
+            ["paste"] = "ctrl+shift+v",
+            ["selectAll"] = "ctrl+shift+a",
+            ["largerText"] = "ctrl+plus",
+            ["smallerText"] = "ctrl+minus"
+        };
 
     /// <summary>
     /// Gets the effective shortcut text for an action, which is empty when it has none.
@@ -99,7 +101,8 @@ internal static class WindowsShortcuts
                 return "That shortcut belongs to a standard Weft command.";
             }
 
-            if (actions.FirstOrDefault(action => action.Id != id && ShortcutChord.Parse(Value(action.Id)) == value) is { } conflict)
+            if (actions.FirstOrDefault(action => action.Id != id
+                && ShortcutChord.Parse(Value(action.Id)) == value) is { } conflict)
             {
                 return "That shortcut is already used by " + conflict.Label.TrimEnd('…') + ".";
             }
@@ -108,7 +111,10 @@ internal static class WindowsShortcuts
         string stored = chord?.ToString() ?? string.Empty;
         PreferencesStore.Update(preferences =>
         {
-            var shortcuts = new Dictionary<string, string>(preferences.Shortcuts, StringComparer.Ordinal) { [id] = stored };
+            var shortcuts = new Dictionary<string, string>(preferences.Shortcuts, StringComparer.Ordinal)
+            {
+                [id] = stored
+            };
             return preferences with { Shortcuts = shortcuts };
         });
         return null;

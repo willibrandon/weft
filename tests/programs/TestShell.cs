@@ -29,6 +29,8 @@ internal static partial class TestShell
     private const uint VirtualTerminalProcessing = 0x0004;
     private const uint VirtualTerminalInput = 0x0200;
     private static readonly List<byte> s_pending = [];
+    private static readonly Encoder s_encoder = Encoding.UTF8.GetEncoder();
+    private static bool s_consoleInput;
     private static Stream s_input = Stream.Null;
     private static Stream s_output = Stream.Null;
     private static uint s_inputMode;
@@ -311,8 +313,8 @@ internal static partial class TestShell
             return value;
         }
 
-        Span<byte> buffer = stackalloc byte[256];
-        int count = s_input.Read(buffer);
+        Span<byte> buffer = stackalloc byte[512];
+        int count = s_consoleInput ? ReadConsoleBytes(buffer) : s_input.Read(buffer);
         if (count <= 0)
         {
             return -1;
@@ -320,6 +322,28 @@ internal static partial class TestShell
 
         s_pending.AddRange(buffer[1..count]);
         return buffer[0];
+    }
+
+    /// <summary>
+    /// Reads UTF-16 from the console and encodes it here, keeping surrogate pairs split across reads together.
+    /// </summary>
+    /// <remarks>
+    /// A byte read makes the console convert one UTF-16 unit at a time, which turns every character outside
+    /// the Basic Multilingual Plane into two replacement characters. Windows shells read UTF-16 for this reason.
+    /// </remarks>
+    private static unsafe int ReadConsoleBytes(Span<byte> buffer)
+    {
+        Span<char> characters = stackalloc char[128];
+        uint read;
+        fixed (char* pointer = characters)
+        {
+            if (!ReadConsole(GetStdHandle(StandardInput), pointer, (uint)characters.Length, out read, 0) || read == 0)
+            {
+                return 0;
+            }
+        }
+
+        return s_encoder.GetBytes(characters[..(int)read], buffer, flush: false);
     }
 
     private static string? ReadLine()
@@ -396,7 +420,7 @@ internal static partial class TestShell
             _ = SetConsoleMode(output, outputMode | VirtualTerminalProcessing);
         }
 
-        _ = GetConsoleMode(GetStdHandle(StandardInput), out s_inputMode);
+        s_consoleInput = GetConsoleMode(GetStdHandle(StandardInput), out s_inputMode);
         s_input = Console.OpenStandardInput();
         s_output = Console.OpenStandardOutput();
     }
@@ -434,6 +458,11 @@ internal static partial class TestShell
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetConsoleMode(nint handle, out uint mode);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "ReadConsoleW", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ReadConsole(nint handle, char* buffer, uint length, out uint read, nint control);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

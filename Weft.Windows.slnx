@@ -15,4 +15,7 @@
     <Project Path="src/Weft.Server/Weft.Server.csproj" />
     <Project Path="src/Weft.SourceGen/Weft.SourceGen.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Weft.Desktop.Windows.Tests/Weft.Desktop.Windows.Tests.csproj" />
+  </Folder>
 </Solution>

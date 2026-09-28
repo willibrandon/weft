@@ -40,7 +40,8 @@ internal sealed class SettingsView : Component
         IReadOnlyList<DesktopAction> actions = DesktopActions.All;
         DesktopAction selected = actions[Math.Clamp(command, 0, actions.Count - 1)];
         string family = preferences.FontFamily ?? TerminalFont.BundledFamily;
-        int familyIndex = Math.Max(0, families.ToList().FindIndex(name => string.Equals(name, family, StringComparison.OrdinalIgnoreCase)));
+        int familyIndex = Math.Max(0, families.ToList().FindIndex(name =>
+            string.Equals(name, family, StringComparison.OrdinalIgnoreCase)));
         string shortcut = WindowsShortcuts.Display(selected.Id);
 
         void Record(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -90,7 +91,8 @@ internal sealed class SettingsView : Component
                     if (index >= 0 && index < families.Count)
                     {
                         string next = families[index];
-                        PreferencesStore.Update(value => value with { FontFamily = next == TerminalFont.BundledFamily ? null : next });
+                        PreferencesStore.Update(value =>
+                            value with { FontFamily = next == TerminalFont.BundledFamily ? null : next });
                     }
                 })
                 .Header("Terminal font")
@@ -138,7 +140,8 @@ internal sealed class SettingsView : Component
                     WindowsShortcuts.Restore();
                     setMessage("Default shortcuts restored.");
                 })),
-            TextBlock(message).FontSize(12).Opacity(0.8).TextWrapping(TextWrapping.Wrap).AutomationName("Shortcut status"))
+            TextBlock(message).FontSize(12).Opacity(0.8).TextWrapping(TextWrapping.Wrap)
+                .AutomationName("Shortcut status"))
             .Padding(24))
             .RequestedTheme(ElementTheme.Dark)
             .Background(TerminalAppearance.Format(TerminalAppearance.Background));
@@ -146,7 +149,8 @@ internal sealed class SettingsView : Component
 
     private static StackElement ColorRow(string name, Color color, Action<Color> changed)
     {
-        Element swatch = Border(Empty()).Width(44).Height(20).CornerRadius(4).Background(TerminalAppearance.Format(color));
+        Element swatch = Border(Empty()).Width(44).Height(20).CornerRadius(4)
+            .Background(TerminalAppearance.Format(color));
         return HStack(12,
             TextBlock(name).Width(90).VAlign(VerticalAlignment.Center),
             Button(swatch)

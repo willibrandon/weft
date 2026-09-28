@@ -44,8 +44,10 @@ internal static class AppIcon
         foreach (int size in (int[])[16, 24, 32, 48, 256])
         {
             byte[] png = await PngAsync(device, size, size, size).ConfigureAwait(true);
-            await File.WriteAllBytesAsync(Path.Join(directory, $"Square44x44Logo.targetsize-{size}.png"), png).ConfigureAwait(true);
-            await File.WriteAllBytesAsync(Path.Join(directory, $"Square44x44Logo.targetsize-{size}_altform-unplated.png"), png)
+            await File.WriteAllBytesAsync(Path.Join(directory, $"Square44x44Logo.targetsize-{size}.png"), png)
+                .ConfigureAwait(true);
+            await File.WriteAllBytesAsync(
+                Path.Join(directory, $"Square44x44Logo.targetsize-{size}_altform-unplated.png"), png)
                 .ConfigureAwait(true);
         }
 
@@ -62,7 +64,8 @@ internal static class AppIcon
         ];
         foreach ((string name, int width, int height, int mark) in logos)
         {
-            await File.WriteAllBytesAsync(Path.Join(directory, name), await PngAsync(device, width, height, mark).ConfigureAwait(true))
+            await File.WriteAllBytesAsync(Path.Join(directory, name),
+                await PngAsync(device, width, height, mark).ConfigureAwait(true))
                 .ConfigureAwait(true);
         }
     }
@@ -102,7 +105,8 @@ internal static class AppIcon
             LineJoin = CanvasLineJoin.Round
         };
         Stroke(session, [new(294, 512), new(730, 512)], s_thread, 44, style);
-        Stroke(session, [new(276, 334), new(386, 690), new(512, 418), new(638, 690), new(748, 334)], s_ivory, 50, style);
+        Stroke(session, [new(276, 334), new(386, 690), new(512, 418), new(638, 690), new(748, 334)],
+            s_ivory, 50, style);
         Stroke(session, [new(304, 512), new(354, 512)], s_thread, 44, style);
         Stroke(session, [new(670, 512), new(720, 512)], s_thread, 44, style);
         session.Transform = transform;
@@ -113,7 +117,8 @@ internal static class AppIcon
         return Color.FromArgb(alpha, red, green, blue);
     }
 
-    private static void Stroke(CanvasDrawingSession session, Vector2[] points, Color color, float width, CanvasStrokeStyle style)
+    private static void Stroke(CanvasDrawingSession session, Vector2[] points, Color color, float width,
+        CanvasStrokeStyle style)
     {
         using var builder = new CanvasPathBuilder(session);
         builder.BeginFigure(points[0]);
