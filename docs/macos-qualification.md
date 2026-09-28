@@ -24,7 +24,8 @@ installed-app measurements distinguish local results from CI hardware coverage.
 The ARM64 installed-DMG suite passes, including the 16-tab workload, resource
 limits, native rendering and input, crash recovery, upgrade, removal, and reinstall.
 Its loaded input-to-paint p95 was 50.8 ms and tab-switch p95 was 81.3 ms. Native
-Intel execution and Swift CodeQL await GitHub validation. Interactive checks below
+Intel qualification awaits GitHub validation. Swift CodeQL passes with zero findings.
+Interactive checks below
 remain open; only one physical display was connected and VoiceOver was off.
 
 On the Apple M4 Pro, the preceding balanced-optimization run measured 49.4 Sixel
@@ -87,8 +88,8 @@ and tab switch p95 75.4 ms.
 Reports also include host/target architecture details and the private server log
 when a test fails.
 The external rbirds workload is optional local qualification; CI does not download
-or build that reference repository. Swift CodeQL still needs its first successful
-GitHub run.
+or build that reference repository. Swift CodeQL's first successful GitHub scan
+is recorded in [PR 18](https://github.com/willibrandon/weft/pull/18).
 
 ## Hands-on checks still open
 

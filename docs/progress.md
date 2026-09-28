@@ -148,6 +148,16 @@ p95 11.1 ms, loaded input p95 46.8 ms, and tab switch p95 75.4 ms.
 Swift extraction logs identified an incompatible precompiled C bridge header.
 Analysis now parses that header directly; the compiler and security checks remain
 unchanged.
+The subsequent ARM64 run exposed the same wrapped login-prompt assumption in the
+idle resource sample. Both input measurements now establish their prompt after
+the attached window's resize before recording cursor movement.
+Intel's producer remained slow after removing per-frame `awk` launches; per-frame
+`sleep` launches remained. The paced stream now comes from one native test process
+with the same 120 frames, 30 lines per frame, and 20 ms interval. It reports its
+own elapsed time, and completion and performance limits remain unchanged.
+The corrected native suite passes locally with idle input p95 10.9 ms, loaded
+input p95 46.2 ms, and tab switch p95 126.2 ms. Swift CodeQL completed its first
+successful GitHub scan with zero findings after the header fix.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.

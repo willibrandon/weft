@@ -8,6 +8,15 @@ enum SmokeFailure: Error {
 @MainActor
 struct MacSmoke {
     static func main() {
+        if CommandLine.arguments.dropFirst().first == "--produce-output" {
+            do {
+                try produceOutput()
+                exit(0)
+            } catch {
+                FileHandle.standardError.write(Data(("Output workload failed: \(error)\n").utf8))
+                exit(1)
+            }
+        }
         if CommandLine.arguments.dropFirst().first == "--image-cache" {
             do {
                 try ImageCacheQualification.run(Array(CommandLine.arguments.dropFirst(2)))

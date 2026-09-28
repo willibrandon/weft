@@ -18,7 +18,16 @@ extension MacSmoke {
             }
             times.append(milliseconds(start.duration(to: .now)))
             if iteration == 0 {
-                let block = frame.blocks.first(where: { $0.active }) ?? frame.blocks[0]
+                let target = frame.blocks.first(where: { $0.active }) ?? frame.blocks[0]
+                // Login prompts can wrap when the attached window resizes an existing split.
+                // Establish the cursor after that resize, independent of the host's prompt.
+                controller.terminal.send?(DesktopCommand(operation: "text", target: target.id,
+                    text: "PS1='$ '; printf '\\033[2J\\033[H'\r"))
+                let ready = try await wait(controller) {
+                    $0.blocks.first(where: { $0.id == target.id })?.cells.map(\.text).joined()
+                        .trimmingCharacters(in: .whitespacesAndNewlines) == "$"
+                }
+                let block = ready.blocks.first(where: { $0.id == target.id })!
                 // Typing starts after the prompt is painted, as it does for a person.
                 // Keep cold window drawing separate from the steady input distribution.
                 guard controller.window?.isVisible == true else { throw SmokeFailure.failed("The measured terminal window is not visible") }

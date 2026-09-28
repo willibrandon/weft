@@ -306,6 +306,8 @@ tracer, then compiles every Swift source with the app's build arguments. Analysi
 reads the C bridge header directly because precompiled headers cannot be shared
 between Xcode and the extractor's compiler. Native performance checks require
 visible accessory windows and record first-window painting separately from typing.
+The paced output test uses one producer process with timed writes, avoiding a
+new shell child for every frame.
 The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching
