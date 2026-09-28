@@ -302,7 +302,10 @@ and readable narrow layouts, alongside measured latency and resource use.
 Mac CI selects the newest installed numbered Xcode release for both native tests
 and Swift analysis. CI preserves native timing samples and compiler extraction
 logs, including failed runs. Analysis prepares native dependencies before enabling the
-tracer, then compiles every Swift source with the same arguments as the app build.
+tracer, then compiles every Swift source with the app's build arguments. Analysis
+reads the C bridge header directly because precompiled headers cannot be shared
+between Xcode and the extractor's compiler. Native performance checks require
+visible accessory windows and record first-window painting separately from typing.
 The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching

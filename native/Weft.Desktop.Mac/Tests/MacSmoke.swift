@@ -19,7 +19,7 @@ struct MacSmoke {
         }
         let application = NSApplication.shared
         let recording = CommandLine.arguments.contains("--record-output")
-        application.setActivationPolicy(recording || CommandLine.arguments.contains("--accessibility-window") ? .regular : .prohibited)
+        application.setActivationPolicy(recording || CommandLine.arguments.contains("--accessibility-window") ? .regular : .accessory)
         Task {
             do {
                 if CommandLine.arguments.contains("--graphics-app") {

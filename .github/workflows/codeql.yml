@@ -94,7 +94,8 @@ jobs:
           queries: security-and-quality
 
       - name: Build macOS app for analysis
-        run: xcrun swiftc @artifacts/macos/swift-analysis.rsp
+        # The extractor must parse the C bridge itself, not consume Xcode's compiler-specific PCH.
+        run: xcrun swiftc -disable-bridging-pch @artifacts/macos/swift-analysis.rsp
         timeout-minutes: 15
 
       - name: Save Swift extraction logs

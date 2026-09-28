@@ -135,6 +135,19 @@ The next ARM64 run reduced input p50 from 75.5 to 32.6 ms, but the largest of it
 records cold painting separately, and saves 100 individual input samples. The p95
 limit remains 100 ms; this separates startup work and gives the percentile more
 than one observation in its upper tail.
+ARM64 and Intel CI then passed input p95 at 41.9 and 21.7 ms. Their paced output
+producers were still running when the completion wait expired. The producer now uses the
+shell's built-in `printf` instead of launching `awk` for each frame, retaining
+120 frames, 30 lines per frame, and the same 20 ms pacing.
+The native harness now uses accessory activation instead of background-only
+activation, and resource measurements require a visible window. First-window paint
+timing includes attachment and initial drawing; earlier measurements did not
+verify window visibility and must not be read as compositor latency.
+The local suite passes with visible windows: initial paint 68.9 ms, idle input
+p95 11.1 ms, loaded input p95 46.8 ms, and tab switch p95 75.4 ms.
+Swift extraction logs identified an incompatible precompiled C bridge header.
+Analysis now parses that header directly; the compiler and security checks remain
+unchanged.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.

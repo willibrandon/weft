@@ -78,7 +78,12 @@ the viewport, font metrics, display scale, workload revision, and host condition
 CI retains architecture-specific qualification JSON, graphics JSON and captures,
 including all 100 input timing samples and initial window painting measured
 separately. Typing measurements begin after the prompt has been painted; the
-100 ms p95 limit is unchanged.
+100 ms p95 limit is unchanged. The harness uses accessory activation and verifies
+window visibility before timing. First-window painting includes attachment and
+initial drawing. Earlier background-only runs did not verify visibility; none of
+these AppKit timings measure compositor presentation latency. The current local
+visible-window suite passes with idle input p95 11.1 ms, loaded input p95 46.8 ms,
+and tab switch p95 75.4 ms.
 Reports also include host/target architecture details and the private server log
 when a test fails.
 The external rbirds workload is optional local qualification; CI does not download

@@ -6,6 +6,7 @@ extension MacSmoke {
         let controller = TerminalWindow(executablePath: executable, autosaveName: nil)
         defer { controller.close() }
         controller.showWindow(nil)
+        guard controller.window?.isVisible == true else { throw SmokeFailure.failed("The workload window is not visible") }
         _ = try await wait(controller) { !$0.blocks.isEmpty }
         controller.terminal.send?(DesktopCommand(operation: "newSession", text: "Qualification"))
         let initial = try await wait(controller) { $0.title == "Qualification" && $0.blocks.count == 1 && text($0).trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("$") }
@@ -47,8 +48,9 @@ extension MacSmoke {
             controller.terminal.send?(DesktopCommand(operation: "text", target: id,
                 text: "awk 'BEGIN {for(i=1;i<=2000;i++) printf \"hidden %06d 0123456789abcdefghijklmnopqrstuvwxyz\\n\",i}'; printf 'HIDDEN\\055DONE\\n'\r"))
         }
+        // Keep one shell producing the paced stream instead of launching awk for every frame.
         controller.terminal.send?(DesktopCommand(operation: "text", target: originalBlock,
-            text: "for frame in $(seq 1 120); do awk -v f=\"$frame\" 'BEGIN {for(i=1;i<=30;i++) printf \"visible %03d %03d 0123456789abcdefghijklmnopqrstuvwxyz\\n\",f,i}'; sleep .02; done; printf 'OUTPUT\\055DONE\\n'\r"))
+            text: "frame=1; while [ $frame -le 120 ]; do row=1; while [ $row -le 30 ]; do printf 'visible %03d %03d 0123456789abcdefghijklmnopqrstuvwxyz\\n' $frame $row; row=$((row+1)); done; sleep .02; frame=$((frame+1)); done; printf 'OUTPUT\\055DONE\\n'\r"))
         _ = try await wait(controller) { $0.blocks.first(where: { $0.id == originalBlock })?.cells.map(\.text).joined().contains("visible 001") == true }
         var latency: [Double] = []
         var drawing: [Double] = []

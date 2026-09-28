@@ -21,9 +21,10 @@ extension MacSmoke {
                 let block = frame.blocks.first(where: { $0.active }) ?? frame.blocks[0]
                 // Typing starts after the prompt is painted, as it does for a person.
                 // Keep cold window drawing separate from the steady input distribution.
-                let painting = ContinuousClock.now
+                guard controller.window?.isVisible == true else { throw SmokeFailure.failed("The measured terminal window is not visible") }
                 controller.window?.displayIfNeeded()
-                initialPaint = milliseconds(painting.duration(to: .now))
+                controller.terminal.displayIfNeeded()
+                initialPaint = milliseconds(start.duration(to: .now))
                 for _ in 0..<100 {
                     let beginning = ContinuousClock.now
                     controller.terminal.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
