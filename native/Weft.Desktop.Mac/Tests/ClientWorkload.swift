@@ -3,11 +3,6 @@ import AppKit
 extension MacSmoke {
     /// Emits the paced terminal workload in one process so shell child startup cannot set its frame rate.
     static func produceOutput(report: String) throws {
-        // This helper has no visible window. Keep macOS from treating its paced
-        // output as idle background work while the measured terminal is busy.
-        let activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
-            reason: "Produce the finite terminal qualification workload")
-        defer { ProcessInfo.processInfo.endActivity(activity) }
         guard FileManager.default.createFile(atPath: report, contents: Data("frame\tformat_ms\twrite_ms\tsleep_ms\telapsed_ms\n".utf8)) else {
             throw SmokeFailure.failed("Could not create the output producer report")
         }
@@ -21,7 +16,10 @@ extension MacSmoke {
             let writing = ContinuousClock.now
             try FileHandle.standardOutput.write(contentsOf: Data(lines.utf8))
             let sleeping = ContinuousClock.now
-            Thread.sleep(forTimeInterval: 0.02)
+            // Pace against the original clock. A delayed write or coalesced
+            // timer must not add another full interval to every later frame.
+            let remaining = milliseconds(sleeping.duration(to: start.advanced(by: .milliseconds(frame * 20)))) / 1000
+            if remaining > 0 { Thread.sleep(forTimeInterval: remaining) }
             let awake = ContinuousClock.now
             let measurement = String(format: "%d\t%.3f\t%.3f\t%.3f\t%.3f\n", frame,
                 milliseconds(formatting.duration(to: writing)), milliseconds(writing.duration(to: sleeping)),

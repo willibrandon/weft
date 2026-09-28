@@ -179,10 +179,11 @@ terminals a turn. The local workload completed in 11.8 seconds with loaded input
 p95 57.1 ms and tab switching p95 18.7 ms. Workstation GC remains enabled.
 Per-frame formatting, write, sleep, and elapsed timings are retained in CI.
 Later CI traces showed the windowless producer's 20 ms sleeps frequently taking
-120–170 ms. Its finite workload now holds a user-initiated activity assertion,
-allowing system sleep, so background timer coalescing cannot dictate its pacing.
-Input and draw measurements are also printed before waiting for output completion,
-preserving them when a command times out. Performance limits remain unchanged.
+120–170 ms. An activity assertion did not correct those delays and was removed.
+The producer now uses absolute frame deadlines rather than accumulating a fresh
+sleep after each delayed write. Input and draw measurements are also printed before
+waiting for output completion. The failing ARM64 run passed those limits at
+131.5 ms and 1.6 ms p95 respectively; completion and performance limits are unchanged.
 A concurrent real-file regression checks that output remains complete and ordered
 as commands exit. Each server owns its processing slot; independent servers do not
 share it. Exit draining also accounts for queued output. All 548 .NET tests pass.
