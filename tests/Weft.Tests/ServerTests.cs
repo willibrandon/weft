@@ -142,6 +142,44 @@ public sealed class ServerTests
     }
 
     /// <summary>
+    /// Verifies concurrent file output survives batching and process exit without omissions or reordering.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public async Task ConcurrentCommandsPreserveCompleteFileOutput()
+    {
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        string source = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "../../../../CONTRIBUTING.md"));
+        string contents = await File.ReadAllTextAsync(source, cancellationToken).ConfigureAwait(false);
+        string expected = new([.. contents.Where(character => !char.IsWhiteSpace(character))]);
+        var fixture = ServerFixture.Start();
+        await using (fixture.ConfigureAwait(false))
+        {
+            await fixture.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
+            ControlClient client = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await using (client.ConfigureAwait(false))
+            {
+                _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "burst" }, cancellationToken).ConfigureAwait(false);
+                List<Task<BlockRunResult>> runs = [];
+                for (int index = 0; index < 4; index++)
+                {
+                    runs.Add(client.RunAsync(new BlockRunParams { Target = "burst", Command = ["/bin/cat", source], TimeoutMs = 20_000 }, cancellationToken));
+                }
+                BlockRunResult[] results = await Task.WhenAll(runs).ConfigureAwait(false);
+                foreach (BlockRunResult result in results)
+                {
+                    Assert.IsTrue(result.Completed);
+                    Assert.AreEqual(0, result.ExitCode);
+                    Assert.IsFalse(result.Truncated);
+                    string actual = new([.. result.Output.Where(character => !char.IsWhiteSpace(character))]);
+                    Assert.AreEqual(expected, actual);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies events stream to a subscriber and closing a session publishes its closure.
     /// </summary>
     /// <returns>A task representing the test.</returns>

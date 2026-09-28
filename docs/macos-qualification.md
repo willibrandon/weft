@@ -88,6 +88,14 @@ visible-window suite passes with idle input p95 11.1 ms, loaded input p95 46.8 m
 and tab switch p95 75.4 ms.
 Reports also include host/target architecture details and the private server log
 when a test fails.
+Paced output reports include formatting, PTY write, sleep, and elapsed timings.
+An active server profile identified allocation contention during concurrent
+scrolling. Serializing screen application in batches of at most eight line breaks
+passed the local workload at 57.1 ms loaded input p95. Workstation GC remains
+enabled. CI exercises the same workload on both architectures. A graphics
+comparison under unrelated CPU-intensive host load measured Kitty at 22.7 frames/s
+on the previous server and 29.8 on the scheduled server. Both missed the limit;
+graphics acceptance still needs a run without that competing load.
 The external rbirds workload is optional local qualification; CI does not download
 or build that reference repository. Swift CodeQL's first successful GitHub scan
 is recorded in [PR 18](https://github.com/willibrandon/weft/pull/18).

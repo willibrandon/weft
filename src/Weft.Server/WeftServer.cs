@@ -9,6 +9,7 @@ namespace Weft.Server;
 public sealed class WeftServer : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stopping = new();
+    private readonly SemaphoreSlim _outputProcessing = new(1, 1);
     private readonly RequestDispatcher _dispatcher = new();
     private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -21,7 +22,7 @@ public sealed class WeftServer : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
         Options = options;
         Events = new EventLog();
-        Registry = new SessionRegistry(options, Events, new SessionStore(Path.Join(options.StateDirectory, "sessions")));
+        Registry = new SessionRegistry(options, Events, new SessionStore(Path.Join(options.StateDirectory, "sessions")), _outputProcessing);
         Waits = new WaitChannels();
         ServerHandlers.Register(_dispatcher);
         SessionHandlers.Register(_dispatcher);
@@ -148,6 +149,7 @@ public sealed class WeftServer : IAsyncDisposable
         }
 
         _stopping.Dispose();
+        _outputProcessing.Dispose();
     }
 
     private async Task WaitForStopAsync()

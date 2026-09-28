@@ -168,10 +168,25 @@ for a background command to finish. Timing now ends when the selected tab's fram
 is painted, then separately verifies output completion. Loaded memory is sampled
 after every background producer has completed.
 Both CI architectures now compile and pass functional and idle-resource checks,
-but output completion can still time out with the native producer. A local server
-profile was dominated by waits. Per-frame write and sleep timings are retained
-alongside qualification results to identify whether production or consumption is
-delayed; no throughput fix is claimed yet.
+but output completion can still time out with the native producer. An initial
+profile captured shutdown waits; a profile taken during active output instead
+showed workstation GC allocation contention across terminal workers. Producer
+diagnostics confirmed 15.3 seconds blocked in PTY writes in an 18.1-second run,
+with only 11 ms spent formatting. That run failed loaded input at 297 ms p95.
+Server output now processes one batch at a time, yielding after at most eight
+line breaks. This bounds concurrent screen-change allocation and gives other
+terminals a turn. The local workload completed in 11.8 seconds with loaded input
+p95 57.1 ms and tab switching p95 18.7 ms. Workstation GC remains enabled.
+Per-frame formatting, write, sleep, and elapsed timings are retained in CI.
+A concurrent real-file regression checks that output remains complete and ordered
+as commands exit. Each server owns its processing slot; independent servers do not
+share it. Exit draining also accounts for queued output. All 548 .NET tests pass.
+CI runs the same workload on ARM64 and native Intel; limits and deadlines are
+unchanged. Under current unrelated CPU-intensive load, a graphics comparison
+measured Kitty at 22.7 frames/s on the previous server and 29.8 on the scheduled
+server. Both missed the 55 frames/s limit; this establishes neither a regression
+nor acceptance under normal load. The background-activity experiment used for
+that comparison was removed.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.
