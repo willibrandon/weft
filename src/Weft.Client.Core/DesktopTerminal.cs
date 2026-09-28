@@ -249,11 +249,12 @@ internal sealed class DesktopTerminal : IAsyncDisposable
             return;
         }
         var text = new StringBuilder();
+        var content = new StringBuilder();
         for (int line = start / snapshot.Width; line <= end / snapshot.Width; line++)
         {
             int first = line == start / snapshot.Width ? start % snapshot.Width : 0;
             int last = line == end / snapshot.Width ? end % snapshot.Width : snapshot.Width - 1;
-            var content = new StringBuilder();
+            _ = content.Clear();
             for (int cell = first; cell <= last; cell++)
             {
                 _ = content.Append(snapshot.GetCell(cell, line).Character);

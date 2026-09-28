@@ -54,20 +54,22 @@ internal sealed class DesktopSixel
         {
             double scaleX = cellWidth / placement.Image.CellMetrics.SafeWidth;
             double scaleY = cellHeight / placement.Image.CellMetrics.SafeHeight;
+            bool unitX = MatchesCellSize(placement.Image.CellMetrics.SafeWidth, cellWidth);
+            bool unitY = MatchesCellSize(placement.Image.CellMetrics.SafeHeight, cellHeight);
             // Read the painted crop directly from damage-masked row spans. Materializing
             // a second cropped image adds a full raster copy to every animation frame.
             string key = Convert.ToHexString(placement.Image.ContentHash);
             _ = _sizes.TryGetValue(key, out DesktopRasterSize? size);
-            (int sourceLeft, int sourceTop, int sourceWidth, int sourceHeight) = Crop(placement,
+            (int _, int _, int estimatedWidth, int estimatedHeight) = Crop(placement,
                 size?.Width ?? int.MaxValue, size?.Height ?? int.MaxValue);
-            if (sourceWidth <= 0 || sourceHeight <= 0)
+            if (estimatedWidth <= 0 || estimatedHeight <= 0)
             {
                 continue;
             }
             int originX = placement.PaintedLeft * cellWidth;
             int originY = (placement.PaintedTop - top) * cellHeight;
-            int endX = Math.Min(width, originX + (int)Math.Ceiling(sourceWidth * scaleX));
-            int endY = Math.Min(rows, originY + (int)Math.Ceiling(sourceHeight * scaleY));
+            int endX = Math.Min(width, originX + (int)Math.Ceiling(estimatedWidth * scaleX));
+            int endY = Math.Min(rows, originY + (int)Math.Ceiling(estimatedHeight * scaleY));
             // Do not materialize old raster buffers when newer pixels cover their entire visible crop.
             if (Covered(uncoveredLeft, uncoveredRight, Math.Max(0, originX), endX, Math.Max(0, originY), endY))
             {
@@ -79,7 +81,7 @@ internal sealed class DesktopSixel
                 continue;
             }
             _sizes[key] = new DesktopRasterSize(pixels.Width, pixels.Height);
-            (sourceLeft, sourceTop, sourceWidth, sourceHeight) = Crop(placement, pixels.Width, pixels.Height);
+            (int sourceLeft, int sourceTop, int sourceWidth, int sourceHeight) = Crop(placement, pixels.Width, pixels.Height);
             if (sourceWidth <= 0 || sourceHeight <= 0)
             {
                 continue;
@@ -88,7 +90,7 @@ internal sealed class DesktopSixel
             endY = Math.Min(rows, originY + (int)Math.Ceiling(sourceHeight * scaleY));
             int startX = Math.Max(0, originX);
             int startY = Math.Max(0, originY);
-            if (canvas is null && scaleX == 1 && scaleY == 1 && endX > startX && endY > startY
+            if (canvas is null && unitX && unitY && endX > startX && endY > startY
                 && CopyOpaque(pixels, sourceLeft + startX - originX, sourceTop + startY - originY,
                     endX - startX, endY - startY, width, rows, startX, startY) is { } front)
             {
@@ -127,7 +129,7 @@ internal sealed class DesktopSixel
                         continue;
                     }
 
-                    Rgba32 pixel = source[scaleX == 1 ? x - originX : Math.Min(sourceWidth - 1, (int)((x - originX) / scaleX))];
+                    Rgba32 pixel = source[unitX ? x - originX : Math.Min(sourceWidth - 1, (int)((x - originX) / scaleX))];
                     if (pixel.A == 0)
                     {
                         continue;
@@ -195,6 +197,12 @@ internal sealed class DesktopSixel
         double heightCells = (double)pixelHeight / cellHeight;
         return new DesktopImage(identity ?? Convert.ToHexString(SHA256.HashData(data)), data, 32, pixelWidth, pixelHeight,
             xCells, yCells, widthCells, heightCells, xCells, yCells, widthCells, heightCells, 0);
+    }
+
+    private static bool MatchesCellSize(double source, int destination)
+    {
+        // Direct copies require whole pixels. Fractional metrics must keep the resampling path.
+        return double.IsInteger(source) && source <= int.MaxValue && source >= 1 && (int)source == destination;
     }
 
     private static byte[]? CopyOpaque(SixelPixelBuffer pixels, int sourceX, int sourceY, int width, int height,

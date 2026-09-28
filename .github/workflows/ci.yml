@@ -137,10 +137,12 @@ jobs:
           dotnet-quality: preview
       - name: Report SDK
         run: dotnet --info
-      - name: Report Swift compiler
-        run: xcrun swiftc --version
+      - name: Select current installed Xcode
+        run: dotnet run --file scripts/Select-MacToolchain.cs
       - name: Build app bundle
         run: dotnet run --file scripts/Build-MacApp.cs -- --arch ${{ matrix.arch }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Package local disk image
         run: dotnet run --file scripts/Package-MacApp.cs -- --arch ${{ matrix.arch }}
       - name: Test installed app and native bridge

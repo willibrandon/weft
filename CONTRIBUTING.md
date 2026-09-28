@@ -35,6 +35,9 @@ The Mac app currently links Apple system frameworks and has no Swift package
 dependencies. Dependabot covers NuGet and GitHub Actions. Add its `swift` ecosystem
 when a Swift package manifest introduces external dependencies; Xcode and Swift
 remain supplied by the build environment without version pins.
+Mac CI selects the newest numbered Xcode release installed on the runner, since
+the Intel image's default compiler predates isolated protocol conformances.
+The selection applies only to the job through `DEVELOPER_DIR`.
 
 CodeQL scans C# on Linux and builds the Mac app for Swift analysis on macOS. Both
 jobs run the security and quality queries and fail on any finding. The Swift build

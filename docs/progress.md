@@ -116,6 +116,12 @@ Living tracker for the weft build. Check items off as they land; keep the
 
 ## Verification log
 
+The first PR run exposed an unauthenticated font-release API rate limit, the Intel
+runner's older default Swift compiler, and five C# CodeQL findings. The fixes
+authenticate only the metadata request, select the newest installed Xcode release,
+reuse the selection text buffer, and determine Sixel direct-copy eligibility from
+whole-pixel cell sizes. Checks remain enabled without suppressions; reruns are pending.
+
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.
 Prior installed-bundle smoke tests passed for Intel under Rosetta after copying

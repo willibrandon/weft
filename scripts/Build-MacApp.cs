@@ -6,6 +6,7 @@
 
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -155,7 +156,16 @@ internal static class BuildMacApp
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Weft-Build");
-        string releaseText = await http.GetStringAsync(new Uri("https://api.github.com/repos/microsoft/cascadia-code/releases/latest")).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/microsoft/cascadia-code/releases/latest");
+        string? token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            // Authenticate only the API lookup, never release asset or license downloads.
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+        using HttpResponseMessage response = await http.SendAsync(request).ConfigureAwait(false);
+        _ = response.EnsureSuccessStatusCode();
+        string releaseText = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         using var release = JsonDocument.Parse(releaseText);
         JsonElement asset = release.RootElement.GetProperty("assets").EnumerateArray()
             .Single(item => item.GetProperty("name").GetString()!.EndsWith(".zip", StringComparison.Ordinal));

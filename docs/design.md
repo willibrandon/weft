@@ -299,6 +299,9 @@ the same termination confirmation applies to the button, menu, and Commands pane
 Terminal drawing is confined to its view; bundled symbol fallback preserves
 prompt glyphs. Visual acceptance includes real window captures, native scrolling,
 and readable narrow layouts, alongside measured latency and resource use.
+Mac CI selects the newest installed numbered Xcode release for both native tests
+and Swift analysis. The font release lookup uses the job's read-only GitHub token;
+asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching
 to an older running server; existing terminal processes keep their shell and state.
 The desktop worker coalesces terminal and control events and wakes AppKit through
