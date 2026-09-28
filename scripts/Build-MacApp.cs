@@ -22,7 +22,7 @@ internal static class BuildMacApp
     {
         if (args is ["--help"] or ["-h"])
         {
-            await Console.Out.WriteLineAsync("Builds a self-contained Weft.app with AppKit and the Native AOT client. Requires macOS, Xcode command line tools, and a compatible .NET SDK. Usage: dotnet run --file scripts/Build-MacApp.cs [--arch arm64|x64]").ConfigureAwait(false);
+            await Console.Out.WriteLineAsync("Builds a self-contained Weft.app with AppKit and the Native AOT client. --prepare-analysis prepares dependencies and a Swift compiler response file for CodeQL. Usage: dotnet run --file scripts/Build-MacApp.cs [--arch arm64|x64] [--prepare-analysis]").ConfigureAwait(false);
             return 0;
         }
 
@@ -32,6 +32,8 @@ internal static class BuildMacApp
             return 1;
         }
 
+        bool prepareAnalysis = args.Contains("--prepare-analysis", StringComparer.Ordinal);
+        args = [.. args.Where(argument => argument != "--prepare-analysis")];
         string arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
         if (args is ["--arch", "arm64" or "x64"])
         {
@@ -127,6 +129,15 @@ internal static class BuildMacApp
             library, "-o", Path.Join(executables, "Weft")
         ];
         swiftArguments.AddRange(Directory.EnumerateFiles(Path.Join(source, "Sources"), "*.swift").Order(StringComparer.Ordinal));
+        if (prepareAnalysis)
+        {
+            // CodeQL traces Swift compilation directly; dependency preparation runs before tracing begins.
+            string responseFile = Path.Join(root, "artifacts", "macos", "swift-analysis.rsp");
+            await File.WriteAllLinesAsync(responseFile, swiftArguments.Skip(1).Select(argument =>
+                "\"" + argument.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"")).ConfigureAwait(false);
+            await Console.Out.WriteLineAsync("Prepared Swift analysis: " + responseFile).ConfigureAwait(false);
+            return 0;
+        }
         byte[] serverHash = await HashAsync(Path.Join(executables, "weft-server")).ConfigureAwait(false);
         await RunAsync("xcrun", swiftArguments).ConfigureAwait(false);
         byte[] serverAfter = await HashAsync(Path.Join(executables, "weft-server")).ConfigureAwait(false);

@@ -41,7 +41,9 @@ The selection applies only to the job through `DEVELOPER_DIR`.
 
 CodeQL scans C# on Linux and builds the Mac app for Swift analysis on macOS. Both
 jobs run the security and quality queries and fail on any finding. The Swift build
-uses `Build-MacApp.cs`; scanning does not open a terminal window. Add native Linux
+prepares dependencies with `Build-MacApp.cs --prepare-analysis`, then traces Swift
+compilation using the generated response file. Scanning does not open a terminal
+window. Add native Linux
 C/C++ analysis with that frontend, and validate Windows-specific C# extraction
 on a Windows runner when the Reactor project lands.
 

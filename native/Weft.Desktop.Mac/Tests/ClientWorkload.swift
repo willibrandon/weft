@@ -33,6 +33,15 @@ extension MacSmoke {
         guard !controller.terminal.hasMarkedText() else { throw SmokeFailure.failed("Composition followed focus into another pane") }
         controller.terminal.send?(DesktopCommand(operation: "focus", target: inputBlock.id))
         _ = try await wait(controller) { $0.blocks.first(where: { $0.active })?.id == inputBlock.id }
+        // Runner hostnames can wrap a login prompt after the split has resized its PTY.
+        // Establish the measurement's prompt and cursor on the final pane geometry.
+        controller.terminal.send?(DesktopCommand(operation: "text", target: inputBlock.id,
+            text: "PS1='$ '; printf '\\033[2J\\033[H'\r"))
+        let inputReady = try await wait(controller) {
+            $0.blocks.first(where: { $0.id == inputBlock.id })?.cells.map(\.text).joined()
+                .trimmingCharacters(in: .whitespacesAndNewlines) == "$"
+        }
+        let inputCursor = inputReady.blocks.first(where: { $0.id == inputBlock.id })!.cursorX
         let manyTabs = try residentBytes()
         for id in blocks {
             controller.terminal.send?(DesktopCommand(operation: "text", target: id,
@@ -47,13 +56,13 @@ extension MacSmoke {
         for _ in 0..<40 {
             let start = ContinuousClock.now
             controller.terminal.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
-            _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == inputBlock.id })?.cursorX == inputBlock.cursorX + 1 }
+            _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == inputBlock.id })?.cursorX == inputCursor + 1 }
             let painting = ContinuousClock.now
             controller.terminal.displayIfNeeded()
             drawing.append(milliseconds(painting.duration(to: .now)))
             latency.append(milliseconds(start.duration(to: .now)))
             controller.terminal.send?(DesktopCommand(operation: "key", target: inputBlock.id, text: "BSpace"))
-            _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == inputBlock.id })?.cursorX == inputBlock.cursorX }
+            _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == inputBlock.id })?.cursorX == inputCursor }
         }
         _ = try await wait(controller) { $0.blocks.first(where: { $0.id == originalBlock })?.cells.map(\.text).joined().contains("OUTPUT-DONE") == true }
         let elapsed = milliseconds(started.duration(to: .now))

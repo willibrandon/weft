@@ -94,7 +94,7 @@ public sealed class DesktopClient : IAsyncDisposable
             bool accepted = _accepting && !_stopping.IsCancellationRequested && _commands.Writer.TryWrite(command);
             if (accepted)
             {
-                Invalidate();
+                Wake();
             }
             return accepted;
         }
@@ -183,7 +183,7 @@ public sealed class DesktopClient : IAsyncDisposable
             {
                 throw new InvalidOperationException("The running server uses a different protocol. Finish running work before explicitly restarting the server with this app's version.");
             }
-            control.EventReceived += Invalidate;
+            control.EventReceived += Wake;
             IReadOnlyList<SessionInfo> sessions = (await control.ListSessionsAsync(connecting.Token).ConfigureAwait(false)).Sessions;
             SessionMirror? mirror = null;
             long snapshotSequence = 0;
@@ -213,6 +213,7 @@ public sealed class DesktopClient : IAsyncDisposable
                 // Limit each batch so sustained input cannot starve output or cancellation.
                 for (int count = 0; count < 64 && _commands.Reader.TryRead(out DesktopCommand? command); count++)
                 {
+                    string? previousError = error;
                     try
                     {
                         if (command.Operation is "session" or "newSession")
@@ -281,12 +282,18 @@ public sealed class DesktopClient : IAsyncDisposable
                         error = exception.Message;
                     }
 
-                    Invalidate();
+                    // Input changes the screen only when the terminal publishes output.
+                    // Avoid projecting and decoding a stale frame ahead of that response.
+                    if (command.Operation is not ("text" or "key" or "paste" or "mouse")
+                        || !string.Equals(error, previousError, StringComparison.Ordinal))
+                    {
+                        Invalidate();
+                    }
                 }
 
                 if (_commands.Reader.TryPeek(out _))
                 {
-                    Invalidate();
+                    Wake();
                 }
 
                 while (control.Events.TryRead(out ProtocolMessage? message))
@@ -300,7 +307,12 @@ public sealed class DesktopClient : IAsyncDisposable
                     {
                         sessions = (await control.ListSessionsAsync(token).ConfigureAwait(false)).Sessions;
                     }
-                    Invalidate();
+                    // Visible output is committed by the terminal connection. Its control
+                    // notification carries no pixels and must not race that presentation.
+                    if (message.Event != ProtocolEvents.BlockOutput || mirror?.ActivityChanged == true)
+                    {
+                        Invalidate();
+                    }
                 }
 
                 if (control.Closed.IsCompleted || control.Events.Completion.IsCompleted)
@@ -373,7 +385,7 @@ public sealed class DesktopClient : IAsyncDisposable
         // Leave headroom for a 60 Hz producer whose completed frames arrive between display ticks.
         // Native views coalesce presentation; idle terminals still wait for an actual change.
         TimeSpan remaining = TimeSpan.FromSeconds(1d / 120) - Stopwatch.GetElapsedTime(_frameStarted);
-        if (remaining > TimeSpan.Zero)
+        if (remaining > TimeSpan.Zero && !_commands.Reader.TryPeek(out _))
         {
             await Task.Delay(remaining, token).ConfigureAwait(false);
         }
@@ -531,6 +543,11 @@ public sealed class DesktopClient : IAsyncDisposable
     private void Invalidate()
     {
         _ = Interlocked.Exchange(ref _dirty, 1);
+        Wake();
+    }
+
+    private void Wake()
+    {
         _ = _wake.Writer.TryWrite(true);
     }
 

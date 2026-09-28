@@ -300,14 +300,19 @@ Terminal drawing is confined to its view; bundled symbol fallback preserves
 prompt glyphs. Visual acceptance includes real window captures, native scrolling,
 and readable narrow layouts, alongside measured latency and resource use.
 Mac CI selects the newest installed numbered Xcode release for both native tests
-and Swift analysis. The font release lookup uses the job's read-only GitHub token;
+and Swift analysis. Analysis prepares native dependencies before enabling the
+tracer, then compiles every Swift source with the same arguments as the app build.
+The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching
 to an older running server; existing terminal processes keep their shell and state.
 The desktop worker coalesces terminal and control events and wakes AppKit through
 the versioned native callback bridge. Frame serialization and decoding run on a
 bounded worker; AppKit receives only the latest immutable result. A main run-loop source delivers frames in common
-modes so native scrollbar tracking continues to receive terminal updates. Each pane
+modes so native scrollbar tracking continues to receive terminal updates. Queued
+input wakes the worker without waiting for the display cadence or publishing an
+unchanged frame; terminal output or a command error triggers the next display.
+Each pane
 uses an AppKit scroll view confined to the scrollbar gutter, with a virtual document
 sized to its retained rows. AppKit
 owns the scrollbar's thumb, track, and visibility preferences; terminal cells remain

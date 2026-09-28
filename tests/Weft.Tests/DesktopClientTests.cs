@@ -123,7 +123,16 @@ public sealed class DesktopClientTests
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
                         "stty raw -echo; printf '\\033[2J\\033[HREADY'; dd bs=1 count=5 of=keys.bin 2>/dev/null; stty sane; printf DONE\r")));
                     _ = await WaitAsync(desktop, frame => Text(frame).Contains("READY", StringComparison.Ordinal) && !Text(frame).Contains("stty", StringComparison.Ordinal), token).ConfigureAwait(false);
+                    await Task.Delay(100, token).ConfigureAwait(false);
+                    _ = desktop.TakeFrame();
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("key", id, "Escape")));
+                    string keyFile = Path.Join(fixture.Root, "keys.bin");
+                    while (!File.Exists(keyFile) || new FileInfo(keyFile).Length != 1)
+                    {
+                        await Task.Delay(5, token).ConfigureAwait(false);
+                    }
+                    await Task.Delay(100, token).ConfigureAwait(false);
+                    Assert.IsNull(desktop.TakeFrame(), "Input without terminal output must not republish the unchanged screen.");
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("key", id, "C-b")));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("key", id, "F1")));
                     _ = await WaitAsync(desktop, frame => Text(frame).Contains("DONE", StringComparison.Ordinal), token).ConfigureAwait(false);

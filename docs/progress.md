@@ -120,7 +120,16 @@ The first PR run exposed an unauthenticated font-release API rate limit, the Int
 runner's older default Swift compiler, and five C# CodeQL findings. The fixes
 authenticate only the metadata request, select the newest installed Xcode release,
 reuse the selection text buffer, and determine Sixel direct-copy eligibility from
-whole-pixel cell sizes. Checks remain enabled without suppressions; reruns are pending.
+whole-pixel cell sizes. C# analysis now passes and its five review threads are
+resolved. Native ARM64 CI reached the tests but measured 134.6 ms input p95 against
+the unchanged 100 ms limit. Input now wakes the worker without the display delay
+and no longer publishes an unchanged screen ahead of terminal output. A real PTY
+test checks silent input. Output notifications no longer republish pixels already
+delivered by the terminal connection. Intel's functional and idle-resource checks
+passed; the loaded-input test now establishes a short prompt after pane resizing
+instead of using cursor coordinates from before its login prompt reflowed.
+Swift tracing is separated from dependency preparation
+after the combined step stalled before producing .NET build output. Reruns are pending.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.
