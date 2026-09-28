@@ -19,6 +19,9 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
     private var selectionScroll: Timer?
     private var pendingSelections: Set<String> = []
     private let images = TerminalImages()
+    /// Resource accounting for local qualification; this is not process physical footprint.
+    var rasterCacheBytes: Int { images.retainedBytes }
+    var rasterCacheCount: Int { images.count }
     private var scrollers: [String: TerminalScrollView] = [:]
     private var wheelRemainders: [String: CGFloat] = [:]
     private var tracking: NSTrackingArea?
@@ -91,6 +94,7 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
             inputContext?.discardMarkedText()
         }
         frameData = frame
+        images.retain(Set(frame.blocks.flatMap { $0.textures.map(\.cacheKey) }))
         let oldCursor = previous?.blocks.first(where: \.active)
         let cursor = activeBlock
         updateCursorBlink(reset: oldCursor?.id != cursor?.id || oldCursor?.cursorX != cursor?.cursorX

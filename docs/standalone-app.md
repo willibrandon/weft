@@ -97,7 +97,8 @@ maximum 120 Hz update interval, and input after an idle period wakes immediately
 views coalesce presentation independently, leaving headroom for 60 Hz producers. Completed
 snapshots prevent partial synchronized redraws from reaching the view. Local output,
 typing, scrolling, and graphics measurements live in the progress tracker; portable
-performance budgets remain a release qualification task.
+performance budgets remain a release qualification task. Initial test limits and
+their outstanding validation are recorded in [Mac qualification](macos-qualification.md).
 
 The bundle includes regular and italic Cascadia Mono NF from Microsoft's latest
 published Cascadia Code release, with its license and source hash. Fonts are
@@ -140,8 +141,10 @@ Desktop terminal retention is bounded to 64 MiB for each of the main and alterna
 screens and 8,388,608 logical pixels, reserving room for sparse and dense storage;
 the independent 16 MiB projection budget limits a visible block's resources.
 Fully covering crops reuse their source identity. Swift draws cached Core Graphics
-images directly and decodes in-memory images into a
-bounded cache and clips them to their placements. Terminal output cannot name files
+images directly and clips them to their placements. The cache discards images
+absent from the current frame and retains at most 256 images and 32 MiB of decoded
+row storage. Shared frame buffers and compositor surfaces are measured separately;
+the cache bound is not a process memory budget. Terminal output cannot name files
 for the app to load.
 
 Lost control connections retain known content with a reconnect message, reject new

@@ -16,16 +16,19 @@ extension MacSmoke {
         guard let bitmap = captured.converting(to: .sRGB, renderingIntent: .default) else {
             throw SmokeFailure.failed("Could not normalize the animation's color profile")
         }
+        try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: CommandLine.arguments[2] + ".animation.png"))
         let scaleX = CGFloat(bitmap.pixelsWide) / controller.terminal.bounds.width
         let scaleY = CGFloat(bitmap.pixelsHigh) / controller.terminal.bounds.height
         let x = Int((CGFloat(block.x) + placement.x + 0.5) * controller.terminal.cellWidth * scaleX)
         let y = Int((CGFloat(block.y) + placement.y + 0.5) * controller.terminal.cellHeight * scaleY)
         guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), color.greenComponent - color.redComponent > 0.5 else {
-            try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: CommandLine.arguments[2] + ".animation.png"))
             throw SmokeFailure.failed("Animation pixel at \(x),\(y) is \(String(describing: bitmap.colorAt(x: x, y: y))); placement \(placement.x),\(placement.y)")
         }
         controller.terminal.insertText("printf '\\033_Ga=d,d=a,q=2\\033\\\\'\r", replacementRange: NSRange(location: NSNotFound, length: 0))
         _ = try await wait(controller) { $0.blocks.first?.images.isEmpty == true }
+        guard controller.terminal.rasterCacheCount == 0, controller.terminal.rasterCacheBytes == 0 else {
+            throw SmokeFailure.failed("Deleted graphics retained native image providers")
+        }
         let red = Data((0..<(15 * 9)).flatMap { _ in [UInt8(255), 0, 0, 255] }).base64EncodedString()
         controller.terminal.insertText("printf '\\033[2J\\033[H\\033_Ga=T,f=32,s=15,v=9,X=3,Y=4,q=2;\(red)\\033\\\\'\r",
                                        replacementRange: NSRange(location: NSNotFound, length: 0))

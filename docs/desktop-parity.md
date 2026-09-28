@@ -221,13 +221,13 @@ offscreen 1×/2× drawing. Those tests leave the following checks open:
 
 | Open check | Completion evidence |
 | --- | --- |
-| Sixel cost | Repeatable sustained workload with conversion, drawing, allocation and memory measurements; reduce remaining raster preparation cost without losing pixels |
+| Sixel throughput | Speed-focused compilation reduces client CPU in repeated local measurements; steady 60 fps and larger viewport coverage remain unproven, as recorded in [Mac qualification](macos-qualification.md) |
 | VoiceOver | Interactive reading, range navigation, selection/Copy, native controls, search and dialog focus; no unsolicited output flood |
 | Candidate windows | Japanese and Chinese input methods with visible candidates correctly anchored through resize, scroll, pane switches and cancellation; committed text appears once |
 | Physical layouts | Common non-US physical keyboards, dead keys, Option and repeat in terminal and command search; no shortcut collisions |
 | Multiple displays | Move a live window between physical displays with different scale/resolution, including composition, graphics, scrolling and fullscreen |
 | Native Intel hardware | Execute installed-app qualification on Intel hardware and record it separately from Rosetta |
-| Performance budgets | Reproducible platform baselines and agreed regression thresholds, including sustained memory after graphics and window churn |
+| Performance budgets | Validate the [initial test limits](macos-qualification.md) against repeated platform baselines, including sustained memory after graphics and window churn |
 
 Use private sessions for qualification. Keep launches bounded and leave the user's
 running work alone. Tests never enable a screen reader or change the selected

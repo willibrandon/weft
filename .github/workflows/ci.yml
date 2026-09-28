@@ -145,6 +145,18 @@ jobs:
         run: dotnet run --file scripts/Package-MacApp.cs -- --arch ${{ matrix.arch }}
       - name: Test installed app and native bridge
         run: dotnet run --file scripts/Test-MacApp.cs -- --arch ${{ matrix.arch }} --package
+      - name: Save Mac qualification evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-qualification-${{ matrix.arch }}
+          retention-days: 14
+          path: |
+            artifacts/macos/osx-${{ matrix.arch }}/qualification*.json
+            artifacts/macos/osx-${{ matrix.arch }}/qualification*.txt
+            artifacts/macos/osx-${{ matrix.arch }}/native-smoke*.png
+            artifacts/macos/osx-${{ matrix.arch }}/native-smoke*.json
+            artifacts/macos/osx-${{ matrix.arch }}/failed-server.log
 
   native-aot-size:
     name: Native AOT size (linux-x64)

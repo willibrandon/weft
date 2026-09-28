@@ -94,6 +94,7 @@ extension MacSmoke {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(metrics).write(to: URL(fileURLWithPath: report))
+        try PerformanceLimits.workload(metrics)
         print(String(format: "Workload passed: 16 tabs, 33,600 output lines; input paint p50 %.1f ms, p95 %.1f ms; tab switch p95 %.1f ms; client resident %.1f / %.1f / %.1f / %.1f MiB (initial/empty tabs/output/closed)",
                      latency[20], latency[37], switching[14], metrics["clientBaselineMiB"]!, metrics["clientEmptyTabsMiB"]!, metrics["clientOutputMiB"]!, metrics["clientAfterCloseMiB"]!))
         // Bitmap allocations belong to rendering qualification, after the workload memory sample.

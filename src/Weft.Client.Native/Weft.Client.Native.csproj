@@ -5,6 +5,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <NativeLib>Shared</NativeLib>
     <PublishAot>true</PublishAot>
+    <OptimizationPreference>Speed</OptimizationPreference>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>

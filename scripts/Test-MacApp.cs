@@ -62,6 +62,10 @@ internal static class TestMacApp
 
         string root = Directory.GetCurrentDirectory();
         string output = Path.Join(root, "artifacts", "macos", "osx-" + arch);
+        _ = Directory.CreateDirectory(output);
+        File.Delete(Path.Join(output, "failed-server.log"));
+        await File.WriteAllTextAsync(Path.Join(output, "qualification-environment.txt"),
+            $"OS: {RuntimeInformation.OSDescription}\nHost architecture: {RuntimeInformation.OSArchitecture}\nDriver architecture: {RuntimeInformation.ProcessArchitecture}\nApp target: {arch}\n").ConfigureAwait(false);
         string contents = Path.Join(output, "Weft.app", "Contents");
         string cli = Path.Join(contents, "MacOS", "weft-server");
         string bundledCli = cli;
@@ -101,6 +105,7 @@ internal static class TestMacApp
             List<string> arguments =
             [
                 "swiftc", "-swift-version", "6", "-O", "-warnings-as-errors",
+                "-module-cache-path", Path.Join(output, "module-cache"),
                 "-target", (arch == "arm64" ? "arm64" : "x86_64") + "-apple-macosx" + minimum.Trim(),
                 "-import-objc-header", Path.Join(source, "WeftNative.h"),
                 "-framework", "AppKit", "-Xlinker", "-rpath", "-Xlinker", Path.Join(contents, "Frameworks"),
@@ -152,6 +157,11 @@ internal static class TestMacApp
                 await VerifyInstallLifecycleAsync(output, temporary, test, bundledCli, environment).ConfigureAwait(false);
             }
         }
+        catch
+        {
+            PreserveFailureLog(temporary, output);
+            throw;
+        }
         finally
         {
             if (File.Exists(Path.Join(temporary, "run", "weft.sock")))
@@ -163,6 +173,22 @@ internal static class TestMacApp
         }
 
         return 0;
+    }
+
+    private static void PreserveFailureLog(string temporary, string output)
+    {
+        try
+        {
+            string log = Path.Join(temporary, "state", "server.log");
+            if (File.Exists(log))
+            {
+                File.Copy(log, Path.Join(output, "failed-server.log"), overwrite: true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine("Could not preserve the private server log: " + exception.Message);
+        }
     }
 
     private static async Task VerifyAccessibilityAsync(string test, string cli, Dictionary<string, string> environment)

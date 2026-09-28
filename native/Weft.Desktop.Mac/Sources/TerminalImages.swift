@@ -1,22 +1,36 @@
 import AppKit
 import ImageIO
 
-/// Decodes bounded terminal rasters once and evicts them under memory pressure.
+/// Keeps only current-frame rasters, with hard limits on decoded bytes and image count.
 /// ImageIO receives in-memory data only; terminal output cannot name a file to open.
 @MainActor
 final class TerminalImages {
-    private let cache = NSCache<NSString, CGImage>()
+    private let byteLimit = 32 * 1024 * 1024
+    private let countLimit = 256
+    private var cache: [String: (image: CGImage, cost: Int, used: UInt64)] = [:]
+    private var clock: UInt64 = 0
+    /// Accounted decoded raster bytes, excluding the native compositor's own storage.
+    private(set) var retainedBytes = 0
+    var count: Int { cache.count }
 
-    init() {
-        cache.totalCostLimit = 32 * 1024 * 1024
-        cache.countLimit = 256
+    /// Animation replaces images continuously; obsolete providers must release their frame buffers immediately.
+    func retain(_ keys: Set<String>) {
+        for key in cache.keys where !keys.contains(key) { remove(key) }
     }
 
-    func removeAll() { cache.removeAllObjects() }
+    func removeAll() {
+        cache.removeAll(keepingCapacity: false)
+        retainedBytes = 0
+    }
 
     func image(_ raster: DesktopTexture) -> CGImage? {
-        let key = "\(raster.format):\(raster.pixelWidth):\(raster.pixelHeight):\(raster.key)" as NSString
-        if let existing = cache.object(forKey: key) { return existing }
+        let key = raster.cacheKey
+        clock &+= 1
+        if var existing = cache[key] {
+            existing.used = clock
+            cache[key] = existing
+            return existing.image
+        }
         guard raster.pixelWidth > 0, raster.pixelHeight > 0,
               raster.pixelWidth <= 4096, raster.pixelHeight <= 4096,
               raster.pixelWidth * raster.pixelHeight <= 4_194_304,
@@ -39,7 +53,18 @@ final class TerminalImages {
                              provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
         }
         guard let bitmap else { return nil }
-        cache.setObject(bitmap, forKey: key, cost: raster.pixelWidth * raster.pixelHeight * 4)
+        let cost = bitmap.bytesPerRow * bitmap.height
+        guard cost <= byteLimit else { return bitmap }
+        while cache.count >= countLimit || retainedBytes + cost > byteLimit {
+            guard let oldest = cache.min(by: { $0.value.used < $1.value.used })?.key else { break }
+            remove(oldest)
+        }
+        cache[key] = (bitmap, cost, clock)
+        retainedBytes += cost
         return bitmap
+    }
+
+    private func remove(_ key: String) {
+        if let old = cache.removeValue(forKey: key) { retainedBytes -= old.cost }
     }
 }

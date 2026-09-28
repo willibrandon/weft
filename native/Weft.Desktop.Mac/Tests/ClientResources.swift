@@ -44,6 +44,7 @@ extension MacSmoke {
             fflush(stdout)
             try await Task.sleep(for: .seconds(30))
         }
+        try PerformanceLimits.client(attach: times[2], input: input[15], idle: idle, resident: resident)
     }
 
     static func cpuMilliseconds() -> Double {

@@ -69,8 +69,9 @@ churn, separately from the process that captures rendering-test bitmaps.
 `dotnet run --file scripts/Test-MacApp.cs -- --qualify` runs the 16-tab output and
 typing workload, scrolling, resize and backing-scale checks, multiple attachments,
 and forced client termination. Normal native tests include these checks. Metrics
-are saved in the architecture's `qualification.json`; local observations are not
-portable performance budgets. Tests move their private window across connected
+are saved in the architecture's `qualification.json`. Initial regression limits
+are listed in [Mac qualification](docs/macos-qualification.md); they still need
+repeated hardware validation and are not portable release budgets. Tests move their private window across connected
 displays when more than one is available.
 
 `--accessibility` checks the external macOS accessibility tree. It can also check

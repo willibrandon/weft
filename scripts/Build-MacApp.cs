@@ -119,6 +119,7 @@ internal static class BuildMacApp
         List<string> swiftArguments =
         [
             "swiftc", "-swift-version", "6", "-O", "-warnings-as-errors",
+            "-module-cache-path", Path.Join(output, "module-cache"),
             "-target", (arch == "arm64" ? "arm64" : "x86_64") + "-apple-macosx" + minimum,
             "-import-objc-header", Path.Join(source, "WeftNative.h"),
             "-framework", "AppKit", "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",

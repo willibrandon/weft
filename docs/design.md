@@ -343,7 +343,9 @@ Input restarts its timer; focus loss, occlusion, and Reduce Motion stop it.
 The native scrollbar maps page clicks to explicit history rows. Page navigation
 does not leave a clip-view animation running into a later drag or Return to Live.
 The native wire format encodes value-type cells as compact arrays and omits default
-styles. ABI 4 prefixes JSON metadata with its little-endian byte length, then appends
+styles. The Native AOT client uses speed-focused optimization, matching the server,
+because terminal parsing and raster projection are sustained workloads. ABI 4
+prefixes JSON metadata with its little-endian byte length, then appends
 raw texture buffers in block order. Each unique texture is transferred once, regardless
 of sprite count. The bridge writes directly into its owned buffer; decoded texture
 slices retain that allocation until their last image is released. Sixel placements are composited into a bounded viewport
@@ -357,7 +359,12 @@ and reads cropped rows without allocating another complete raster. An opaque,
 unscaled front image uses vectorized alpha checks and bulk row copies; transparent
 overlays retain the general compositing path.
 Fully covering crops derive their identity from the source instead of hashing the
-entire bitmap again. AppKit draws cached Core Graphics images directly.
+entire bitmap again. AppKit draws cached Core Graphics images directly. Its image
+cache releases entries absent from the latest frame and enforces limits of 256
+images and 32 MiB of decoded row storage. These bounds exclude shared frame buffers
+and compositor surfaces; process memory is measured separately. The
+[Mac qualification record](macos-qualification.md) separates checked behavior,
+initial regression limits, and outstanding hardware evidence.
 The desktop retains a completed presentation during synchronized output, with a
 one-second wakeup deadline, so a frame cannot expose the middle of an application's
 redraw or remain held indefinitely when output stops before the update is closed.

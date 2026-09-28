@@ -8,6 +8,15 @@ enum SmokeFailure: Error {
 @MainActor
 struct MacSmoke {
     static func main() {
+        if CommandLine.arguments.dropFirst().first == "--image-cache" {
+            do {
+                try ImageCacheQualification.run(Array(CommandLine.arguments.dropFirst(2)))
+                exit(0)
+            } catch {
+                FileHandle.standardError.write(Data(("Image cache qualification failed: \(error)\n").utf8))
+                exit(1)
+            }
+        }
         let application = NSApplication.shared
         let recording = CommandLine.arguments.contains("--record-output")
         application.setActivationPolicy(recording || CommandLine.arguments.contains("--accessibility-window") ? .regular : .prohibited)
@@ -191,6 +200,7 @@ struct MacSmoke {
         let graphic = try await wait(controller) { $0.blocks[0].images.contains(where: { $0.format == 32 }) }
         try assertImagePixels(controller.terminal, block: graphic.blocks[0], path: image + ".graphics.png")
         try await exerciseGraphics(controller)
+        try ImageCacheQualification.run([image, image + ".graphics.png", image + ".animation.png"])
         try await exerciseCursorBlink(controller)
         controller.splitRight()
         _ = try await wait(controller) { $0.blocks.count == 2 }
