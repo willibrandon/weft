@@ -6,11 +6,12 @@ Living tracker for the weft build. Check items off as they land; keep the
 ## Now
 
 - Phases 2 and 3, the .NET 11 migration, and startup prompt synchronization have landed on main. The current branch has direct TUI shortcuts, one Help panel, and an explicit Exit weft button; the final shortcut design remains under discussion.
-- Native applications are the primary product direction. The `feat/macos-app` branch implements the [desktop app](standalone-app.md) with AppKit, a shared client core, and a Native AOT C interface. Windows and Linux follow later; the CLI and terminal attachment remain companion interfaces.
+- Native applications are the primary product direction. The `feat/macos-app` branch implements the [desktop app](standalone-app.md) with AppKit, a shared client core, and a Native AOT C interface, and with Microsoft UI Reactor on Windows. Linux follows; the CLI and terminal attachment remain companion interfaces.
+- The Windows app covers the parity inventory: sessions, tabs, splits, Find, Commands, Settings, history, selection, composition, UI Automation text, Kitty and Sixel graphics, cursor styles, and reconnect. 54 window tests drive real windows inside the test process through the same entry points real input reaches and check composed pixels. They found invisible wide and emoji text, Find replacing the terminal surface, typing dropped after a cancelled composition, and pasted lines that never ran; all are fixed. The published folder is 111 MB after dropping unused Windows App SDK components. The installed MSIX lifecycle needs an elevated run, and the new Windows CI jobs need their first run.
 - The [native app parity contract](desktop-parity.md) maps the Mac implementation to Reactor on Windows and GTK4 on Linux. Shared behavior, native adaptations, installed-app acceptance, and the remaining Mac hardware checks are explicit. The Mac milestone is committed as `2cd2b06`.
 - CodeQL now has a manual Swift build and analysis job on macOS alongside C# analysis. Both enforce zero findings. Dependabot already covers NuGet and Actions; there are no Swift package dependencies to monitor yet. The new workflow still needs its first GitHub run.
 - Native visual iteration uses one app instance. The Mac app now has retained history, native scrollbars and Find, selection across scrollback, a shared command catalog, Commands search, configurable Mac shortcuts, pane divider dragging, terminal mouse input, animated Kitty and Sixel graphics, and automatic reconnect. Tabs expose close buttons on hover. Compact widths, persistent tab boundaries, and centered visible glyphs address ambiguous repeated titles and button-cell alignment. Focused Swift DocC comments describe lifetime and input contracts. An original vector icon is included in the bundle.
-- Installation work targets local development and testing. Mac builds produce an ad hoc signed app and DMG without certificates or notarization. CI exercises an app copied out of that DMG. Windows development MSIX and Linux native packages are planned with their frontends. Store distribution, public signing, and update services are deferred.
+- Installation work targets local development and testing. Mac builds produce an ad hoc signed app and DMG without certificates or notarization. CI exercises an app copied out of that DMG. Windows builds produce an unsigned development MSIX whose server runs outside the package, so upgrades and removal leave sessions running. Linux native packages are planned with that frontend. Store distribution, public signing, and update services are deferred.
 - Mac scrolling uses an AppKit scroll view to manage the native thumb and its visibility. A standalone overlay scroller had shown its full-height track without a visible thumb even with the correct history count. Frame delivery continues during thumb tracking, and arriving frames cannot pull the thumb away from the pointer. Page clicks step through history directly so a delayed animation cannot compete with a later drag. Cached font measurements and skipping default background fills reduced median AppKit drawing from 54.9 ms to 4.8 ms in the same 130-column, 37-row history sample. Broader workload and hardware budgets remain open.
 - Selection can span viewports and autoscroll during a held drag. External accessibility exposes a read-only terminal with Unicode selection. Composition replacement and pane-change cancellation, plus installed French/German/Spanish key translation, have real PTY coverage. Interactive VoiceOver, physical keyboards, input-method candidate windows, and movement between physical displays remain manual qualification work. Accessibility tests never enable VoiceOver themselves.
 - Frame conversion runs off the UI thread. ABI 4 separates raw shared textures from compact JSON metadata, writes directly into owned native storage, and retains texture slices without further pixel copies. Closed windows explicitly release snapshots, image caches, backing layers, and content. Earlier five-client profiling reduced physical footprint from 141.5 MiB to 87.6 MiB. Current qualification also measures 16 tabs, sustained output and typing, scrolling, resize, multiple windows, and forced client termination; portable release budgets remain open.
@@ -81,7 +82,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [ ] Multi-client live sharing with read-only observers
 - [ ] Remote attach over forwarded sockets
 - [ ] Session recording and replay
-- [ ] Native AOT release packaging for linux, macOS, windows (linux-x64 publish verified clean)
+- [ ] Native AOT release packaging for linux, macOS, windows (linux-x64 and win-x64 publish verified clean)
 
 ## Standalone desktop track
 
@@ -94,10 +95,12 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [x] Add the first AppKit terminal window with menus, tab selection, splits, resize, and workload-preserving reattach
 - [x] Create and switch sessions from the native menu while preserving existing shell processes
 - [x] Add a shared desktop command catalog for native menus and command search
-- [ ] Prove real terminal views on Reactor and GTK4
+- [x] Prove real terminal views on Reactor
+- [ ] Prove real terminal views on GTK4
 - [ ] Validate rendering, historical scrollback, selection, graphics, input methods, clipboard, and accessibility
 - [x] Review and implement the Mac shortcut defaults, configurable shortcuts, native menus, command search, tabs, sessions, and splits
-- [ ] Review Windows and Linux shortcut mappings alongside those frontends
+- [x] Review and implement the Windows shortcut mapping, following Windows Terminal
+- [ ] Review the Linux shortcut mapping alongside that frontend
 - [x] Add bounded history viewing, Find, retained visible selection, terminal mouse input, and workload-preserving reconnect on macOS
 - [x] Extend selection across scrollback, use current viewport dimensions after resize, and stop edge autoscroll on mouse release
 - [x] Add native hover close controls without switching inactive tabs before confirmation
@@ -108,9 +111,12 @@ Living tracker for the weft build. Check items off as they land; keep the
 - [x] Measure sustained output and typing across 16 tabs; verify resizing, multiple windows, simulated backing scales, and workload-preserving client crash recovery
 - [x] Add an original app icon and focused Swift DocC documentation
 - [x] Add AppKit and published Native AOT bridge smoke tests, plus macOS ARM64 and Intel CI jobs
-- [ ] Add Windows and Linux desktop UI automation and published-app coverage for ARM64 and x64
+- [x] Add Windows desktop UI automation and published-app tests, with x64 and ARM64 CI jobs
+- [ ] Add Linux desktop UI automation and published-app coverage for ARM64 and x64
 - [x] Add a local macOS DMG and installed-bundle smoke coverage without signing credentials
-- [ ] Add Windows unsigned development MSIX and Linux local package installation tests
+- [x] Add Windows unsigned development MSIX packaging and an installed lifecycle test
+- [ ] Qualify the Windows installed lifecycle from elevated runs on x64 and ARM64
+- [ ] Add Linux local package installation tests
 - [x] Qualify Mac installation, upgrade, removal, and reinstall with running sessions; defer public signing and distribution until needed
 - [ ] Measure desktop performance and resource budgets separately from the CLI and server; assess optional musl desktop packages after server and CLI validation
 
@@ -251,6 +257,8 @@ offscreen AppKit captures do not reproduce composited toolbar materials.
 
 | Date | What | Result |
 | --- | --- | --- |
+| 2026-09-28 | Windows app with Microsoft UI Reactor | 54 window tests pass twice in a row, against both the JIT server and the bundled Native AOT server. They drive keys, text, composition, pointer and wheel input, menus, tabs, dialogs, and the scroll bar, and capture composed pixels with Windows Graphics Capture. Fixes from those tests: wide and emoji cells drew nothing because text drawn at a point was clipped to an empty box; Find replaced the terminal surface because unkeyed Reactor children match by position; a cancelled composition discarded the next typed text; pasted line feeds never pressed Enter; a rejected-input notice outlived reconnection; dialogs opened from menus returned focus to the closed menu. The win-x64 app folder fell from 169 MB to 111 MB with only the WinUI and windowing components. The MSIX builds; its elevated lifecycle run and the Windows CI jobs are pending |
+| 2026-09-28 | Windows server and portable suite | Shells get a real console when the server's standard handles are redirected, and the detached server inherits no caller handles or job. A file-based test shell replaces `/bin/sh`; it reads console input as UTF-16 so characters outside the Basic Multilingual Plane reach tests intact. The portable suite passes on Windows |
 | 2026-09-28 | ARM64 installed app after cache and compiler changes | DMG installation, native rendering and input, resource limits, two attachments, forced client termination, upgrade, removal, and reinstall all pass. The 16-tab workload measured input-to-paint p95 50.8 ms, tab switch p95 81.3 ms, and 156.2 MiB resident memory after closing its tabs. Cache tests process 46,592,512 decoded bytes through real capture files while staying within the 32 MiB bound. One physical display was connected; VoiceOver was off. Both formatting checks and repository policy pass. Native Intel and Swift CodeQL await GitHub execution |
 | 2026-09-28 | Native client optimization and graphics limits | The client bridge now uses speed-focused AOT compilation, matching the server. At 165×43 cells on Apple M4 Pro, two 800-bird runs measured Sixel at 56.2/53.1 frames/s, 117.6/117.3% client CPU, and 331.2/330.4 MiB resident memory; the preceding balanced build measured 49.4 frames/s, 130.7%, and 341.8 MiB. Sampled footprint peaks of 619.2/604.9 MiB do not establish a reduction. Kitty measured 59.9/57.3 frames/s. Both runs pass the initial limits and keep graphics inside the viewport. The library grows by 589,792 bytes. All 547 .NET tests pass; final installed-app and GitHub checks remain underway |
 | 2026-09-27 | Native image retention and regression limits | Swift compilation with warnings as errors and the cache check using real capture files passed. Obsolete native images are removed when frames change; retained decoded row storage is bounded separately from process footprint. Workload limits, JSON graphics measurements, host architecture records, and CI artifact retention were added. At this point live-server validation was blocked by denied socket binding and GitHub was unreachable. The earlier 547-test and installed-app results predated these changes; no new Sixel throughput or process-memory result was claimed |

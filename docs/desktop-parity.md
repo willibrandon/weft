@@ -6,9 +6,9 @@ platform adaptations they need, and the evidence required before calling a
 feature complete. Architecture lives in [standalone-app.md](standalone-app.md);
 current work and measurements live in [progress.md](progress.md).
 
-macOS is implemented and undergoing qualification. Windows and Linux are planned;
-neither has a working frontend yet. A shared implementation or a passing Mac test
-does not establish that a feature works in either future application.
+macOS and Windows are implemented and undergoing qualification. Linux is planned
+and has no frontend yet. A shared implementation or a passing test on one platform
+does not establish that a feature works on another.
 
 ## What parity means
 
@@ -95,21 +95,20 @@ features are not implicitly declared native UI features by this table.
 
 ## Native platform mapping
 
-| Area | macOS, implemented | Windows, planned | Linux, planned |
+| Area | macOS, implemented | Windows, implemented | Linux, planned |
 | --- | --- | --- | --- |
 | Application | Swift and AppKit | C# and Microsoft UI Reactor over WinUI | Small C frontend using GTK4 |
 | Core access | Native AOT C interface | Direct managed core, published with Native AOT | Native AOT C interface |
-| Terminal surface | Custom AppKit view, CoreText and CoreGraphics | Stable hosted drawing surface; prototype DirectWrite/DirectX integration | Custom GTK widget; prototype GTK snapshot drawing with Pango text |
+| Terminal surface | Custom AppKit view, CoreText and CoreGraphics | Stable control over a Win2D virtual canvas; glyph runs at cell positions, DirectWrite for complex cells | Custom GTK widget; prototype GTK snapshot drawing with Pango text |
 | Chrome | macOS menu bar, toolbar, sheets, native window controls | Windows title bar, tabs, menus/flyouts, dialogs, snap and system controls | GTK menus, dialogs and tabs; respect desktop decoration and window-manager conventions |
-| Composition | `NSTextInputClient` | Windows text services integrated with the hosted surface | `GtkIMContext`, preedit/commit/cancellation, cursor geometry |
-| Accessibility | AppKit accessibility and VoiceOver | UI Automation text/selection providers and Narrator | GTK accessible text and AT-SPI, exercised with Orca |
-| Scrolling | AppKit scrollbar and wheel/trackpad events | Native scrollbar, wheel increments, precision touchpad and DPI conversion | GTK adjustment/scrollbar, discrete and smooth scrolling on Wayland and X11 |
-| Preferences | macOS defaults and native font panel | Per-user Windows settings and native settings controls | XDG configuration and GTK settings controls |
-| Installation | Ad hoc signed `.app` in DMG | Unsigned development MSIX | Local `.deb` and `.rpm` packages |
+| Composition | `NSTextInputClient` | Windows text services through a borderless text box at the caret | `GtkIMContext`, preedit/commit/cancellation, cursor geometry |
+| Accessibility | AppKit accessibility and VoiceOver | UI Automation text pattern and ranges from the terminal's peer, and Narrator | GTK accessible text and AT-SPI, exercised with Orca |
+| Scrolling | AppKit scrollbar and wheel/trackpad events | Native scroll bar, 120-unit wheel detents and accumulated precision deltas | GTK adjustment/scrollbar, discrete and smooth scrolling on Wayland and X11 |
+| Preferences | macOS defaults and native font panel | `%LOCALAPPDATA%\weft\desktop.json` and a native Settings window | XDG configuration and GTK settings controls |
+| Installation | Ad hoc signed `.app` in DMG | Unsigned development MSIX; the server runs from a copy outside the package | Local `.deb` and `.rpm` packages |
 
-Drawing backend choices for Windows and Linux remain prototype decisions. They
-must meet terminal behavior and measured responsiveness before becoming the
-production path. Keep cell output out of general UI reconciliation: no component
+The Linux drawing backend remains a prototype decision. It must meet terminal
+behavior and measured responsiveness before becoming the production path. Keep cell output out of general UI reconciliation: no component
 or native text control per terminal cell.
 Batch glyphs at explicit cell positions, preserving a fallback for complex text
 and individual clipping. The Mac renderer avoids a separate AppKit text layout
@@ -145,6 +144,13 @@ helper as C# automation, explain elevation, and preserve real package identity,
 Start menu integration, resources and uninstall behavior. This development identity
 is not the eventual signed release identity; migration between them needs its own
 test. No certificate creation or trust-store changes are part of local setup.
+
+The Windows app now covers every capability row. Its server runs from a copy in the
+user's local data, started outside the package, because Windows ends a package's
+processes when the package updates or is removed. A Reactor reconciliation detail
+matters for any conditional layout: children are matched by position unless keyed,
+so a row that appears before the terminal surface must be keyed or it replaces the
+surface and its session connection.
 
 ### Linux
 
@@ -216,6 +222,30 @@ Dependabot currently covers NuGet and Actions; Swift package updates become rele
 only if a `Package.swift` introduces dependencies. Reactor uses the existing NuGet
 entry. Review native dependency coverage when adding the Linux manifests.
 
+Windows carries the same groups into `tests/Weft.Desktop.Windows.Tests`, which drives
+real windows through their input entry points and UI Automation:
+
+| Scenario group | Windows evidence |
+| --- | --- |
+| Workspaces and commands | `WorkspaceTests`: splits, tabs, inactive tab close, context menu, divider drag, Find, Commands, sessions, rename, broadcast, reattach, narrow windows |
+| Scrollback and selection | `TerminalHistoryTests` and `TerminalSelectionTests`: scroll bar through UI Automation, wheel and precision deltas, drag autoscroll, selection held during output |
+| Fonts and redraw | `TerminalRenderingTests` pixel captures: prompt-row repaint and exact erase, true color wide text; `SettingsTests` font and color changes |
+| Keyboard and accessibility | `TerminalInputTests`, `TerminalAccessibilityTests`, `ShortcutTests`, and the cursor blink pixel test |
+| Graphics | `TerminalRenderingTests`: Kitty placement, animation, fractional size, crop, orientation, deletion, and Sixel |
+| Resource use and lifecycle | `WindowLifecycleTests`: shared attachments through resizes, released frames and images, window churn, server loss and return |
+| Installation | `Build-WindowsApp.cs`, `Package-WindowsApp.cs`, `Test-WindowsApp.cs` installed-package lifecycle |
+
+## Remaining Windows qualification
+
+| Open check | Completion evidence |
+| --- | --- |
+| Installed package lifecycle | `Test-WindowsApp.cs -- --package` passes from an elevated terminal on x64 and ARM64, with the server and shells outside the package |
+| Narrator | Interactive reading, range navigation, selection and Copy, native controls, Find and dialog focus |
+| Candidate windows | Japanese and Chinese input methods with candidates anchored at the caret through resize, scroll, and pane switches |
+| Physical layouts | Non-US keyboards with AltGr, dead keys, and repeat in the terminal and command search |
+| Multiple displays | Move a live window between displays with different scaling, including composition, graphics, and scrolling |
+| Performance budgets | Launch, reattach, input-to-paint, tab switching, output and graphics frame rate, idle CPU, and memory after window churn, measured on x64 and ARM64 |
+
 ## Remaining Mac qualification
 
 The automated baseline includes installed ARM64 and Intel-under-Rosetta runs,
@@ -240,10 +270,8 @@ check, not a simulated hardware pass.
 
 ## Port delivery order
 
-Finish Mac qualification and keep this inventory current. For Windows, first prove
-an AOT-published Reactor window against a real server, including text input and
-reattach, then carry over the capability inventory with native controls and MSIX
-tests. Follow with GTK on Linux, proving Wayland/X11 input and accessibility early.
+Finish Mac and Windows qualification and keep this inventory current. Follow with
+GTK on Linux, proving Wayland/X11 input and accessibility early.
 Each frontend must complete its native input, rendering and lifecycle foundation
 before expanding its chrome.
 

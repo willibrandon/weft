@@ -1,7 +1,12 @@
 # Contributing
 
 Install any compatible .NET 11 SDK, including previews. Native AOT publishing on Linux
-also needs `clang` and the zlib development headers.
+also needs `clang` and the zlib development headers. On Windows it needs Visual Studio or
+its Build Tools with the Desktop development with C++ workload; MSIX packaging also uses
+the Windows SDK's MakeAppx and MakePri. The .NET SDK locates the linker through
+`vcvarsall.bat`, which fails when `PATH` exceeds the command prompt's limit of about
+8,000 characters, and publishing then reports that the platform linker was not found.
+Shorten `PATH` if that happens.
 
 Then run:
 
@@ -41,14 +46,14 @@ The selection applies only to the job through `DEVELOPER_DIR`.
 App and native test compilation use Swift batch mode with concurrency based on
 the host's processor count, avoiding repeated parsing for every individual file.
 
-CodeQL scans C# on Linux and builds the Mac app for Swift analysis on macOS. Both
-jobs run the security and quality queries and fail on any finding. The Swift build
+CodeQL scans C# on Linux, builds `Weft.Windows.slnx` on Windows so the Reactor app is
+extracted with its WinUI types, and builds the Mac app for Swift analysis on macOS. Each
+job runs the security and quality queries and fails on any finding. The Swift build
 prepares dependencies with `Build-MacApp.cs --prepare-analysis`, then traces Swift
 compilation using the generated response file. It reads the C bridge directly with
 `-disable-bridging-pch`, avoiding compiler-specific precompiled headers. Scanning does not open a terminal
 window. Add native Linux
-C/C++ analysis with that frontend, and validate Windows-specific C# extraction
-on a Windows runner when the Reactor project lands.
+C/C++ analysis with that frontend.
 
 Builds explicitly enable all code-style analyzers and treat their findings as errors.
 CI follows the rolling .NET 11 preview channel and records `dotnet --info` so its SDK
@@ -61,6 +66,22 @@ steps use this setting; it does not affect Native AOT publishing of weft.
 
 Repository automation is implemented only as .NET file-based C# apps under
 `scripts/`. Shell, PowerShell, batch, and command scripts are not used.
+
+The Windows app and its tests build only on Windows, from `Weft.Windows.slnx`:
+
+```console
+dotnet build Weft.Windows.slnx
+dotnet test --project tests/Weft.Desktop.Windows.Tests
+dotnet format Weft.Windows.slnx whitespace --verify-no-changes
+dotnet format Weft.Windows.slnx style --verify-no-changes
+```
+
+The window tests host the app inside the test process and open real windows behind the
+active window, each against a private server, without taking the keyboard or changing
+your preferences or sessions. They capture pixels with Windows Graphics Capture, which
+needs Windows 10 version 21H2 or later. `Test-WindowsApp.cs` also starts the published
+app in front, so keep typing elsewhere until it finishes. Its `--package` option installs
+the development MSIX and needs an elevated terminal.
 
 For Mac redraw investigation, `dotnet run --file scripts/Test-MacApp.cs -- --record-output`
 opens one temporary window against an isolated server, runs `ls` in Nushell for six

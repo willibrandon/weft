@@ -7,8 +7,8 @@ selection, and workspace controls; the structured control protocol lets people,
 scripts, and agents work with the same sessions.
 
 This document is the source of truth for architecture and behaviour. The
-[native app design](standalone-app.md) is the main product direction: macOS first,
-then Windows and Linux, over a shared client core. Current installation work targets
+[native app design](standalone-app.md) is the main product direction: macOS and
+Windows, then Linux, over a shared client core. Current installation work targets
 local development and testing with ordinary platform packages and no certificate
 setup. Public distribution and stores are outside the current scope.
 Progress lives in [progress.md](progress.md).
@@ -341,6 +341,11 @@ The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching
 to an older running server; existing terminal processes keep their shell and state.
+The Windows client is a Microsoft UI Reactor app that uses `Weft.Client.Core` directly.
+Reactor renders only the window chrome; the terminal surface is a stable control whose
+frames invalidate changed rows of a Win2D virtual canvas, so output never passes
+through reconciliation. Text drawing, input, composition, UI Automation, preferences,
+and packaging are described in the [native app design](standalone-app.md#windows-implementation).
 The desktop worker coalesces terminal and control events and wakes AppKit through
 the versioned native callback bridge. Frame serialization and decoding run on a
 bounded worker; AppKit receives only the latest immutable result. A main run-loop source delivers frames in common
@@ -765,13 +770,15 @@ No mocking libraries, no hand-written substitutes for production services, no sk
 
 Native AOT per RID (`linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64`,
 `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`) as a `dotnet tool` package `weft` and as
-GitHub release archives. Windows relies on Hex1b's ConPTY proxy and AF_UNIX support and is
-best-effort until its tests run in CI.
+GitHub release archives. Windows relies on Hex1b's ConPTY proxy and AF_UNIX support. The
+server gives shells a real console even when its own standard handles are redirected, and
+the portable suite runs on Windows x64 and ARM64 in CI.
 
 Standalone desktop applications have separate bundles, native dependencies, and platform
 validation. Their [distribution plan](standalone-app.md#builds-and-distribution) covers
 ARM64 and x64 on all three operating systems. Windows desktop support requires real
 Windows test coverage before release; CLI archive publishing alone does not establish it.
+The Windows window tests and installed-package lifecycle test provide that coverage.
 
 ## 15. Phases
 

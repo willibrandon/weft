@@ -1,8 +1,8 @@
 # Standalone desktop app
 
-Status: native applications are the primary product direction. macOS is in progress;
-Windows and Linux follow later. Installation currently targets local development and
-testing, without store submission or signing credentials. This extends the
+Status: native applications are the primary product direction. macOS and Windows
+are implemented and in qualification; Linux follows. Installation currently targets
+local development and testing, without store submission or signing credentials. This extends the
 [weft design](design.md). Delivery is tracked in [progress.md](progress.md).
 The [native app parity contract](desktop-parity.md) inventories implemented Mac
 behavior and the corresponding Windows and Linux work, including native adaptations
@@ -172,6 +172,78 @@ and closes and reattaches a window. Test windows do not restore or save user win
 placement. The .NET integration tests also verify raw
 Escape, Control+B, and F1 bytes and preservation of shell process identities.
 CI builds and runs the native test on ARM64 and Intel macOS runners.
+
+## Windows implementation
+
+`src/Weft.Desktop.Windows` is a C# app built with Microsoft UI Reactor over WinUI 3.
+It references `Weft.Client.Core` directly, so frames stay managed objects rather than
+crossing the C interface. The app references only the WinUI and windowing components of
+the Windows App SDK and ships them self-contained, which keeps the published folder near
+110 MB instead of carrying unused AI and machine learning runtimes. `Program.cs`
+initializes that runtime by full path before any window exists and rejects every
+argument, so the app can never act as the server. Two workarounds apply to the current
+releases and should be rechecked when they update: the Native AOT publish copies the
+app's resource index itself, and `Program.cs` constructs one array type the .NET 11 RC1
+compiler's scanner fails to predict.
+
+Each window is one Reactor component. The title bar holds the session menu, a WinUI
+`TabView`, and a menu of every catalog action with its shortcut. Find, the empty state,
+the connection status, and dialogs are keyed children of one grid, so opening Find
+never replaces the terminal surface. Commands is a `ContentDialog` with a search field;
+dismissing a dialog returns focus to the text field that had it, or to the terminal.
+
+The terminal surface is a stable control that Reactor never re-renders. Frames invalidate
+changed rows of a Win2D `CanvasVirtualControl`, which keeps the rest of its pixels.
+Ordinary text is drawn as glyph runs at fixed cell advances, with the bundled Cascadia
+Mono NF face filling symbols the chosen font lacks. Wide and complex cells use DirectWrite
+text clipped to their cells. Kitty and Sixel rasters come from the shared core and are
+cached on the device with count and byte limits. A borderless text box follows the
+caret: typed text, AltGr, dead keys, and input method composition arrive through it,
+composition shows in place until it commits, and a pane change cancels it. Other keys
+become the named keys the server encodes. The terminal's automation peer implements
+the UI Automation text pattern over the visible cells, and the history scroll bar is
+a native `ScrollBar` that also moves through UI Automation.
+
+Preferences live in `%LOCALAPPDATA%\weft\desktop.json`: font, size, colors, and
+shortcuts. Shortcuts follow Windows Terminal. Plain Ctrl and Alt letters always reach
+the terminal, so a recorded shortcut must combine Shift with Ctrl or Alt.
+
+| Action | Default |
+| --- | --- |
+| Commands | Ctrl+Shift+P |
+| Find | Ctrl+Shift+F |
+| New Tab, Next Tab, Previous Tab | Ctrl+Shift+T, Ctrl+Tab, Ctrl+Shift+Tab |
+| Split Right, Split Below | Alt+Shift+Plus, Alt+Shift+Minus |
+| New Window, Settings | Ctrl+Shift+N, Ctrl+Comma |
+| Copy, Paste, Select All | Ctrl+Shift+C, Ctrl+Shift+V, Ctrl+Shift+A, plus Ctrl+Insert and Shift+Insert |
+| Larger Text, Smaller Text | Ctrl+Plus, Ctrl+Minus |
+
+Pasting sends each line with Enter as a carriage return, as Windows Terminal does,
+because Windows consoles do not treat a line feed as Enter.
+
+Build with `dotnet run --file scripts/Build-WindowsApp.cs`, optionally followed by
+`-- --arch x64` or `-- --arch arm64`. It publishes the app and the CLI with Native AOT
+and assembles `artifacts/windows/win-<architecture>/Weft` with `weft-server.exe`, the
+pseudo-console host it needs, the bundled font with its license, and rendered icons. It
+checks that the server is unchanged and distinct from the app and that the app refuses
+server arguments. ARM64 builds run on ARM64 Windows, which can also build x64.
+`Package-WindowsApp.cs` wraps that folder in an unsigned development MSIX with the
+reserved development publisher, Start menu tiles, and a `weft-desktop` execution alias.
+
+Windows ends a package's processes when it updates or removes the package. The packaged
+app therefore copies the server into `%LOCALAPPDATA%\weft\server\<package>` and starts
+it outside the package, so upgrading or uninstalling the app leaves sessions running.
+
+`tests/Weft.Desktop.Windows.Tests` runs real windows inside the test process on one UI
+thread, each against its own server and the file-based test shell. Windows open behind
+the active window and never take the keyboard. Tests drive the same key, text,
+composition, pointer, and wheel entry points real input reaches, operate menus, tabs,
+dialogs, and the scroll bar through UI Automation, and check composed pixels with
+Windows Graphics Capture. `Test-WindowsApp.cs` runs them against the bundled server,
+then starts the published app with a minimal PATH, closes it, and reopens it while its
+server and shell keep running. With `--package` it installs, upgrades, removes, and
+reinstalls the MSIX. Windows installs unsigned packages with executables only for an
+administrator, so that option needs an elevated terminal.
 
 ## Visual and interaction acceptance
 
@@ -444,9 +516,9 @@ Apple's [ad hoc signature](https://developer.apple.com/documentation/security/se
 uses no signing identity. Windows supports
 [unsigned development packages](https://learn.microsoft.com/en-us/windows/msix/package/unsigned-package)
 with a dedicated publisher OID and `AllowUnsigned`; that development identity differs
-from a later signed identity. Implement the Windows install helper in C# using platform
-deployment APIs and document its privilege requirement when the Windows frontend lands.
-Do not require testers to create or trust a certificate.
+from a later signed identity. The Windows install helper,
+`Test-WindowsApp.cs -- --package`, uses the platform deployment API and needs an
+administrator. Do not require testers to create or trust a certificate.
 
 Public distribution is a later milestone. Revisit Developer ID and notarization,
 Windows package signing, repository signing, and update channels then. Store submission
@@ -465,9 +537,8 @@ ARM64 support. Record toolchain versions in CI output without exact SDK pins.
 
 ## Delivery and verification
 
-The shared client boundary and first Mac implementation are in place. Finish Mac
-qualification, then implement Windows and Linux in that order using the
-[parity contract](desktop-parity.md). Begin each port with a minimal window that
+The shared client boundary and the Mac and Windows apps are in place. Finish their
+qualification, then implement Linux using the [parity contract](desktop-parity.md). Begin each port with a minimal window that
 attaches to a real session, renders output, accepts input, resizes, closes, and
 reattaches to the same process. Prove published Native AOT integration at this stage.
 
