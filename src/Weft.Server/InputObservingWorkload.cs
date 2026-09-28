@@ -10,6 +10,7 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     private const int LineBreaksPerBatch = 8;
     private readonly SemaphoreSlim _outputProcessing;
     private readonly Hex1bTerminalChildProcess _process;
+    private readonly CursorControlReader _cursorControls = new();
     private ReadOnlyMemory<byte> _pendingOutput;
     private CancellationTokenRegistration _processingCancellation;
     private int _pendingBytes;
@@ -37,6 +38,11 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     internal event Action<ReadOnlyMemory<byte>>? InputWritten;
 
     /// <summary>
+    /// Gets or sets the callback invoked after a returned batch has been applied, before reading another.
+    /// </summary>
+    internal Func<CursorControlReader, CancellationToken, ValueTask>? OutputApplied { get; set; }
+
+    /// <summary>
     /// Gets whether output has been read but not yet applied to the terminal.
     /// </summary>
     internal bool HasPendingOutput => Volatile.Read(ref _pendingBytes) != 0 || Volatile.Read(ref _applying) != 0;
@@ -45,6 +51,10 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     public async ValueTask<ReadOnlyMemory<byte>> ReadOutputAsync(CancellationToken ct = default)
     {
         await _processingCancellation.DisposeAsync().ConfigureAwait(false);
+        if (Volatile.Read(ref _applying) != 0 && OutputApplied is { } applied)
+        {
+            await applied(_cursorControls, ct).ConfigureAwait(false);
+        }
         CompleteOutput();
         ct.ThrowIfCancellationRequested();
         if (_pendingOutput.IsEmpty)
@@ -57,7 +67,7 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        // Each scroll can record screen-wide changes. Small batches keep other
+        // Each scroll touches the screen. Small batches keep other
         // terminals responsive without fragmenting ordinary graphics payloads.
         int length = _pendingOutput.Length;
         int lines = 0;
@@ -70,9 +80,11 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
             }
         }
 
+        length = _cursorControls.Read(_pendingOutput.Span[..length]);
+
         // Ordinary character echo and graphics do not need to wait behind
         // scrolling terminals. The slot bounds newline-driven screen changes.
-        if (lines != 0)
+        if (_pendingOutput.Span[..length].Contains((byte)'\n'))
         {
             await _outputProcessing.WaitAsync(ct).ConfigureAwait(false);
             Volatile.Write(ref _processing, 1);

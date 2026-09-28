@@ -111,13 +111,17 @@ separately from input and drawing latency.
 Failed native runs sample the private server before shutdown and retain its memory
 summary with the qualification artifacts, so runner-specific stalls can be diagnosed.
 
-weft's presentation filter projects ordinary cursor restores to the server's applied cursor
-coordinates. A view can attach while a shell is drawing a temporary startup prompt, after
-the shell saved its cursor but before it restores and erases that prompt. Explicit row and
-column positioning keeps that view aligned with captures from the server, including after
-a resize. Saves or restores at the right edge and sequences using origin or horizontal
-margin modes retain their original tokens so positioning cannot discard pending wrap or
-change margin semantics.
+weft observes completed output at the next workload read, after the terminal has applied
+the preceding batch. Ordinary output follows the raw byte path without collecting cell
+change records solely for revision and cursor bookkeeping. A bounded control reader ends
+batches at cursor saves, restores, and relevant mode changes, while treating string and
+graphics payloads as opaque. After a restore, weft sends the server's resulting row and
+column before allowing subsequent workload bytes through. A view that attached after the
+save therefore erases its temporary startup prompt at the same position as the server.
+Saves or restores at the right edge and sequences using origin or horizontal margin modes
+retain their original semantics so positioning cannot discard pending wrap or change margins.
+Oversized or unrecognized control forms disable position projection until modes are known
+again; bytes are never discarded by the observer.
 
 ### 3.2 Resize authority
 
@@ -324,7 +328,7 @@ so output completion failures can be distinguished from presentation delays.
 The executable uses server GC with the runtime's adaptive heap sizing for concurrent
 terminal workloads; the native client retains workstation GC. Server output processing
 admits one newline-containing batch at a time and yields
-after at most eight line breaks, limiting concurrent screen-change allocations
+after at most eight line breaks, bounding work before other terminals get a turn
 and giving other terminals a turn. Character echo and graphics bytes without line
 breaks bypass that queue. PTY reads, input, and client transport remain independent. Pending
 bytes retain their order; cancellation and terminal failure release the processing

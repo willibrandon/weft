@@ -197,6 +197,15 @@ ARM64 CI passed the complete installed suite with loaded input p95 102.3 ms and
 tab switching p95 35.2 ms. Native Intel passed input and drawing limits but still
 timed out on output completion. Failed native runs now retain a three-second sample
 and memory summary of the private server before cleanup, to identify that remaining stall.
+The Intel profile identified per-cell change recording requested by weft's presentation
+filter, with a 553.8 MiB peak server footprint. Revisions now advance at the next workload
+read, after application, and cursor controls are observed at bounded byte boundaries.
+This retains authoritative restore coordinates without collecting unused cell changes.
+All 552 tests pass, including real-process replay and file-based hostile-payload and
+fragmentation checks. The installed-DMG suite completes the paced producer in 2.4 seconds,
+with loaded input p95 25.1 ms and tab switching p95 8.2 ms. Kitty and Sixel both measured
+60 frames/s in the same 800-bird workload; client resident memory was 154.7 and 331.9 MiB.
+Native Intel CI remains the required cross-architecture check.
 A concurrent real-file regression checks that output remains complete and ordered
 as commands exit. Each server owns its processing slot; independent servers do not
 share it. Exit draining also accounts for queued output. All 548 .NET tests pass.
