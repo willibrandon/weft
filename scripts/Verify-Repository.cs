@@ -114,7 +114,9 @@ static void VerifySources(string root, IReadOnlyList<string> tracked, ICollectio
         string code = Patterns.StringLiterals().Replace(text, string.Empty);
         int types = typeDeclaration.Count(code);
         bool assemblyAttributesOnly = types == 0 && text.Contains("[assembly:", StringComparison.Ordinal);
-        if (types != 1 && !assemblyAttributesOnly)
+        // An entry point written as top-level statements declares its program implicitly.
+        bool topLevelProgram = types == 0 && Path.GetFileName(path) == "Program.cs" && !code.Contains("namespace ", StringComparison.Ordinal);
+        if (types != 1 && !assemblyAttributesOnly && !topLevelProgram)
         {
             failures.Add($"Each C# file holds exactly one type, nested types included: {path} declares {types}.");
         }
