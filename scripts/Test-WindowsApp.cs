@@ -27,6 +27,7 @@ namespace Weft.Scripts;
 internal static partial class TestWindowsApp
 {
     private const int AppModelErrorNoPackage = 15700;
+    private const string PackageName = "Weft.Development";
     private const int QueryLimitedInformation = 0x1000;
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(30);
 
@@ -86,20 +87,45 @@ internal static partial class TestWindowsApp
             "OS: " + RuntimeInformation.OSDescription + "\nHost architecture: " + RuntimeInformation.OSArchitecture
             + "\nApp target: " + arch + "\n").ConfigureAwait(false);
 
-        // The window tests run against the bundled server the app ships with.
-        _ = await RunAsync("dotnet", ["test", "--project", "tests/Weft.Desktop.Windows.Tests"],
+        // The window tests run against the bundled server the app ships with, and their results are kept.
+        await RunVisibleAsync("dotnet", ["test", "--project", "tests/Weft.Desktop.Windows.Tests", "--report-trx"],
             new Dictionary<string, string>(StringComparer.Ordinal) { ["WEFT_DESKTOP_SERVER"] = server })
             .ConfigureAwait(false);
 
+        await IsolateAsync(output, server, environment =>
+            VerifyPublishedAppAsync(Path.Join(app, "Weft.exe"), server, environment)).ConfigureAwait(false);
+        if (package)
+        {
+            // A fresh server location makes the installed app start its own server rather than reuse one.
+            string copies = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft",
+                "server");
+            try
+            {
+                await IsolateAsync(output, server, environment =>
+                    VerifyPackageLifecycleAsync(root, arch, server, environment)).ConfigureAwait(false);
+            }
+            finally
+            {
+                foreach (string copy in Directory.Exists(copies)
+                    ? Directory.EnumerateDirectories(copies, PackageName + "_*")
+                    : [])
+                {
+                    DeleteWhenReleased(copy);
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private static async Task IsolateAsync(string output, string server,
+        Func<Dictionary<string, string>, Task> test)
+    {
         string temporary = Path.Join(Path.GetTempPath(), "wa-" + Guid.NewGuid().ToString("N")[..8]);
         Dictionary<string, string> environment = await PrepareAsync(temporary).ConfigureAwait(false);
         try
         {
-            await VerifyPublishedAppAsync(Path.Join(app, "Weft.exe"), server, environment).ConfigureAwait(false);
-            if (package)
-            {
-                await VerifyPackageLifecycleAsync(root, arch, server, environment).ConfigureAwait(false);
-            }
+            await test(environment).ConfigureAwait(false);
         }
         catch
         {
@@ -115,8 +141,6 @@ internal static partial class TestWindowsApp
 
             DeleteWhenReleased(temporary);
         }
-
-        return 0;
     }
 
     private static async Task<Dictionary<string, string>> PrepareAsync(string temporary)
@@ -137,13 +161,15 @@ internal static partial class TestWindowsApp
         };
     }
 
-    private static async Task VerifyPublishedAppAsync(string executable, string server, Dictionary<string, string> environment)
+    private static async Task VerifyPublishedAppAsync(string executable, string server,
+        Dictionary<string, string> environment)
     {
         // The app must never serve as the server bootstrap, whatever arguments it is given.
         var rejected = new ProcessStartInfo(executable) { UseShellExecute = false, RedirectStandardError = true };
         rejected.ArgumentList.Add("server");
         rejected.ArgumentList.Add("--detached");
-        using (Process process = Process.Start(rejected) ?? throw new InvalidOperationException("Could not start the app."))
+        using (Process process = Process.Start(rejected)
+            ?? throw new InvalidOperationException("Could not start the app."))
         {
             _ = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
             await process.WaitForExitAsync().ConfigureAwait(false);
@@ -233,7 +259,8 @@ internal static partial class TestWindowsApp
             start.Environment[key] = value;
         }
 
-        using Process app = Process.Start(start) ?? throw new InvalidOperationException("Could not start " + executable);
+        using Process app = Process.Start(start)
+            ?? throw new InvalidOperationException("Could not start " + executable);
         Dictionary<string, int> shells = [];
         int pid = 0;
         await UntilAsync(async () =>
@@ -285,10 +312,12 @@ internal static partial class TestWindowsApp
     private static async Task VerifyOutsidePackageAsync(int pid, Dictionary<string, int> shells)
     {
         string image = Process.GetProcessById(pid).MainModule?.FileName ?? string.Empty;
-        if (image.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase))
+        string copies = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft",
+            "server", PackageName + "_");
+        if (!image.StartsWith(copies, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("The server runs from the package, which an upgrade would replace: "
-                + image);
+            throw new InvalidOperationException("The installed app did not start its server from a copy outside the "
+                + "package, which an upgrade would replace: " + image);
         }
 
         foreach (int process in shells.Values.Prepend(pid))
@@ -338,7 +367,7 @@ internal static partial class TestWindowsApp
     private static async Task RemoveInstalledAsync(PackageManager manager)
     {
         foreach (global::Windows.ApplicationModel.Package installed in manager.FindPackagesForUser(string.Empty)
-            .Where(item => item.Id.Name == "Weft.Development").ToList())
+            .Where(item => item.Id.Name == PackageName).ToList())
         {
             DeploymentResult result = await manager.RemovePackageAsync(installed.Id.FullName).AsTask()
                 .ConfigureAwait(false);
@@ -355,7 +384,8 @@ internal static partial class TestWindowsApp
         using var blocks = JsonDocument.Parse(await RunAsync(server, ["blocks", "--json"], environment)
             .ConfigureAwait(false));
         return blocks.RootElement.GetProperty("blocks").EnumerateArray()
-            .Where(block => block.TryGetProperty("pid", out JsonElement value) && value.ValueKind == JsonValueKind.Number)
+            .Where(block => block.TryGetProperty("pid", out JsonElement value)
+                && value.ValueKind == JsonValueKind.Number)
             .ToDictionary(block => block.GetProperty("id").GetString()!, block => block.GetProperty("pid").GetInt32(),
                 StringComparer.Ordinal);
     }
@@ -410,6 +440,30 @@ internal static partial class TestWindowsApp
         }
     }
 
+    private static async Task RunVisibleAsync(string executable, IEnumerable<string> arguments,
+        IReadOnlyDictionary<string, string> environment)
+    {
+        var start = new ProcessStartInfo(executable) { UseShellExecute = false };
+        foreach (string argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        foreach ((string key, string value) in environment)
+        {
+            start.Environment[key] = value;
+        }
+
+        using Process process = Process.Start(start)
+            ?? throw new InvalidOperationException("Could not start " + executable);
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(executable + " " + string.Join(' ', arguments)
+                + " failed with exit code " + process.ExitCode.ToString(CultureInfo.InvariantCulture) + ".");
+        }
+    }
+
     private static async Task<string> RunAsync(string executable, IEnumerable<string> arguments,
         IReadOnlyDictionary<string, string>? environment = null)
     {
@@ -424,7 +478,8 @@ internal static partial class TestWindowsApp
             start.Environment[key] = value;
         }
 
-        using Process process = Process.Start(start) ?? throw new InvalidOperationException("Could not start " + executable);
+        using Process process = Process.Start(start)
+            ?? throw new InvalidOperationException("Could not start " + executable);
         string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
         await process.WaitForExitAsync().ConfigureAwait(false);
         return process.ExitCode == 0 ? output : throw new InvalidOperationException(executable + " "

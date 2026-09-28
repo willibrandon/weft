@@ -48,7 +48,8 @@ internal static class WindowsConsole
 
     private static SafeFileHandle? Open(string device)
     {
-        SafeFileHandle handle = NativeMethods.CreateFile(device, NativeMethods.ReadWrite, NativeMethods.ShareReadWrite, 0, NativeMethods.OpenExisting, 0, 0);
+        SafeFileHandle handle = NativeMethods.CreateFile(device, NativeMethods.ReadWrite, NativeMethods.ShareReadWrite,
+            0, NativeMethods.OpenExisting, 0, 0);
         if (handle.IsInvalid)
         {
             handle.Dispose();

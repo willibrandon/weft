@@ -12,6 +12,9 @@ namespace Weft.Desktop.Windows.Tests;
 [TestClass]
 public sealed class TerminalRenderingTests
 {
+    private static readonly byte[] s_red = [255, 0, 0, 255];
+    private static readonly byte[] s_green = [0, 255, 0, 255];
+
     /// <summary>
     /// Gets the test cancellation context.
     /// </summary>
@@ -116,7 +119,7 @@ public sealed class TerminalRenderingTests
                 .ConfigureAwait(true);
             DesktopFrame animated = await window.WaitAsync(frame => frame.Blocks[0].Images.Any(image =>
                 frame.Blocks[0].Textures.Any(texture => TerminalImages.KeyOf(texture) == TerminalImages.KeyOf(image)
-                    && texture.Data.Span[..4].SequenceEqual((byte[])[0, 255, 0, 255])))).ConfigureAwait(true);
+                    && texture.Data.Span[..4].SequenceEqual(s_green)))).ConfigureAwait(true);
             DesktopImage frameImage = animated.Blocks[0].Images[0];
 
             // Frames alternate every 120 ms, so the screen must show the second frame within a few captures.
@@ -132,7 +135,7 @@ public sealed class TerminalRenderingTests
 
             await DeleteImagesAsync(window).ConfigureAwait(true);
             string solid = Convert.ToBase64String(
-                [.. Enumerable.Range(0, 15 * 9).SelectMany(_ => (byte[])[255, 0, 0, 255])]);
+                [.. Enumerable.Range(0, 15 * 9).SelectMany(_ => s_red)]);
             await window.RunAsync(@"print '\033[2J\033[H\033_Ga=T,f=32,s=15,v=9,X=3,Y=4,q=2;" + solid + @"\033\\'")
                 .ConfigureAwait(true);
             DesktopFrame native = await window.WaitAsync(frame =>

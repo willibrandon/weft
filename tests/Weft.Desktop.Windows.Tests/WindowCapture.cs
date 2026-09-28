@@ -63,22 +63,26 @@ internal sealed class WindowCapture
             DirectXPixelFormat.B8G8R8A8UIntNormalized, 1, item.Size);
         using GraphicsCaptureSession session = pool.CreateCaptureSession(item);
         session.IsCursorCaptureEnabled = false;
-        session.IsBorderRequired = false;
-        var arrived = new TaskCompletionSource<Direct3D11CaptureFrame>(
+        // Without borderless access, Windows outlines the window on screen while it is captured, outside the pixels.
+        session.IsBorderRequired = borderless != AppCapabilityAccessStatus.Allowed;
+        // Each frame is copied out where it arrives, so no frame outlives its handler.
+        var arrived = new TaskCompletionSource<(byte[] Pixels, int Width, int Height)>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         pool.FrameArrived += (sender, _) =>
         {
-            if (sender.TryGetNextFrame() is { } next && !arrived.TrySetResult(next))
+            using Direct3D11CaptureFrame? frame = sender.TryGetNextFrame();
+            if (frame is not null && !arrived.Task.IsCompleted)
             {
-                next.Dispose();
+                using var bitmap = CanvasBitmap.CreateFromDirect3D11Surface(CanvasDevice.GetSharedDevice(),
+                    frame.Surface);
+                _ = arrived.TrySetResult((bitmap.GetPixelBytes(), (int)bitmap.SizeInPixels.Width,
+                    (int)bitmap.SizeInPixels.Height));
             }
         };
         session.StartCapture();
-        using Direct3D11CaptureFrame frame = await arrived.Task.WaitAsync(s_timeout, cancellationToken)
+        (byte[] pixels, int width, int height) = await arrived.Task.WaitAsync(s_timeout, cancellationToken)
             .ConfigureAwait(true);
-        using var bitmap = CanvasBitmap.CreateFromDirect3D11Surface(CanvasDevice.GetSharedDevice(), frame.Surface);
-        byte[] pixels = bitmap.GetPixelBytes();
-        int stride = (int)bitmap.SizeInPixels.Width * 4;
+        int stride = width * 4;
 
         // The frame covers the window's visible bounds; the client area sits inside them.
         Assert.AreEqual(0, NativeMethods.DwmGetWindowAttribute(window, NativeMethods.ExtendedFrameBounds,
@@ -87,8 +91,7 @@ internal sealed class WindowCapture
         Assert.IsTrue(NativeMethods.ClientToScreen(window, ref origin), "The client area could not be located.");
         int left = origin.X - bounds.Left;
         int top = origin.Y - bounds.Top;
-        return new WindowCapture(pixels, stride, left, top, (int)bitmap.SizeInPixels.Width - left,
-            (int)bitmap.SizeInPixels.Height - top);
+        return new WindowCapture(pixels, stride, left, top, width - left, height - top);
     }
 
     /// <summary>

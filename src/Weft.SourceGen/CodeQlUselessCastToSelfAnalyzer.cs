@@ -63,15 +63,21 @@ public sealed class CodeQlUselessCastToSelfAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeCast(SyntaxNodeAnalysisContext context)
     {
         var cast = (CastExpressionSyntax)context.Node;
-        ITypeSymbol? sourceType = context.SemanticModel.GetTypeInfo(
-            cast.Expression,
-            context.CancellationToken).Type;
+        // A collection expression has no type of its own; CodeQL types it as the collection it builds, which a
+        // cast then only repeats. A typed local or parameter states the collection type without the cast.
+        ITypeSymbol? sourceType = cast.Expression is CollectionExpressionSyntax collection
+            ? context.SemanticModel.GetOperation(collection, context.CancellationToken)?.Type
+            : context.SemanticModel.GetTypeInfo(cast.Expression, context.CancellationToken).Type;
         ITypeSymbol? targetType = context.SemanticModel.GetTypeInfo(
             cast.Type,
             context.CancellationToken).Type;
+        // A collection expression takes its element annotations from its target, so only the collection type counts.
+        SymbolEqualityComparer comparer = cast.Expression is CollectionExpressionSyntax
+            ? SymbolEqualityComparer.Default
+            : SymbolEqualityComparer.IncludeNullability;
         if (sourceType is null ||
             targetType is null ||
-            !SymbolEqualityComparer.IncludeNullability.Equals(sourceType, targetType))
+            !comparer.Equals(sourceType, targetType))
         {
             return;
         }

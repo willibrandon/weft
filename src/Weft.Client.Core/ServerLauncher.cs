@@ -60,7 +60,8 @@ public static class ServerLauncher
     /// <param name="executablePath">The bundled CLI path, or null to use the current CLI.</param>
     /// <param name="cancellationToken">Cancels the attempt.</param>
     /// <returns>The connected control client.</returns>
-    public static async Task<ControlClient> ConnectOrStartAsync(string runtimeDirectory, string? executablePath, CancellationToken cancellationToken)
+    public static async Task<ControlClient> ConnectOrStartAsync(string runtimeDirectory, string? executablePath,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         string socketPath = WeftPaths.ControlSocketPath(runtimeDirectory);
@@ -83,16 +84,21 @@ public static class ServerLauncher
             }
         }
 
-        throw new InvalidOperationException("The weft server did not start within ten seconds. Check the server log under " + WeftPaths.ResolveStateDirectory() + ".");
+        throw new InvalidOperationException(
+            "The weft server did not start within ten seconds. Check the server log under "
+            + WeftPaths.ResolveStateDirectory() + ".");
     }
 
     private static void Start(string runtimeDirectory, string? executablePath)
     {
-        string executable = executablePath ?? Environment.ProcessPath ?? throw new InvalidOperationException("The weft executable path is unknown.");
+        string executable = executablePath ?? Environment.ProcessPath
+            ?? throw new InvalidOperationException("The weft executable path is unknown.");
         if (executablePath is not null && Environment.ProcessPath is { } current
-            && string.Equals(Path.GetFullPath(executablePath), Path.GetFullPath(current), StringComparison.OrdinalIgnoreCase))
+            && string.Equals(Path.GetFullPath(executablePath), Path.GetFullPath(current),
+                StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("The desktop app cannot start itself as the server. Rebuild the app bundle.");
+            throw new InvalidOperationException(
+                "The desktop app cannot start itself as the server. Rebuild the app bundle.");
         }
 
         List<string> arguments = [];
@@ -118,7 +124,8 @@ public static class ServerLauncher
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        using Process process = Process.Start(start) ?? throw new InvalidOperationException("The weft server process could not be started.");
+        using Process process = Process.Start(start)
+            ?? throw new InvalidOperationException("The weft server process could not be started.");
         process.StandardInput.Close();
         process.StandardOutput.Close();
         process.StandardError.Close();

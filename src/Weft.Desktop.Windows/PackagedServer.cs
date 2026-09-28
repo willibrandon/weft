@@ -26,12 +26,14 @@ internal static class PackagedServer
             return bundled;
         }
 
-        string root = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft", "server");
+        string root = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "weft",
+            "server");
         string target = Path.Join(root, package);
         string source = Path.GetDirectoryName(bundled)!;
         if (!IsComplete(source, target))
         {
-            string partial = target + ".partial-" + Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string partial = target + ".partial-"
+                + Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
             _ = Directory.CreateDirectory(partial);
             foreach (string file in s_files)
             {

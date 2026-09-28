@@ -12,7 +12,6 @@ using Weft.Client;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.System;
-using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue;
@@ -376,8 +375,10 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     {
         ArgumentNullException.ThrowIfNull(block);
         Rect content = _renderer.ContentRect(block, Inset);
-        return new Rect(content.X + (index % block.Width * Font.CellWidth),
-            content.Y + (index / block.Width * Font.CellHeight), Font.CellWidth, Font.CellHeight);
+        int column = index % block.Width;
+        int row = index / block.Width;
+        return new Rect(content.X + (column * Font.CellWidth), content.Y + (row * Font.CellHeight), Font.CellWidth,
+            Font.CellHeight);
     }
 
     /// <summary>
@@ -448,7 +449,7 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     private void OnRegionsInvalidated(CanvasVirtualControl sender, CanvasRegionsInvalidatedEventArgs args)
     {
         var scene = new TerminalScene(Frame ?? EmptyFrame, TerminalAppearance.Background, TerminalAppearance.Foreground,
-            TerminalAppearance.Cursor, SelectionColor(), _cursorLit, Inset);
+            TerminalAppearance.Cursor, TerminalAppearance.Selection, _cursorLit, Inset);
         foreach (Rect region in args.InvalidatedRegions)
         {
             using CanvasDrawingSession session = sender.CreateDrawingSession(region);
@@ -457,13 +458,6 @@ internal sealed partial class TerminalSurface : UserControl, IDisposable
     }
 
     private static DesktopFrame EmptyFrame { get; } = new(false, "Weft", null, null, [], [], [], null);
-
-    private Color SelectionColor()
-    {
-        Color accent = _settings.GetColorValue(UIColorType.Accent);
-        accent.A = 115;
-        return accent;
-    }
 
     private void Invalidate()
     {

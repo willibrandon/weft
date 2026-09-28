@@ -34,6 +34,7 @@ internal static class AppIcon
         _ = Directory.CreateDirectory(directory);
         using var device = new CanvasDevice();
         int[] iconSizes = [16, 20, 24, 32, 40, 48, 64, 256];
+        int[] targetSizes = [16, 24, 32, 48, 256];
         var images = new List<(int Size, byte[] Png)>();
         foreach (int size in iconSizes)
         {
@@ -41,7 +42,7 @@ internal static class AppIcon
         }
 
         await File.WriteAllBytesAsync(Path.Join(directory, "AppIcon.ico"), Icon(images)).ConfigureAwait(true);
-        foreach (int size in (int[])[16, 24, 32, 48, 256])
+        foreach (int size in targetSizes)
         {
             byte[] png = await PngAsync(device, size, size, size).ConfigureAwait(true);
             await File.WriteAllBytesAsync(Path.Join(directory, $"Square44x44Logo.targetsize-{size}.png"), png)

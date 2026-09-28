@@ -46,9 +46,13 @@ The selection applies only to the job through `DEVELOPER_DIR`.
 App and native test compilation use Swift batch mode with concurrency based on
 the host's processor count, avoiding repeated parsing for every individual file.
 
-CodeQL scans C# on Linux, builds `Weft.Windows.slnx` on Windows so the Reactor app is
-extracted with its WinUI types, and builds the Mac app for Swift analysis on macOS. Each
-job runs the security and quality queries and fails on any finding. The Swift build
+CodeQL scans C# on Linux and again on Windows, where the Windows SDK, WinUI, Reactor, and
+Win2D packages resolve, and builds the Mac app for Swift analysis on macOS. The C# jobs
+read the sources without a build, because a traced build also extracts source generator
+output that is not ours and that the path filter cannot exclude for compiled languages.
+Each job runs the security and quality queries and fails on any finding. `Weft.SourceGen`
+mirrors the queries that have fired here, so a finding fails the local build first; when
+CodeQL reports something the build did not, extend or add the matching analyzer with a test. The Swift build
 prepares dependencies with `Build-MacApp.cs --prepare-analysis`, then traces Swift
 compilation using the generated response file. It reads the C bridge directly with
 `-disable-bridging-pch`, avoiding compiler-specific precompiled headers. Scanning does not open a terminal

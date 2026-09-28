@@ -22,7 +22,8 @@ public sealed class WeftServer : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
         Options = options;
         Events = new EventLog();
-        Registry = new SessionRegistry(options, Events, new SessionStore(Path.Join(options.StateDirectory, "sessions")), _outputProcessing);
+        Registry = new SessionRegistry(options, Events, new SessionStore(Path.Join(options.StateDirectory, "sessions")),
+            _outputProcessing);
         Waits = new WaitChannels();
         ServerHandlers.Register(_dispatcher);
         SessionHandlers.Register(_dispatcher);
@@ -82,7 +83,6 @@ public sealed class WeftServer : IAsyncDisposable
         finally
         {
             _ = _stopped.TrySetResult();
-            ServerLog.Info("Server stopped.");
         }
     }
 
@@ -94,8 +94,23 @@ public sealed class WeftServer : IAsyncDisposable
             WindowsConsole.UseConsoleForChildren();
         }
 
-        using ServerLock serverLock = ServerLock.TryAcquire(WeftPaths.LockFilePath(Options.RuntimeDirectory)) ?? throw new InvalidOperationException("Another weft server is running on " + Options.RuntimeDirectory + ".");
-        ServerLog.UseFile(Path.Join(Options.StateDirectory, "server.log"));
+        using ServerLock serverLock = ServerLock.TryAcquire(WeftPaths.LockFilePath(Options.RuntimeDirectory))
+            ?? throw new InvalidOperationException(
+                "Another weft server is running on " + Options.RuntimeDirectory + ".");
+        // The log closes with this server, so its state directory can be removed or reused at once.
+        using ServerLogFile log = ServerLog.UseFile(Path.Join(Options.StateDirectory, "server.log"));
+        try
+        {
+            await RunStartedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ServerLog.Info("Server stopped.");
+        }
+    }
+
+    private async Task RunStartedAsync(CancellationToken cancellationToken)
+    {
         StartedAt = DateTimeOffset.Now;
         using CancellationTokenRegistration registration = cancellationToken.Register(RequestShutdown);
         var listener = new ControlListener(SocketPath, this, _dispatcher);
@@ -110,7 +125,8 @@ public sealed class WeftServer : IAsyncDisposable
             }
             finally
             {
-                _ = Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance, ProtocolJsonContext.Default.EmptyResult);
+                _ = Events.Publish(ProtocolEvents.ServerStopping, EmptyResult.Instance,
+                    ProtocolJsonContext.Default.EmptyResult);
                 await Registry.CloseAllAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }

@@ -24,6 +24,11 @@ internal static class TerminalAppearance
     internal const int DefaultCursor = 0x80a7c2;
 
     /// <summary>
+    /// The selected text background, which is the Mac's dark selected text color rather than the accent color.
+    /// </summary>
+    internal const int DefaultSelection = 0x3f638b;
+
+    /// <summary>
     /// Gets the terminal background.
     /// </summary>
     internal static Color Background => Resolve(PreferencesStore.Current.Background, DefaultBackground);
@@ -37,6 +42,11 @@ internal static class TerminalAppearance
     /// Gets the cursor color.
     /// </summary>
     internal static Color Cursor => Resolve(PreferencesStore.Current.Cursor, DefaultCursor);
+
+    /// <summary>
+    /// Gets the selected text background, drawn opaque beneath the selected text.
+    /// </summary>
+    internal static Color Selection => FromRgb(DefaultSelection);
 
     /// <summary>
     /// Converts a packed RGB value to an opaque color.

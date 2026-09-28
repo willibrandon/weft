@@ -78,7 +78,8 @@ internal static class WindowsServerProcess
         if (!IsPackaged)
         {
             var startup = new StartupInformation(Marshal.SizeOf<StartupInformation>());
-            return NativeMethods.CreateProcess(executable, commandLine, 0, 0, false, flags, 0, null, startup, out created)
+            return NativeMethods.CreateProcess(executable, commandLine, 0, 0, false, flags, 0, null, startup,
+                out created)
                 ? 0
                 : Marshal.GetLastPInvokeError();
         }

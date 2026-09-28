@@ -103,7 +103,8 @@ internal static partial class TestShell
                     SetMode(command[0]);
                     break;
                 case "bytes" when arguments.Length == 1:
-                    Write(string.Join(' ', ReadBytes(Number(arguments[0])).Select(value => value.ToString(CultureInfo.InvariantCulture))) + "\n");
+                    Write(string.Join(' ', ReadBytes(Number(arguments[0]))
+                        .Select(value => value.ToString(CultureInfo.InvariantCulture))) + "\n");
                     break;
                 case "record" when arguments.Length == 2:
                     Record(Number(arguments[0]), arguments[1]);
@@ -169,7 +170,8 @@ internal static partial class TestShell
                     words = [];
                 }
             }
-            else if (character == '$' && script.AsSpan(index).StartsWith("$((") && script.IndexOf("))", index, StringComparison.Ordinal) is int end and > 0)
+            else if (character == '$' && script.AsSpan(index).StartsWith("$((")
+                && script.IndexOf("))", index, StringComparison.Ordinal) is int end and > 0)
             {
                 _ = word.Append(Evaluate(script[(index + 3)..end]).ToString(CultureInfo.InvariantCulture));
                 index = end + 1;
@@ -225,7 +227,8 @@ internal static partial class TestShell
 
             if (format[index] == '%' && end < format.Length && format[end] == 'd')
             {
-                int width = end == index + 1 ? 0 : int.Parse(format.AsSpan(index + 1, end - index - 1), CultureInfo.InvariantCulture);
+                int width = end == index + 1 ? 0
+                    : int.Parse(format.AsSpan(index + 1, end - index - 1), CultureInfo.InvariantCulture);
                 _ = text.Append(number.ToString(CultureInfo.InvariantCulture).PadLeft(width, '0'));
                 index = end + 1;
             }
@@ -270,12 +273,14 @@ internal static partial class TestShell
                     break;
                 case 'x':
                     int hexLength = 0;
-                    while (hexLength < 2 && index + 1 + hexLength < text.Length && char.IsAsciiHexDigit(text[index + 1 + hexLength]))
+                    while (hexLength < 2 && index + 1 + hexLength < text.Length
+                        && char.IsAsciiHexDigit(text[index + 1 + hexLength]))
                     {
                         hexLength++;
                     }
 
-                    _ = result.Append((char)int.Parse(text.AsSpan(index + 1, hexLength), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+                    _ = result.Append((char)int.Parse(text.AsSpan(index + 1, hexLength), NumberStyles.HexNumber,
+                        CultureInfo.InvariantCulture));
                     index += hexLength;
                     break;
                 case >= '0' and <= '7':

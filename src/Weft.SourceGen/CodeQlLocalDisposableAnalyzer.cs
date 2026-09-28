@@ -30,7 +30,8 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         "Reliability",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Transferred locals must not introduce CodeQL cs/local-not-disposed or cs/dispose-not-called-on-throw findings.");
+        description: "Transferred locals must not introduce CodeQL cs/local-not-disposed or "
+            + "cs/dispose-not-called-on-throw findings.");
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [s_rule];
@@ -48,6 +49,55 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeDeclaration, SyntaxKind.LocalDeclarationStatement);
         context.RegisterSyntaxNodeAction(AnalyzeLoopDeclaration, SyntaxKind.ForStatement);
+        context.RegisterSyntaxNodeAction(AnalyzePatternDesignation, SyntaxKind.SingleVariableDesignation);
+    }
+
+    // A pattern variable cannot be declared with using, so a resource it binds is disposed by an explicit call,
+    // which any call made in between can skip by throwing.
+    private static void AnalyzePatternDesignation(SyntaxNodeAnalysisContext context)
+    {
+        var designation = (SingleVariableDesignationSyntax)context.Node;
+        if (designation.FirstAncestorOrSelf<IsPatternExpressionSyntax>() is not { } test ||
+            !CreatesResource(test.Expression) ||
+            context.SemanticModel.GetDeclaredSymbol(designation, context.CancellationToken) is not ILocalSymbol local ||
+            !IsDisposable(local.Type) ||
+            test.FirstAncestorOrSelf<SyntaxNode>(static node => node is BlockSyntax or ArrowExpressionClauseSyntax
+                or AnonymousFunctionExpressionSyntax) is not { } body)
+        {
+            return;
+        }
+
+        bool unprotected = body.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(invocation => IsDisposeOf(invocation, local, context) && !InCatchOrFinally(invocation, body))
+            .Any(dispose => body.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Any(call => call != dispose && call.SpanStart > designation.Span.End &&
+                    call.Span.End < dispose.SpanStart));
+        if (unprotected)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(s_rule, designation.GetLocation(), local.Name));
+        }
+    }
+
+    private static bool IsDisposeOf(
+        InvocationExpressionSyntax invocation,
+        ILocalSymbol local,
+        SyntaxNodeAnalysisContext context)
+    {
+        return invocation.Expression is MemberAccessExpressionSyntax
+        {
+            Name.Identifier.ValueText: "Dispose",
+            Expression: IdentifierNameSyntax receiver
+        } &&
+            SymbolEqualityComparer.Default.Equals(local,
+                context.SemanticModel.GetSymbolInfo(receiver, context.CancellationToken).Symbol);
+    }
+
+    private static bool InCatchOrFinally(SyntaxNode node, SyntaxNode body)
+    {
+        return node.Ancestors().TakeWhile(ancestor => ancestor != body)
+            .Any(static ancestor => ancestor is CatchClauseSyntax or FinallyClauseSyntax);
     }
 
     private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context)
@@ -82,13 +132,17 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             foreach (ExpressionStatementSyntax handoff in FindResourceAssignments(local, declaration, block, context)
                 .Where(handoff => LeaksFromAssignment(local, handoff, context)))
             {
-                context.ReportDiagnostic(Diagnostic.Create(s_rule, ((AssignmentExpressionSyntax)handoff.Expression).Left.GetLocation(), local.Name));
+                context.ReportDiagnostic(Diagnostic.Create(
+                    s_rule,
+                    ((AssignmentExpressionSyntax)handoff.Expression).Left.GetLocation(),
+                    local.Name));
             }
 
             // An assignment in a for initializer is an expression rather than a statement, and the loop
             // condition decides whether the body ever runs, so it is analyzed with the loop.
             foreach (AssignmentExpressionSyntax handoff in FindLoopAssignments(local, declaration, block, context)
-                .Where(handoff => handoff.Parent is ForStatementSyntax loop && DisposableLocalOwnership.MayLeakInLoop(local, handoff, loop, context)))
+                .Where(handoff => handoff.Parent is ForStatementSyntax loop &&
+                    DisposableLocalOwnership.MayLeakInLoop(local, handoff, loop, context)))
             {
                 context.ReportDiagnostic(Diagnostic.Create(s_rule, handoff.Left.GetLocation(), local.Name));
             }
@@ -122,13 +176,17 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        foreach (VariableDeclaratorSyntax variable in declaration.Variables.Where(variable => LeaksFromLoopDeclaration(variable, loop, context)))
+        foreach (VariableDeclaratorSyntax variable in declaration.Variables
+            .Where(variable => LeaksFromLoopDeclaration(variable, loop, context)))
         {
             context.ReportDiagnostic(Diagnostic.Create(s_rule, variable.GetLocation(), variable.Identifier.ValueText));
         }
     }
 
-    private static bool LeaksFromLoopDeclaration(VariableDeclaratorSyntax variable, ForStatementSyntax loop, SyntaxNodeAnalysisContext context)
+    private static bool LeaksFromLoopDeclaration(
+        VariableDeclaratorSyntax variable,
+        ForStatementSyntax loop,
+        SyntaxNodeAnalysisContext context)
     {
         return variable.Initializer is { } initializer &&
         CreatesResource(initializer.Value) &&
@@ -152,32 +210,46 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
             .Where(statement => IsResourceAssignment(statement, local, context));
     }
 
-    private static bool LeaksFromAssignment(ILocalSymbol local, ExpressionStatementSyntax handoff, SyntaxNodeAnalysisContext context)
+    private static bool LeaksFromAssignment(
+        ILocalSymbol local,
+        ExpressionStatementSyntax handoff,
+        SyntaxNodeAnalysisContext context)
     {
         return handoff.Parent is (BlockSyntax or SwitchSectionSyntax) and { } scope &&
-        DisposableLocalOwnership.MayLeak(local, ((AssignmentExpressionSyntax)handoff.Expression).Right, handoff, priorRisk: false, scope, context);
+        DisposableLocalOwnership.MayLeak(local, ((AssignmentExpressionSyntax)handoff.Expression).Right, handoff,
+            priorRisk: false, scope, context);
     }
 
-    private static bool IsResourceAssignment(ExpressionStatementSyntax statement, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool IsResourceAssignment(
+        ExpressionStatementSyntax statement,
+        ILocalSymbol local,
+        SyntaxNodeAnalysisContext context)
     {
-        return statement.Expression is AssignmentExpressionSyntax assignment && IsResourceAssignment(assignment, local, context);
+        return statement.Expression is AssignmentExpressionSyntax assignment &&
+            IsResourceAssignment(assignment, local, context);
     }
 
-    private static bool IsResourceAssignment(AssignmentExpressionSyntax assignment, ILocalSymbol local, SyntaxNodeAnalysisContext context)
+    private static bool IsResourceAssignment(
+        AssignmentExpressionSyntax assignment,
+        ILocalSymbol local,
+        SyntaxNodeAnalysisContext context)
     {
         return assignment is { Left: IdentifierNameSyntax target } &&
         assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
         CreatesResource(assignment.Right) &&
-        SymbolEqualityComparer.Default.Equals(local, context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol);
+        SymbolEqualityComparer.Default.Equals(local,
+            context.SemanticModel.GetSymbolInfo(target, context.CancellationToken).Symbol);
     }
 
     private static bool CreatesResource(ExpressionSyntax expression)
     {
         return expression switch
         {
-            ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or InvocationExpressionSyntax => true,
+            ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax
+                or InvocationExpressionSyntax => true,
             AwaitExpressionSyntax awaited => CreatesResource(awaited.Expression),
-            ConditionalExpressionSyntax conditional => CreatesResource(conditional.WhenTrue) || CreatesResource(conditional.WhenFalse),
+            ConditionalExpressionSyntax conditional => CreatesResource(conditional.WhenTrue) ||
+                CreatesResource(conditional.WhenFalse),
             ParenthesizedExpressionSyntax parenthesized => CreatesResource(parenthesized.Expression),
             _ => false
         };
@@ -190,7 +262,8 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
     {
         return local.Type.DeclaringSyntaxReferences.IsEmpty &&
             (local.Type.ContainingAssembly?.Name.StartsWith("Weft.", StringComparison.Ordinal)) != true &&
-            local.Type.AllInterfaces.Any(static type => type.ToDisplayString() == "System.IDisposable") && block.DescendantNodes(static node =>
+            local.Type.AllInterfaces.Any(static type => type.ToDisplayString() == "System.IDisposable") &&
+            block.DescendantNodes(static node =>
                 node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax))
             .OfType<InvocationExpressionSyntax>()
             .Where(IsAsyncUsingExpression)

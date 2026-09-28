@@ -553,6 +553,17 @@ internal sealed class TestWindow : IAsyncDisposable
     }
 
     /// <summary>
+    /// Gets whether two measurements agree within rounding, such as sizes and scroll positions.
+    /// </summary>
+    /// <param name="first">The first value.</param>
+    /// <param name="second">The second value.</param>
+    /// <returns>Whether they differ by less than a hundredth.</returns>
+    internal static bool Near(double first, double second)
+    {
+        return Math.Abs(first - second) < 0.01;
+    }
+
+    /// <summary>
     /// Gets how far two colors are apart, summed over their channels.
     /// </summary>
     /// <param name="first">The first color.</param>

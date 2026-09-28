@@ -215,8 +215,8 @@ Build on the target OS, report installed toolchains, and keep the portable solut
 usable without another OS's UI dependencies. All repository automation remains
 file-based C# under `scripts/`.
 
-CodeQL covers the shared C# implementation and the compiled Swift frontend. Add
-Windows-specific C# extraction validation with Reactor and C/C++ analysis with the
+CodeQL covers the shared C# implementation, the Windows app with its Windows packages
+resolved on a Windows runner, and the compiled Swift frontend. Add C/C++ analysis with the
 GTK frontend. Keep the security and quality suites and the zero-findings gate.
 Dependabot currently covers NuGet and Actions; Swift package updates become relevant
 only if a `Package.swift` introduces dependencies. Reactor uses the existing NuGet

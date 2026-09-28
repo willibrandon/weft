@@ -78,18 +78,15 @@ jobs:
         run: dotnet --info
 
       - name: Initialize CodeQL
+        # Extraction without a build reads the repository's own sources, resolving the Windows SDK, WinUI,
+        # Reactor, and Win2D packages on Windows. A traced build would also extract source generator output,
+        # which is compiler code rather than ours and which the path filter cannot exclude for compiled languages.
         uses: github/codeql-action/init@v4
         with:
-          build-mode: manual
+          build-mode: none
           config-file: ./.github/codeql-config.yml
           languages: csharp
           queries: security-and-quality
-
-      - name: Build Windows app and tests for analysis
-        # A real build resolves the WinUI, Reactor, and Win2D types the Linux job can only approximate.
-        run: dotnet build Weft.Windows.slnx
-        env:
-          CI: true
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4

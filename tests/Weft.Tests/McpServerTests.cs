@@ -17,12 +17,13 @@ public sealed class McpServerTests
     /// </summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly string[] s_expectedTools = ["list_sessions", "list_blocks", "create_block", "run", "send_keys", "capture", "wait_for", "close_block"];
+    private static readonly string[] s_expectedTools = ["list_sessions", "list_blocks", "create_block", "run",
+        "send_keys", "capture", "wait_for", "close_block"];
     private static readonly string[] s_runCommand = [TestPrograms.Shell, "-c", "echo mcp-$((6*7)); exit 5"];
     private static readonly string[] s_keys = ["echo keys-$((2*2))", "Enter"];
 
     /// <summary>
-    /// Verifies tools are listed, a command runs to completion with its exit code, keys reach a block, and the block resource reads its screen.
+    /// Verifies tools are listed, commands report exit codes, keys reach a block, and its resource reads the screen.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [TestMethod]
@@ -37,30 +38,66 @@ public sealed class McpServerTests
             var clientToServer = new Pipe();
             var serverToClient = new Pipe();
             using var serverStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            Task server = WeftMcpServer.RunStreamsAsync(token => ControlClient.ConnectAsync(fixture.SocketPath, token), "test", clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream(), verbose: false, serverStop.Token);
-            McpClient client = await McpClient.CreateAsync(new StreamClientTransport(clientToServer.Writer.AsStream(), serverToClient.Reader.AsStream()), cancellationToken: cancellationToken).ConfigureAwait(false);
+            Task server = WeftMcpServer.RunStreamsAsync(
+                token => ControlClient.ConnectAsync(fixture.SocketPath, token),
+                "test",
+                clientToServer.Reader.AsStream(),
+                serverToClient.Writer.AsStream(),
+                verbose: false,
+                serverStop.Token);
+            McpClient client = await McpClient.CreateAsync(
+                new StreamClientTransport(clientToServer.Writer.AsStream(), serverToClient.Reader.AsStream()),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                IList<McpClientTool> tools = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                IList<McpClientTool> tools = await client.ListToolsAsync(cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
                 CollectionAssert.IsSubsetOf(s_expectedTools, tools.Select(tool => tool.Name).ToList());
 
-                CallToolResult run = await client.CallToolAsync("run", new Dictionary<string, object?> { ["command"] = s_runCommand, ["target"] = "agent" }, cancellationToken: cancellationToken).ConfigureAwait(false);
+                CallToolResult run = await client.CallToolAsync(
+                    "run",
+                    new Dictionary<string, object?> { ["command"] = s_runCommand, ["target"] = "agent" },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 string runText = Text(run);
                 Assert.Contains("exit code 5", runText);
                 Assert.Contains("mcp-42", runText);
 
-                CallToolResult blocks = await client.CallToolAsync("list_blocks", new Dictionary<string, object?> { ["target"] = "agent" }, cancellationToken: cancellationToken).ConfigureAwait(false);
+                CallToolResult blocks = await client.CallToolAsync(
+                    "list_blocks",
+                    new Dictionary<string, object?> { ["target"] = "agent" },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 string blockId = Text(blocks).Split(' ')[0];
                 Assert.StartsWith("b", blockId);
 
-                CallToolResult prompt = await client.CallToolAsync("wait_for", new Dictionary<string, object?> { ["target"] = blockId, ["pattern"] = "\\$\\s*$", ["timeoutMs"] = 20_000 }, cancellationToken: cancellationToken).ConfigureAwait(false);
+                CallToolResult prompt = await client.CallToolAsync(
+                    "wait_for",
+                    new Dictionary<string, object?>
+                    {
+                        ["target"] = blockId,
+                        ["pattern"] = "\\$\\s*$",
+                        ["timeoutMs"] = 20_000
+                    },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 Assert.StartsWith("pattern", Text(prompt));
 
-                _ = await client.CallToolAsync("send_keys", new Dictionary<string, object?> { ["target"] = blockId, ["keys"] = s_keys }, cancellationToken: cancellationToken).ConfigureAwait(false);
-                CallToolResult wait = await client.CallToolAsync("wait_for", new Dictionary<string, object?> { ["target"] = blockId, ["pattern"] = "^keys-4$", ["timeoutMs"] = 20_000 }, cancellationToken: cancellationToken).ConfigureAwait(false);
+                _ = await client.CallToolAsync(
+                    "send_keys",
+                    new Dictionary<string, object?> { ["target"] = blockId, ["keys"] = s_keys },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                CallToolResult wait = await client.CallToolAsync(
+                    "wait_for",
+                    new Dictionary<string, object?>
+                    {
+                        ["target"] = blockId,
+                        ["pattern"] = "^keys-4$",
+                        ["timeoutMs"] = 20_000
+                    },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 Assert.StartsWith("pattern", Text(wait));
 
-                ReadResourceResult resource = await client.ReadResourceAsync(new Uri("weft://block/" + blockId), cancellationToken: cancellationToken).ConfigureAwait(false);
+                ReadResourceResult resource = await client.ReadResourceAsync(
+                    new Uri("weft://block/" + blockId),
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 var screen = (TextResourceContents)resource.Contents[0];
                 Assert.Contains("keys-4", screen.Text);
             }

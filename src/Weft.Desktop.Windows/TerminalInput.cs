@@ -38,8 +38,9 @@ internal sealed partial class TerminalInput : TextBox
         SelectionHighlightColor = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         Opacity = 0;
         TabIndex = 0;
-        foreach (string key in (string[])["TextControlBackgroundFocused", "TextControlBackgroundPointerOver",
-            "TextControlBorderBrushFocused", "TextControlBorderBrushPointerOver", "TextControlBorderBrush"])
+        string[] chrome = ["TextControlBackgroundFocused", "TextControlBackgroundPointerOver",
+            "TextControlBorderBrushFocused", "TextControlBorderBrushPointerOver", "TextControlBorderBrush"];
+        foreach (string key in chrome)
         {
             Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }

@@ -15,7 +15,8 @@ internal static partial class NativeMethods
     /// <summary>
     /// Gets the calling process's package full name.
     /// </summary>
-    /// <param name="length">The buffer length in characters, including the terminator; receives the length needed.</param>
+    /// <param name="length">The buffer length in characters, including the terminator; receives the length
+    /// needed.</param>
     /// <param name="name">The buffer, or null to query the length.</param>
     /// <returns>A Win32 error code, or zero.</returns>
     [LibraryImport("kernel32.dll")]

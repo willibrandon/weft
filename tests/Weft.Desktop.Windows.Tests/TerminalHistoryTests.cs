@@ -31,7 +31,8 @@ public sealed class TerminalHistoryTests
             DesktopBlockFrame live = await FillHistoryAsync(window).ConfigureAwait(true);
             ScrollBar bar = VisualTree.Descendants(window.Surface).OfType<ScrollBar>()
                 .Single(item => AutomationProperties.GetName(item) == "Terminal history");
-            await window.UntilAsync(() => bar.Visibility == Visibility.Visible && bar.Maximum == live.HistoryLines)
+            await window.UntilAsync(() => bar.Visibility == Visibility.Visible
+                && TestWindow.Near(bar.Maximum, live.HistoryLines))
                 .ConfigureAwait(true);
             Assert.AreEqual(live.Height, bar.ViewportSize, "The thumb represents the visible rows.");
             Assert.AreEqual(bar.Maximum, bar.Value, "The thumb starts at live output.");
@@ -48,7 +49,7 @@ public sealed class TerminalHistoryTests
 
             await window.MenuAsync("View", "Resume Live Output").ConfigureAwait(true);
             _ = await window.WaitAsync(frame => frame.Blocks[0].ScrollOffset == 0).ConfigureAwait(true);
-            await window.UntilAsync(() => bar.Value == bar.Maximum).ConfigureAwait(true);
+            await window.UntilAsync(() => TestWindow.Near(bar.Value, bar.Maximum)).ConfigureAwait(true);
             Automation.SetRange(bar, bar.Maximum - bar.LargeChange);
             _ = await window.WaitAsync(frame => frame.Blocks[0].ScrollOffset == (int)bar.LargeChange)
                 .ConfigureAwait(true);

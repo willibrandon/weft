@@ -80,7 +80,9 @@ internal static partial class NativeMethods
     /// <param name="flags">The file flags.</param>
     /// <param name="template">A template handle, or zero.</param>
     /// <returns>The opened handle, which is invalid on failure.</returns>
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", SetLastError = true,
+        StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    internal static partial SafeFileHandle CreateFile(string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
+    internal static partial SafeFileHandle CreateFile(string name, uint access, uint share, nint security,
+        uint disposition, uint flags, nint template);
 }

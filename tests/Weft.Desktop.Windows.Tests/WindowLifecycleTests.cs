@@ -146,9 +146,7 @@ public sealed class WindowLifecycleTests
 
     private static long Collect()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // Forcing the measurement collects and finalizes until the heap size settles.
         return GC.GetTotalMemory(forceFullCollection: true);
     }
 

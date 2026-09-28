@@ -45,20 +45,32 @@ public sealed class TerminalReplayTests
                 _ = await client.CreateSessionAsync(new SessionCreateParams
                 {
                     Name = "cursor-replay",
-                    Command = [TestPrograms.Shell, "-c", "noecho; print 'before-save'; read; " + save + "; print 'temporary prompt'; read; " + restore + "; print 'ready>'; read"]
+                    Command = [TestPrograms.Shell, "-c", "noecho; print 'before-save'; read; " + save
+                        + "; print 'temporary prompt'; read; " + restore + "; print 'ready>'; read"]
                 }, cancellationToken).ConfigureAwait(false);
-                BlockWaitResult waiting = await client.WaitAsync(new BlockWaitParams { Target = "cursor-replay", Pattern = "before-save", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
+                BlockWaitResult waiting = await client.WaitAsync(
+                    new BlockWaitParams { Target = "cursor-replay", Pattern = "before-save", TimeoutMs = 20_000 },
+                    cancellationToken).ConfigureAwait(false);
                 Assert.AreEqual(WaitOutcome.Pattern, waiting.Outcome);
                 if (!attachBeforeSave)
                 {
-                    _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = "cursor-replay", Keys = ["Enter"] }, cancellationToken).ConfigureAwait(false);
-                    waiting = await client.WaitAsync(new BlockWaitParams { Target = "cursor-replay", Pattern = "temporary prompt", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
+                    _ = await client.SendKeysAsync(
+                        new BlockSendKeysParams { Target = "cursor-replay", Keys = ["Enter"] },
+                        cancellationToken).ConfigureAwait(false);
+                    waiting = await client.WaitAsync(new BlockWaitParams
+                    {
+                        Target = "cursor-replay",
+                        Pattern = "temporary prompt",
+                        TimeoutMs = 20_000
+                    }, cancellationToken).ConfigureAwait(false);
                     Assert.AreEqual(WaitOutcome.Pattern, waiting.Outcome);
                 }
 
                 if (resizeBeforeAttach)
                 {
-                    _ = await client.AttachAsync(new SessionAttachParams { Target = "cursor-replay", Width = 100, Height = 30 }, cancellationToken).ConfigureAwait(false);
+                    _ = await client.AttachAsync(
+                        new SessionAttachParams { Target = "cursor-replay", Width = 100, Height = 30 },
+                        cancellationToken).ConfigureAwait(false);
                 }
 
                 BlockInfo block = await client.GetBlockAsync("cursor-replay", cancellationToken).ConfigureAwait(false);
@@ -77,13 +89,19 @@ public sealed class TerminalReplayTests
                         if (attachBeforeSave)
                         {
                             await automator.WaitUntilTextAsync("before-save").ConfigureAwait(false);
-                            _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["Enter"] }, cancellationToken).ConfigureAwait(false);
+                            _ = await client.SendKeysAsync(
+                                new BlockSendKeysParams { Target = block.Id, Keys = ["Enter"] },
+                                cancellationToken).ConfigureAwait(false);
                         }
 
                         await automator.WaitUntilTextAsync("temporary prompt").ConfigureAwait(false);
-                        _ = await client.SendKeysAsync(new BlockSendKeysParams { Target = block.Id, Keys = ["Enter"] }, cancellationToken).ConfigureAwait(false);
+                        _ = await client.SendKeysAsync(
+                            new BlockSendKeysParams { Target = block.Id, Keys = ["Enter"] },
+                            cancellationToken).ConfigureAwait(false);
                         await automator.WaitUntilTextAsync("ready>").ConfigureAwait(false);
-                        BlockCaptureResult server = await client.CaptureAsync(new BlockCaptureParams { Target = block.Id }, cancellationToken).ConfigureAwait(false);
+                        BlockCaptureResult server = await client.CaptureAsync(
+                            new BlockCaptureParams { Target = block.Id },
+                            cancellationToken).ConfigureAwait(false);
                         using Hex1bTerminalSnapshot view = terminal.CreateSnapshot();
                         Assert.AreEqual(server.Width, view.Width);
                         Assert.AreEqual(server.Height, view.Height);
@@ -91,7 +109,8 @@ public sealed class TerminalReplayTests
                         Assert.AreEqual(server.CursorY, view.CursorY);
                         for (int row = 0; row < server.Height; row++)
                         {
-                            Assert.AreEqual(server.Lines[row], view.GetLineTrimmed(row), "View differs from server on row " + row);
+                            Assert.AreEqual(server.Lines[row], view.GetLineTrimmed(row),
+                                "View differs from server on row " + row);
                         }
                     }
                     finally

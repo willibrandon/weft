@@ -19,7 +19,8 @@ namespace Weft.Desktop.Windows;
 /// </remarks>
 internal sealed partial class TerminalRenderer : IDisposable
 {
-    private static readonly Color s_match = Color.FromArgb(89, 255, 214, 0);
+    // The Mac's dark system yellow at 35 percent opacity.
+    private static readonly Color s_match = Color.FromArgb(89, 255, 214, 10);
     private readonly Dictionary<Color, CanvasSolidColorBrush> _brushes = [];
     private readonly List<CanvasGlyph> _glyphs = [];
     private CanvasDevice? _device;

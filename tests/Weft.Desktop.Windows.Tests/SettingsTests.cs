@@ -35,7 +35,8 @@ public sealed class SettingsTests
                 UIElement content = settings.NativeWindow.Content;
                 NumberBox size = await FindAsync<NumberBox>(window, content, "Font size").ConfigureAwait(true);
                 Automation.SetRange(size, 20);
-                await window.UntilAsync(() => PreferencesStore.Current.FontSize == 20 && window.Surface.Font.Size == 20)
+                await window.UntilAsync(() => PreferencesStore.Current.FontSize is { } size && TestWindow.Near(size, 20)
+                    && TestWindow.Near(window.Surface.Font.Size, 20))
                     .ConfigureAwait(true);
                 _ = await window.WaitAsync(frame => frame.Blocks[0].Width < columns).ConfigureAwait(true);
             }
@@ -64,11 +65,12 @@ public sealed class SettingsTests
             try
             {
                 await window.MenuAsync("View", "Larger Text").ConfigureAwait(true);
-                await window.UntilAsync(() => window.Surface.Font.Size == initial + 1).ConfigureAwait(true);
+                await window.UntilAsync(() => TestWindow.Near(window.Surface.Font.Size, initial + 1))
+                    .ConfigureAwait(true);
                 _ = await window.WaitAsync(frame => frame.Blocks[0].Width * frame.Blocks[0].Height < cells)
                     .ConfigureAwait(true);
                 await window.MenuAsync("View", "Smaller Text").ConfigureAwait(true);
-                await window.UntilAsync(() => window.Surface.Font.Size == initial).ConfigureAwait(true);
+                await window.UntilAsync(() => TestWindow.Near(window.Surface.Font.Size, initial)).ConfigureAwait(true);
                 _ = await window.WaitAsync(frame => frame.Blocks[0].Width * frame.Blocks[0].Height == cells)
                     .ConfigureAwait(true);
             }

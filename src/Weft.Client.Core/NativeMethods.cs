@@ -61,12 +61,13 @@ internal static partial class NativeMethods
     /// <param name="startupInfo">The startup information.</param>
     /// <param name="processInformation">Receives the process and thread handles.</param>
     /// <returns>Whether the process was created.</returns>
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateProcessW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateProcessW", SetLastError = true,
+        StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static partial bool CreateProcess(string applicationName, nint commandLine, nint processAttributes, nint threadAttributes,
-        [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, int creationFlags, nint environment, string? currentDirectory,
-        in StartupInformation startupInfo, out ProcessInformation processInformation);
+    internal static partial bool CreateProcess(string applicationName, nint commandLine, nint processAttributes,
+        nint threadAttributes, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, int creationFlags, nint environment,
+        string? currentDirectory, in StartupInformation startupInfo, out ProcessInformation processInformation);
 
     /// <summary>
     /// Creates a process and its primary thread from startup information with an attribute list.
@@ -82,7 +83,8 @@ internal static partial class NativeMethods
     /// <param name="startupInfo">The extended startup information.</param>
     /// <param name="processInformation">Receives the process and thread handles.</param>
     /// <returns>Whether the process was created.</returns>
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateProcessW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateProcessW", SetLastError = true,
+        StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool CreateProcessExtended(string applicationName, nint commandLine, nint processAttributes,
@@ -124,12 +126,12 @@ internal static partial class NativeMethods
     /// Releases a process attribute list's contents.
     /// </summary>
     /// <param name="attributeList">The list.</param>
-    [LibraryImport("kernel32.dll")]
+    [LibraryImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     internal static partial void DeleteProcThreadAttributeList(nint attributeList);
 
     /// <summary>
-    /// Gets the calling process's package name, which fails with <see cref="AppModelErrorNoPackage"/> outside a package.
+    /// Gets the calling process's package name, failing with <see cref="AppModelErrorNoPackage"/> when unpackaged.
     /// </summary>
     /// <param name="length">The buffer length in characters; receives the length needed.</param>
     /// <param name="name">The buffer, or zero to query the length.</param>
