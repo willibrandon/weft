@@ -129,7 +129,7 @@ public sealed class ServerTests
             {
                 _ = await client.CreateSessionAsync(new SessionCreateParams { Name = "run" }, cancellationToken).ConfigureAwait(false);
 
-                BlockRunResult result = await client.RunAsync(new BlockRunParams { Target = "run", Command = ["/bin/sh", "-c", "echo hello-run; exit 3"], TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
+                BlockRunResult result = await client.RunAsync(new BlockRunParams { Target = "run", Command = [TestPrograms.Shell, "-c", "echo hello-run; exit 3"], TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
 
                 Assert.IsTrue(result.Completed);
                 Assert.AreEqual(3, result.ExitCode);
@@ -164,7 +164,7 @@ public sealed class ServerTests
                 List<Task<BlockRunResult>> runs = [];
                 for (int index = 0; index < 4; index++)
                 {
-                    runs.Add(client.RunAsync(new BlockRunParams { Target = "burst", Command = ["/bin/cat", source], TimeoutMs = 20_000 }, cancellationToken));
+                    runs.Add(client.RunAsync(new BlockRunParams { Target = "burst", Command = [TestPrograms.Shell, "-c", "cat '" + source + "'"], TimeoutMs = 20_000 }, cancellationToken));
                 }
                 BlockRunResult[] results = await Task.WhenAll(runs).ConfigureAwait(false);
                 foreach (BlockRunResult result in results)

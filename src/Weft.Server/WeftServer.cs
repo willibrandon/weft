@@ -89,6 +89,11 @@ public sealed class WeftServer : IAsyncDisposable
     private async Task RunLockedAsync(CancellationToken cancellationToken)
     {
         PrepareDirectories();
+        if (OperatingSystem.IsWindows())
+        {
+            WindowsConsole.UseConsoleForChildren();
+        }
+
         using ServerLock serverLock = ServerLock.TryAcquire(WeftPaths.LockFilePath(Options.RuntimeDirectory)) ?? throw new InvalidOperationException("Another weft server is running on " + Options.RuntimeDirectory + ".");
         ServerLog.UseFile(Path.Join(Options.StateDirectory, "server.log"));
         StartedAt = DateTimeOffset.Now;

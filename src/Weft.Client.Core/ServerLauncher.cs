@@ -95,7 +95,22 @@ public static class ServerLauncher
             throw new InvalidOperationException("The desktop app cannot start itself as the server. Rebuild the app bundle.");
         }
 
-        var start = new ProcessStartInfo(executable)
+        List<string> arguments = [];
+        string host = Path.GetFileNameWithoutExtension(executable);
+        if (executablePath is null && string.Equals(host, "dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            // Framework-dependent launch: the entry assembly must be passed to the dotnet host.
+            arguments.Add(Environment.GetCommandLineArgs()[0]);
+        }
+
+        arguments.AddRange(["server", "--detached", "--socket-dir", runtimeDirectory]);
+        if (OperatingSystem.IsWindows())
+        {
+            _ = WindowsServerProcess.Start(executable, arguments);
+            return;
+        }
+
+        var start = new ProcessStartInfo(executable, arguments)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -103,17 +118,6 @@ public static class ServerLauncher
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        string host = Path.GetFileNameWithoutExtension(executable);
-        if (executablePath is null && string.Equals(host, "dotnet", StringComparison.OrdinalIgnoreCase))
-        {
-            // Framework-dependent launch: the entry assembly must be passed to the dotnet host.
-            start.ArgumentList.Add(Environment.GetCommandLineArgs()[0]);
-        }
-
-        start.ArgumentList.Add("server");
-        start.ArgumentList.Add("--detached");
-        start.ArgumentList.Add("--socket-dir");
-        start.ArgumentList.Add(runtimeDirectory);
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("The weft server process could not be started.");
         process.StandardInput.Close();
         process.StandardOutput.Close();

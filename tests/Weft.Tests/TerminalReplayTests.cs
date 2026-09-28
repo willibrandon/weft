@@ -17,7 +17,7 @@ public sealed class TerminalReplayTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// Verifies real tput save and restore commands produce the same screen in the server and an attached view.
+    /// Verifies cursor save and restore sequences produce the same screen in the server and an attached view.
     /// </summary>
     /// <param name="attachBeforeSave">Whether the view observes the save itself.</param>
     /// <param name="rightEdge">Whether the saved cursor carries pending wrap at the right edge.</param>
@@ -39,12 +39,13 @@ public sealed class TerminalReplayTests
             ControlClient client = await fixture.ConnectAsync(cancellationToken).ConfigureAwait(false);
             await using (client.ConfigureAwait(false))
             {
-                string save = rightEdge ? "tput cup 2 79; printf X; tput sc; tput cup 4 0" : "tput cup 2 3; tput sc";
-                string restore = rightEdge ? "tput rc" : "tput rc; tput ed";
+                // The same sequences tput emits for xterm: cup, sc, rc, and ed.
+                string save = rightEdge ? "print '\\e[3;80HX\\e7\\e[5;1H'" : "print '\\e[3;4H\\e7'";
+                string restore = rightEdge ? "print '\\e8'" : "print '\\e8\\e[J'";
                 _ = await client.CreateSessionAsync(new SessionCreateParams
                 {
                     Name = "cursor-replay",
-                    Command = ["/bin/sh", "-c", "stty -echo; printf 'before-save'; IFS= read -r input; " + save + "; printf 'temporary prompt'; IFS= read -r input; " + restore + "; printf 'ready>'; IFS= read -r input"]
+                    Command = [TestPrograms.Shell, "-c", "noecho; print 'before-save'; read; " + save + "; print 'temporary prompt'; read; " + restore + "; print 'ready>'; read"]
                 }, cancellationToken).ConfigureAwait(false);
                 BlockWaitResult waiting = await client.WaitAsync(new BlockWaitParams { Target = "cursor-replay", Pattern = "before-save", TimeoutMs = 20_000 }, cancellationToken).ConfigureAwait(false);
                 Assert.AreEqual(WaitOutcome.Pattern, waiting.Outcome);

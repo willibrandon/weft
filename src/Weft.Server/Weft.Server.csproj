@@ -4,6 +4,7 @@
     <RootNamespace>Weft.Server</RootNamespace>
     <Description>Session server for weft: block hosting, control listener, and persistence.</Description>
     <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Weft.Tests" />

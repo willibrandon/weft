@@ -34,7 +34,7 @@ public sealed class DesktopClientTests
                 SessionInfo session = await control.CreateSessionAsync(new SessionCreateParams { Name = "desktop" }, token).ConfigureAwait(false);
                 await ServerFixture.WaitForPromptAsync(control, session.Id, token).ConfigureAwait(false);
                 string runtime = Path.GetDirectoryName(fixture.SocketPath)!;
-                var desktop = new DesktopClient(runtime, "/unused-existing-server", 100, 30, "/bin/bash");
+                var desktop = new DesktopClient(runtime, "/unused-existing-server", 100, 30, TestPrograms.Shell);
                 string blockId;
                 int? processId;
                 await using (desktop.ConfigureAwait(false))
@@ -42,7 +42,7 @@ public sealed class DesktopClientTests
                     DesktopFrame ready = await WaitAsync(desktop, frame => frame.Blocks.Count == 1, token).ConfigureAwait(false);
                     blockId = ready.Blocks[0].Id;
                     processId = (await control.GetBlockAsync(blockId, token).ConfigureAwait(false)).Pid;
-                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", blockId, "printf '\\033[2J\\033[H\\033[1;38;2;12;34;56m界é\\033[0m\\n\\033]8;;https://example.com\\007link\\033]8;;\\007\\n'\r")));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", blockId, "print '\\033[2J\\033[H\\033[1;38;2;12;34;56m界é\\033[0m\\n\\033]8;;https://example.com\\007link\\033]8;;\\007\\n'\r")));
                     DesktopFrame rendered = await WaitAsync(desktop, frame => frame.Blocks.Any(block => block.Cells.Any(cell => cell.Text == "界" && cell.Foreground == 0x0c2238)
                         && block.Cells.Any(cell => cell.Link == "https://example.com")), token).ConfigureAwait(false);
                     DesktopBlockFrame block = rendered.Blocks.Single();
@@ -71,7 +71,7 @@ public sealed class DesktopClientTests
                     _ = await WaitAsync(desktop, frame => frame.Blocks.Count == 2 && frame.Blocks.Any(item => item.Id == blockId), token).ConfigureAwait(false);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("newSession", Text: "second")));
                     DesktopFrame second = await WaitAsync(desktop, frame => frame.Title == "second" && frame.Blocks.Count == 1, token).ConfigureAwait(false);
-                    Assert.AreEqual("/bin/bash", (await control.GetBlockAsync(second.Blocks[0].Id, token).ConfigureAwait(false)).Command);
+                    Assert.AreEqual(TestPrograms.Shell, (await control.GetBlockAsync(second.Blocks[0].Id, token).ConfigureAwait(false)).Command);
                     Assert.HasCount(2, second.Sessions);
                     Assert.AreNotEqual(session.Id, second.ActiveSession);
                     Assert.AreEqual(0, (await control.GetSessionAsync(session.Id, token).ConfigureAwait(false)).Clients);
@@ -116,13 +116,13 @@ public sealed class DesktopClientTests
                 {
                     DesktopFrame ready = await WaitAsync(desktop, frame => frame.Blocks.Count == 1, token).ConfigureAwait(false);
                     string id = ready.Blocks[0].Id;
-                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "printf '\\033[1 qCURSOR\\055CHECK\\n'; IFS= read -r reply\r")));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "print '\\033[1 qCURSOR\\055CHECK\\n'; read\r")));
                     DesktopFrame cursor = await WaitAsync(desktop, frame => Text(frame).Contains("CURSOR-CHECK", StringComparison.Ordinal), token).ConfigureAwait(false);
                     Assert.AreEqual(1, cursor.Blocks[0].CursorShape);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "\r")));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "stty raw -echo; printf '\\033[2J\\033[HREADY'; dd bs=1 count=5 of=keys.bin 2>/dev/null; stty sane; printf DONE\r")));
-                    _ = await WaitAsync(desktop, frame => Text(frame).Contains("READY", StringComparison.Ordinal) && !Text(frame).Contains("stty", StringComparison.Ordinal), token).ConfigureAwait(false);
+                        "raw; print '\\033[2J\\033[HREADY'; record 5 keys.bin; cooked; print DONE\r")));
+                    _ = await WaitAsync(desktop, frame => Text(frame).Contains("READY", StringComparison.Ordinal) && !Text(frame).Contains("record", StringComparison.Ordinal), token).ConfigureAwait(false);
                     await Task.Delay(100, token).ConfigureAwait(false);
                     _ = desktop.TakeFrame();
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("key", id, "Escape")));
@@ -164,7 +164,7 @@ public sealed class DesktopClientTests
                 _ = await control.TypeAsync(new BlockTextParams
                 {
                     Target = session.Id,
-                    Text = "for i in $(seq 1 120); do printf 'HISTORY-%03d\\n' \"$i\"; done\r"
+                    Text = "repeat 1 120 'HISTORY-%03d\\n'\r"
                 }, token).ConfigureAwait(false);
                 _ = await control.WaitAsync(new BlockWaitParams { Target = session.Id, Pattern = "HISTORY-120" }, token).ConfigureAwait(false);
                 var desktop = new DesktopClient(Path.GetDirectoryName(fixture.SocketPath)!, "/unused-existing-server", 80, 24);
@@ -176,16 +176,16 @@ public sealed class DesktopClientTests
                     DesktopFrame history = await WaitAsync(desktop, frame => frame.Blocks.Any(block => block.ScrollOffset > 50), token).ConfigureAwait(false);
                     Assert.Contains("HISTORY-001", Text(history));
                     Assert.IsFalse(history.Blocks[0].CursorVisible);
-                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "printf 'LIVE-OUTPUT\\n'\r")));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "print 'LIVE-OUTPUT\\n'\r")));
                     _ = await control.WaitAsync(new BlockWaitParams { Target = id, Pattern = "LIVE-OUTPUT" }, token).ConfigureAwait(false);
                     DesktopFrame stable = await WaitAsync(desktop, frame => frame.Blocks.Any(block => block.ScrollOffset > 50), token).ConfigureAwait(false);
                     Assert.AreEqual(Text(history), Text(stable));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("live", id)));
                     _ = await WaitAsync(desktop, frame => Text(frame).Contains("LIVE-OUTPUT", StringComparison.Ordinal), token).ConfigureAwait(false);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "stty raw -echo; printf '\\033[2J\\033[H\\033[?1000h\\033[?1006hMOUSE-READY'; dd bs=1 count=9 of=mouse.bin 2>/dev/null; printf '\\033[?1000l\\033[?1006lMOUSE-DONE'; stty sane\r")));
+                        "raw; print '\\033[2J\\033[H\\033[?1000h\\033[?1006hMOUSE-READY'; record 9 mouse.bin; print '\\033[?1000l\\033[?1006lMOUSE-DONE'; cooked\r")));
                     _ = await WaitAsync(desktop, frame => frame.Blocks.Any(block => block.MouseTracking)
-                        && Text(frame).Contains("MOUSE-READY", StringComparison.Ordinal) && !Text(frame).Contains("stty", StringComparison.Ordinal), token).ConfigureAwait(false);
+                        && Text(frame).Contains("MOUSE-READY", StringComparison.Ordinal) && !Text(frame).Contains("record", StringComparison.Ordinal), token).ConfigureAwait(false);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("mouse", id, "down", X: 3, Y: 4, Button: 1)));
                     _ = await WaitAsync(desktop, frame => Text(frame).Contains("MOUSE-DONE", StringComparison.Ordinal), token).ConfigureAwait(false);
                     Assert.AreEqual("\u001b[<0;4;5M", await File.ReadAllTextAsync(Path.Join(fixture.Root, "mouse.bin"), token).ConfigureAwait(false));
@@ -274,7 +274,7 @@ public sealed class DesktopClientTests
                     DesktopFrame ready = await WaitAsync(desktop, frame => frame.Blocks.Count == 1, token).ConfigureAwait(false);
                     string id = ready.Blocks[0].Id;
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[2J\\033[H\\033_Ga=T,f=32,s=2,v=1,c=8,r=4,q=2;/wAA/wD/AP8=\\033\\\\'\r")));
+                        "print '\\033[2J\\033[H\\033_Ga=T,f=32,s=2,v=1,c=8,r=4,q=2;/wAA/wD/AP8=\\033\\\\'\r")));
                     DesktopFrame graphic = await WaitAsync(desktop, frame => frame.Blocks.Any(block => block.Images.Count > 0), token).ConfigureAwait(false);
                     DesktopImage image = graphic.Blocks[0].Images[0];
                     Assert.AreEqual(2, image.PixelWidth);
@@ -287,7 +287,7 @@ public sealed class DesktopClientTests
                     byte[] wire = DesktopWireFrame.Serialize(graphic);
                     Assert.IsTrue(image.Data.Span.SequenceEqual(wire.AsSpan(wire.Length - image.Data.Length)));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033_Ga=d,d=a,q=2\\033\\\\\\033[2J\\033[H\\033_Ga=T,f=32,s=2,v=1,X=3,Y=4,q=2;/wAA/wD/AP8=\\033\\\\'\r")));
+                        "print '\\033_Ga=d,d=a,q=2\\033\\\\\\033[2J\\033[H\\033_Ga=T,f=32,s=2,v=1,X=3,Y=4,q=2;/wAA/wD/AP8=\\033\\\\'\r")));
                     DesktopFrame native = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Any(raster => raster.ClipWidth < 1), token).ConfigureAwait(false);
                     DesktopImage nativeImage = native.Blocks[0].Images[0];
                     Assert.AreEqual(0.2d, nativeImage.ClipWidth, 0.0001);
@@ -295,7 +295,7 @@ public sealed class DesktopClientTests
                     Assert.AreEqual(0.3d, nativeImage.ClipX, 0.0001);
                     Assert.AreEqual(0.2d, nativeImage.ClipY, 0.0001);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033_Ga=d,d=a,q=2\\033\\\\\\033[2J\\033[H\\033_Ga=t,i=99,f=32,s=2,v=1,q=2;/wAA/wD/AP8=\\033\\\\'; i=1; while [ \"$i\" -le 800 ]; do printf '\\033_Ga=p,i=99,p=%d,c=1,r=1,q=2\\033\\\\' \"$i\"; i=$((i+1)); done\r")));
+                        "print '\\033_Ga=d,d=a,q=2\\033\\\\\\033[2J\\033[H\\033_Ga=t,i=99,f=32,s=2,v=1,q=2;/wAA/wD/AP8=\\033\\\\'; repeat 1 800 '\\033_Ga=p,i=99,p=%d,c=1,r=1,q=2\\033\\\\'\r")));
                     DesktopFrame sprites = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Count == 800, token).ConfigureAwait(false);
                     Assert.HasCount(1, sprites.Blocks[0].Textures);
                     DesktopFrame spriteCopy = JsonSerializer.Deserialize(JsonSerializer.Serialize(sprites,
@@ -303,23 +303,23 @@ public sealed class DesktopClientTests
                     Assert.HasCount(800, spriteCopy.Blocks[0].Images);
                     Assert.HasCount(1, spriteCopy.Blocks[0].Textures);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[?2026h\\033_Ga=d,d=a,q=2\\033\\\\'; sleep .1; printf '\\033_Ga=p,i=99,p=1,c=1,r=1,q=2\\033\\\\'; sleep .1; printf '\\033_Ga=p,i=99,p=2,c=1,r=1,q=2\\033\\\\\\033[?2026l'\r")));
+                        "print '\\033[?2026h\\033_Ga=d,d=a,q=2\\033\\\\'; sleep .1; print '\\033_Ga=p,i=99,p=1,c=1,r=1,q=2\\033\\\\'; sleep .1; print '\\033_Ga=p,i=99,p=2,c=1,r=1,q=2\\033\\\\\\033[?2026l'\r")));
                     _ = await WaitAsync(desktop, frame =>
                     {
                         Assert.IsTrue(frame.Blocks[0].Images.Count is 800 or 2, "A synchronized sprite update was presented before completion.");
                         return frame.Blocks[0].Images.Count == 2;
                     }, token).ConfigureAwait(false);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[?2026h\\033_Ga=d,d=a,q=2\\033\\\\\\033_Ga=p,i=99,p=1,c=1,r=1,q=2\\033\\\\'\r")));
+                        "print '\\033[?2026h\\033_Ga=d,d=a,q=2\\033\\\\\\033_Ga=p,i=99,p=1,c=1,r=1,q=2\\033\\\\'\r")));
                     _ = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Count == 1, token).ConfigureAwait(false);
-                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "printf '\\033[?2026l'\r")));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "print '\\033[?2026l'\r")));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033_Ga=d,d=a,q=2\\033\\\\\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\'\r")));
+                        "print '\\033_Ga=d,d=a,q=2\\033\\\\\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\'\r")));
                     DesktopFrame sixel = await WaitAsync(desktop, frame => frame.Blocks.SelectMany(block => block.Images)
                         .Any(raster => raster.PixelWidth == 20 && raster.PixelHeight == 6), token).ConfigureAwait(false);
                     Assert.AreEqual(0d, sixel.Blocks[0].Images[0].ClipY);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[1;2H\\033Pq#2;2;0;0;100#2!10~\\033\\\\'\r")));
+                        "print '\\033[1;2H\\033Pq#2;2;0;0;100#2!10~\\033\\\\'\r")));
                     DesktopFrame layered = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Any(raster =>
                         raster.PixelWidth == 20 && raster.PixelHeight == 6 && raster.Data.Span[42] == 255), token).ConfigureAwait(false);
                     ReadOnlyMemory<byte> plane = layered.Blocks[0].Images[0].Data;
@@ -327,14 +327,14 @@ public sealed class DesktopClientTests
                     Assert.IsTrue(plane.Span.Slice(40, 4).SequenceEqual(new byte[] { 0, 0, 255, 255 }));
                     Assert.AreEqual(0d, layered.Blocks[0].Images[0].ClipY);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\\\033[H\\033P0;1q#2;2;0;0;100#2!20@\\033\\\\'\r")));
+                        "print '\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\\\033[H\\033P0;1q#2;2;0;0;100#2!20@\\033\\\\'\r")));
                     DesktopFrame transparent = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Any(raster =>
                         raster.PixelWidth == 20 && raster.PixelHeight == 6 && raster.Data.Span[2] == 255), token).ConfigureAwait(false);
                     ReadOnlyMemory<byte> transparentPlane = transparent.Blocks[0].Images[0].Data;
                     Assert.IsTrue(transparentPlane.Span[..4].SequenceEqual(new byte[] { 0, 0, 255, 255 }));
                     Assert.IsTrue(transparentPlane.Span.Slice(80, 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[?2026h\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\\\033[3;4H\\033Pq#2;2;0;0;100#2!10~\\033\\\\\\033[?2026l'\r")));
+                        "print '\\033[?2026h\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\\\033[3;4H\\033Pq#2;2;0;0;100#2!10~\\033\\\\\\033[?2026l'\r")));
                     DesktopFrame separated = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Any(raster =>
                         raster.PixelWidth == 40 && raster.PixelHeight == 46), token).ConfigureAwait(false);
                     ReadOnlyMemory<byte> separatedPlane = separated.Blocks[0].Images[0].Data;
@@ -372,7 +372,7 @@ public sealed class DesktopClientTests
                     DesktopFrame ready = await WaitAsync(desktop, frame => frame.Blocks.Count == 1, token).ConfigureAwait(false);
                     string id = ready.Blocks[0].Id;
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
-                        "printf '\\033[2J\\033[H'; for i in $(seq 1 100); do printf 'SEL-%03d\\n' \"$i\"; done\r")));
+                        "print '\\033[2J\\033[H'; repeat 1 100 'SEL-%03d\\n'\r")));
                     _ = await WaitAsync(desktop, frame => frame.Blocks[0].HistoryLines > 50 && Text(frame).Contains("SEL-100", StringComparison.Ordinal), token).ConfigureAwait(false);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("scrollTo", id, Y: int.MaxValue)));
                     DesktopFrame first = await WaitAsync(desktop, frame => frame.Blocks[0].ScrollOffset == frame.Blocks[0].HistoryLines, token).ConfigureAwait(false);
@@ -389,14 +389,14 @@ public sealed class DesktopClientTests
                     DesktopFrame selected = await WaitAsync(desktop, frame => frame.Blocks[0].Selection?.Text.Contains("SEL-100", StringComparison.Ordinal) == true, token).ConfigureAwait(false);
                     string expected = string.Join('\n', Enumerable.Range(1, 100).Select(number => $"SEL-{number:000}"));
                     Assert.AreEqual(expected, selected.Blocks[0].Selection!.Text);
-                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "printf 'AFTER-SELECTION\\n'\r")));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "print 'AFTER-SELECTION\\n'\r")));
                     _ = await control.WaitAsync(new BlockWaitParams { Target = id, Pattern = "AFTER-SELECTION" }, token).ConfigureAwait(false);
                     DesktopFrame stable = await WaitAsync(desktop, frame => frame.Blocks[0].Selection is not null, token).ConfigureAwait(false);
                     Assert.AreEqual(expected, stable.Blocks[0].Selection!.Text);
                     Assert.AreEqual(Text(selected), Text(stable));
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("live", id)));
                     _ = await WaitAsync(desktop, frame => frame.Blocks[0].Selection is null && Text(frame).Contains("AFTER-SELECTION", StringComparison.Ordinal), token).ConfigureAwait(false);
-                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "printf '\\033[2J\\033[Hab界écd\\n'\r")));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id, "print '\\033[2J\\033[Hab界écd\\n'\r")));
                     _ = await WaitAsync(desktop, frame => Text(frame).StartsWith("ab界écd", StringComparison.Ordinal), token).ConfigureAwait(false);
                     Assert.IsTrue(desktop.TrySend(new DesktopCommand("select", id, "word", X: 6, Y: 0)));
                     DesktopFrame word = await WaitAsync(desktop, frame => frame.Blocks[0].Selection is not null, token).ConfigureAwait(false);

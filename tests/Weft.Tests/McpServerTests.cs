@@ -18,7 +18,7 @@ public sealed class McpServerTests
     public TestContext TestContext { get; set; } = null!;
 
     private static readonly string[] s_expectedTools = ["list_sessions", "list_blocks", "create_block", "run", "send_keys", "capture", "wait_for", "close_block"];
-    private static readonly string[] s_runCommand = ["/bin/sh", "-c", "echo mcp-$((6*7)); exit 5"];
+    private static readonly string[] s_runCommand = [TestPrograms.Shell, "-c", "echo mcp-$((6*7)); exit 5"];
     private static readonly string[] s_keys = ["echo keys-$((2*2))", "Enter"];
 
     /// <summary>

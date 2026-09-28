@@ -52,7 +52,7 @@ internal sealed class ServerFixture : IAsyncDisposable
             RuntimeDirectory = Path.Join(root, "run"),
             StateDirectory = Path.Join(root, "state"),
             HomeDirectory = root,
-            DefaultShell = "/bin/sh",
+            DefaultShell = TestPrograms.Shell,
             Scrollback = 500,
             DefaultWidth = 80,
             DefaultHeight = 24

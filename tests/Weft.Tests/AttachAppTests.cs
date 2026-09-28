@@ -232,7 +232,7 @@ public sealed class AttachAppTests
                 _ = await client.CreateSessionAsync(new SessionCreateParams
                 {
                     Name = "terminal-keys",
-                    Command = ["/bin/sh", "-c", "stty -echo -icanon min 1 time 0; printf 'key-ready\\n'; od -An -tu1 -N1; printf 'esc-received\\n'; od -An -tu1 -N1; stty sane; printf 'key-done\\n'; IFS= read -r input"]
+                    Command = [TestPrograms.Shell, "-c", "raw; print 'key-ready\\r\\n'; bytes 1; print 'esc-received\\r\\n'; bytes 1; cooked; print 'key-done\\n'; read"]
                 }, cancellationToken).ConfigureAwait(false);
                 var app = new AttachApp(new AttachOptions { SocketPath = fixture.SocketPath, Target = "terminal-keys", Headless = (100, 30) });
                 Task run = app.RunAsync(cancellationToken);
