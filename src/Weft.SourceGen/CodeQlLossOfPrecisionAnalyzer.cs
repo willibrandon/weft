@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 
@@ -31,6 +32,14 @@ public sealed class CodeQlLossOfPrecisionAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "Integer arithmetic converted to a floating point or decimal type must not introduce CodeQL "
             + "cs/loss-of-precision findings.");
+
+    // The product types CodeQL treats as exact when both factors are constants, with the values each can hold.
+    private static readonly Dictionary<SpecialType, (decimal Minimum, decimal Maximum)> s_productRanges = new()
+    {
+        [SpecialType.System_Int32] = (int.MinValue, int.MaxValue),
+        [SpecialType.System_UInt32] = (uint.MinValue, uint.MaxValue),
+        [SpecialType.System_Int64] = (long.MinValue, long.MaxValue)
+    };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [s_rule];
@@ -115,10 +124,9 @@ public sealed class CodeQlLossOfPrecisionAnalyzer : DiagnosticAnalyzer
         }
 
         decimal result = (decimal)left * right;
-        SpecialType type = product.Type?.SpecialType ?? SpecialType.None;
-        return (type == SpecialType.System_Int32 && result is >= int.MinValue and <= int.MaxValue)
-            || (type == SpecialType.System_UInt32 && result is >= uint.MinValue and <= uint.MaxValue)
-            || (type == SpecialType.System_Int64 && result is >= long.MinValue and <= long.MaxValue);
+        return product.Type is { } type && s_productRanges.TryGetValue(type.SpecialType,
+            out (decimal Minimum, decimal Maximum) range)
+            && result >= range.Minimum && result <= range.Maximum;
     }
 
     private static long? Constant(IOperation operand)

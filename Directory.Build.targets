@@ -91,7 +91,8 @@
            Text="Nullable reference types must remain enabled." />
   </Target>
   <!-- Every project compiles with the repository's own analyzers, which mirror the CodeQL queries and the
-       conventions in AGENTS.md, so a finding fails the local build instead of a CI run. -->
+       conventions in AGENTS.md, so a finding fails the local build instead of a CI run. Weft.SourceGen cannot
+       load itself, so CodeQlSelfAnalysisTests runs the CodeQL guards over its sources instead. -->
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Weft.SourceGen' and
                         !$([System.String]::Copy('$(MSBuildProjectDirectory)').StartsWith('$(MSBuildThisFileDirectory)scripts')) and
                         Exists('$(MSBuildThisFileDirectory)src/Weft.SourceGen/Weft.SourceGen.csproj')">

@@ -131,6 +131,7 @@ public sealed class SyncInputTests
             }
         }
     }
+
     private static async Task<string> ScreensAsync(ControlClient client, string first, string second,
         CancellationToken cancellationToken)
     {

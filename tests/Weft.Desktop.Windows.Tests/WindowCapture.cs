@@ -55,10 +55,22 @@ internal sealed class WindowCapture
             .RequestAccessAsync(GraphicsCaptureAccessKind.Programmatic).AsTask(cancellationToken).ConfigureAwait(true);
         AppCapabilityAccessStatus borderless = await GraphicsCaptureAccess
             .RequestAccessAsync(GraphicsCaptureAccessKind.Borderless).AsTask(cancellationToken).ConfigureAwait(true);
-        GraphicsCaptureItem item = GraphicsCaptureItem.TryCreateFromWindowId(new WindowId(id))
-            ?? throw new AssertFailedException("The window cannot be captured. Supported: "
-                + GraphicsCaptureSession.IsSupported()
-                + ", programmatic access: " + programmatic + ", borderless access: " + borderless + ".");
+        string access = "Supported: " + GraphicsCaptureSession.IsSupported() + ", programmatic access: " + programmatic
+            + ", borderless access: " + borderless + ".";
+        GraphicsCaptureItem? item;
+        try
+        {
+            item = GraphicsCaptureItem.TryCreateFromWindowId(new WindowId(id));
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            throw new InvalidOperationException("Windows denied capturing the window. " + access, exception);
+        }
+
+        if (item is null)
+        {
+            throw new AssertFailedException("The window cannot be captured. " + access);
+        }
         using var pool = Direct3D11CaptureFramePool.CreateFreeThreaded(CanvasDevice.GetSharedDevice(),
             DirectXPixelFormat.B8G8R8A8UIntNormalized, 1, item.Size);
         using GraphicsCaptureSession session = pool.CreateCaptureSession(item);

@@ -6,6 +6,7 @@
 #:property AllowUnsafeBlocks=true
 #:property WeftAllowAlternateTargetFramework=true
 
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -86,6 +87,11 @@ internal static partial class TestWindowsApp
         await File.WriteAllTextAsync(Path.Join(output, "qualification-environment.txt"),
             "OS: " + RuntimeInformation.OSDescription + "\nHost architecture: " + RuntimeInformation.OSArchitecture
             + "\nApp target: " + arch + "\n").ConfigureAwait(false);
+
+        if (string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            AllowWindowCapture();
+        }
 
         // The window tests run against the bundled server the app ships with, and their results are kept.
         await RunVisibleAsync("dotnet", ["test", "--project", "tests/Weft.Desktop.Windows.Tests", "--report-trx"],
@@ -394,6 +400,35 @@ internal static partial class TestWindowsApp
     {
         return expected.Count == actual.Count
             && expected.All(pair => actual.TryGetValue(pair.Key, out int value) && value == pair.Value);
+    }
+
+    /// <summary>
+    /// Lets desktop apps capture windows without asking, as a Windows 11 desktop allows by default.
+    /// </summary>
+    /// <remarks>
+    /// The window tests read their own pixels through Windows Graphics Capture. A fresh Windows Server runner has
+    /// not granted that consent and has no one to grant it, so capture is denied. Only CI runs change it; a local
+    /// run keeps the user's own privacy choice.
+    /// </remarks>
+    private static void AllowWindowCapture()
+    {
+        const string ConsentStore = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\";
+        string[] capabilities = ["graphicsCaptureProgrammatic", "graphicsCaptureWithoutBorder"];
+        foreach (string capability in capabilities)
+        {
+            using (RegistryKey machine = Registry.LocalMachine.CreateSubKey(ConsentStore + capability))
+            {
+                machine.SetValue("Value", "Allow");
+            }
+
+            using (RegistryKey user = Registry.CurrentUser.CreateSubKey(ConsentStore + capability))
+            {
+                user.SetValue("Value", "Allow");
+            }
+
+            using RegistryKey unpackaged = Registry.CurrentUser.CreateSubKey(ConsentStore + capability + @"\NonPackaged");
+            unpackaged.SetValue("Value", "Allow");
+        }
     }
 
     private static bool IsAdministrator()

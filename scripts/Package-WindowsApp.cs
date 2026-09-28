@@ -26,6 +26,8 @@ internal static class PackageWindowsApp
     /// </summary>
     internal const string Publisher = "CN=Weft Development, OID.2.25.311729368913984317654407730594956997722=1";
 
+    private const string LogoList = "logos.resfiles";
+
     private static readonly XNamespace s_foundation = "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
     private static readonly XNamespace s_uap = "http://schemas.microsoft.com/appx/manifest/uap/windows10";
     private static readonly XNamespace s_uap3 = "http://schemas.microsoft.com/appx/manifest/uap/windows10/3";
@@ -105,11 +107,20 @@ internal static class PackageWindowsApp
         string tools = FindTools();
         string configuration = Path.Join(output, "priconfig.xml");
         PriConfiguration().Save(configuration);
+        // The shell resolves the manifest's Assets\ logo paths through the index, so each logo is listed by
+        // its path in the package. A folder index would name them relative to Assets, leaving the taskbar
+        // and Start with no icon.
+        string logos = Path.Join(stage, LogoList);
+        await File.WriteAllLinesAsync(logos,
+            Directory.EnumerateFiles(Path.Join(stage, "Assets"), "*.png")
+                .Select(path => Path.GetRelativePath(stage, path)))
+            .ConfigureAwait(false);
         // The package's resource index merges the app's WinUI resources with the scaled logos.
         await RunAsync(Path.Join(tools, "makepri.exe"),
             ["new", "/pr", stage, "/cf", configuration, "/mn", manifest,
                 "/of", Path.Join(stage, "resources.pri"), "/o"])
             .ConfigureAwait(false);
+        File.Delete(logos);
         string package = Path.Join(root, "artifacts", "windows",
             string.Create(CultureInfo.InvariantCulture, $"Weft-{packageVersion.ToString(3)}-{arch}.msix"));
         await RunAsync(Path.Join(tools, "makeappx.exe"), ["pack", "/d", stage, "/p", package, "/o"])
@@ -203,12 +214,10 @@ internal static class PackageWindowsApp
                 new XAttribute("majorVersion", "1"),
                 new XElement("index",
                     new XAttribute("root", "\\"),
-                    new XAttribute("startIndexAt", "Assets"),
+                    new XAttribute("startIndexAt", LogoList),
                     Defaults(),
                     new XElement("indexer-config",
-                        new XAttribute("type", "folder"),
-                        new XAttribute("foldernameAsQualifier", "true"),
-                        new XAttribute("filenameAsQualifier", "true"),
+                        new XAttribute("type", "RESFILES"),
                         new XAttribute("qualifierDelimiter", "."))),
                 new XElement("index",
                     new XAttribute("root", "\\"),

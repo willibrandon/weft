@@ -114,7 +114,8 @@ public sealed class CodeQlLocalDisposableAnalyzer : DiagnosticAnalyzer
 
         foreach (VariableDeclaratorSyntax variable in declaration.Declaration.Variables)
         {
-            if (context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is not ILocalSymbol local)
+            ISymbol? declared = context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken);
+            if (declared is not ILocalSymbol local)
             {
                 continue;
             }

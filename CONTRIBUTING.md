@@ -83,7 +83,9 @@ dotnet format Weft.Windows.slnx style --verify-no-changes
 The window tests host the app inside the test process and open real windows behind the
 active window, each against a private server, without taking the keyboard or changing
 your preferences or sessions. They capture pixels with Windows Graphics Capture, which
-needs Windows 10 version 21H2 or later. `Test-WindowsApp.cs` also starts the published
+needs Windows 10 version 21H2 or later and lets desktop apps capture windows, as Windows 11
+does by default. Windows Server asks first, so in CI `Test-WindowsApp.cs` grants that
+consent before the tests run. `Test-WindowsApp.cs` also starts the published
 app in front, so keep typing elsewhere until it finishes. Its `--package` option installs
 the development MSIX and needs an elevated terminal.
 
