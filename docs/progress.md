@@ -158,6 +158,15 @@ own elapsed time, and completion and performance limits remain unchanged.
 The corrected native suite passes locally with idle input p95 10.9 ms, loaded
 input p95 46.2 ms, and tab switch p95 126.2 ms. Swift CodeQL completed its first
 successful GitHub scan with zero findings after the header fix.
+ARM64 CI then passed the complete installed-app suite, including the 16-tab
+workload at 81.7 ms input p95 and installation lifecycle checks. The Intel rerun
+expired the two-minute command deadline while compiling the native tests, before
+any test executed. App and test builds now use Swift batch compilation to reduce
+repeated parsing; command deadlines and test limits are unchanged.
+The faster output producer also exposed that tab-switch timing included waiting
+for a background command to finish. Timing now ends when the selected tab's frame
+is painted, then separately verifies output completion. Loaded memory is sampled
+after every background producer has completed.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.

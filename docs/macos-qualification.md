@@ -24,7 +24,8 @@ installed-app measurements distinguish local results from CI hardware coverage.
 The ARM64 installed-DMG suite passes, including the 16-tab workload, resource
 limits, native rendering and input, crash recovery, upgrade, removal, and reinstall.
 Its loaded input-to-paint p95 was 50.8 ms and tab-switch p95 was 81.3 ms. Native
-Intel qualification awaits GitHub validation. Swift CodeQL passes with zero findings.
+Intel qualification is covered by the installed-app CI job on native Intel
+hardware; its results and host report are attached to PR 18. Swift CodeQL passes with zero findings.
 Interactive checks below
 remain open; only one physical display was connected and VoiceOver was off.
 
@@ -103,7 +104,6 @@ items.
 | Japanese and Chinese input | Visible candidates follow composition through resize, scrolling, pane changes, and cancellation; committed text appears once |
 | Physical non-US keyboards | Common layouts, dead keys, Option combinations, repeat, and command search work without shortcut collisions |
 | Mixed-scale displays | Move a live window between different physical displays while composing, scrolling, drawing graphics, and entering fullscreen |
-| Native Intel | Run the installed-app suite on Intel hardware and preserve the host architecture report |
 
 Use private sessions and bounded launches. Never enable VoiceOver or switch system
 keyboard layouts automatically. Leave the user's running terminals untouched.

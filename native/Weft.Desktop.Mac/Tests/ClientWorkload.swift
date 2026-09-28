@@ -80,17 +80,19 @@ extension MacSmoke {
         }
         _ = try await wait(controller) { $0.blocks.first(where: { $0.id == originalBlock })?.cells.map(\.text).joined().contains("OUTPUT-DONE") == true }
         let elapsed = milliseconds(started.duration(to: .now))
-        let loaded = try residentBytes()
         var switching: [Double] = []
         for (index, tab) in tabs.enumerated() {
             let start = ContinuousClock.now
             controller.selectTab(tab)
             _ = try await wait(controller, pollEvery: .milliseconds(1)) {
-                $0.activeTab == tab && $0.blocks.first?.id == blocks[index] && text($0).contains("HIDDEN-DONE")
+                $0.activeTab == tab && $0.blocks.first?.id == blocks[index]
             }
             controller.terminal.displayIfNeeded()
             switching.append(milliseconds(start.duration(to: .now)))
+            // Process completion is required, but it is separate from presenting the selected tab.
+            _ = try await wait(controller) { $0.activeTab == tab && text($0).contains("HIDDEN-DONE") }
         }
+        let loaded = try residentBytes()
         controller.selectTab(originalTab)
         _ = try await wait(controller) { $0.activeTab == originalTab && $0.blocks.count == 2 && ($0.blocks.first(where: { $0.id == originalBlock })?.historyLines ?? 0) > 100 }
         let scrollStart = ContinuousClock.now

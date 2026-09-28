@@ -10,6 +10,7 @@ using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Weft.Scripts;
 
@@ -122,13 +123,26 @@ internal static class BuildMacApp
         List<string> swiftArguments =
         [
             "swiftc", "-swift-version", "6", "-O", "-warnings-as-errors",
+            "-enable-batch-mode", "-j", Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "-module-cache-path", Path.Join(output, "module-cache"),
             "-target", (arch == "arm64" ? "arm64" : "x86_64") + "-apple-macosx" + minimum,
             "-import-objc-header", Path.Join(source, "WeftNative.h"),
             "-framework", "AppKit", "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
             library, "-o", Path.Join(executables, "Weft")
         ];
-        swiftArguments.AddRange(Directory.EnumerateFiles(Path.Join(source, "Sources"), "*.swift").Order(StringComparer.Ordinal));
+        string[] swiftSources = [.. Directory.EnumerateFiles(Path.Join(source, "Sources"), "*.swift").Order(StringComparer.Ordinal)];
+        string objects = Path.Join(output, "app-objects");
+        _ = Directory.CreateDirectory(objects);
+        // Explicit object paths keep the batch compiler and linker on the same outputs.
+        var outputMap = new JsonObject();
+        foreach (string path in swiftSources)
+        {
+            outputMap[path] = new JsonObject { ["object"] = Path.Join(objects, Path.GetFileNameWithoutExtension(path) + ".o") };
+        }
+        string outputMapPath = Path.Join(objects, "output-map.json");
+        await File.WriteAllTextAsync(outputMapPath, outputMap.ToJsonString()).ConfigureAwait(false);
+        swiftArguments.AddRange(["-output-file-map", outputMapPath]);
+        swiftArguments.AddRange(swiftSources);
         if (prepareAnalysis)
         {
             // CodeQL traces Swift compilation directly; dependency preparation runs before tracing begins.

@@ -38,6 +38,8 @@ remain supplied by the build environment without version pins.
 Mac CI selects the newest numbered Xcode release installed on the runner, since
 the Intel image's default compiler predates isolated protocol conformances.
 The selection applies only to the job through `DEVELOPER_DIR`.
+App and native test compilation use Swift batch mode with concurrency based on
+the host's processor count, avoiding repeated parsing for every individual file.
 
 CodeQL scans C# on Linux and builds the Mac app for Swift analysis on macOS. Both
 jobs run the security and quality queries and fail on any finding. The Swift build

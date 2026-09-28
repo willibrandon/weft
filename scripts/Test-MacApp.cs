@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Weft.Scripts;
 
@@ -105,14 +106,31 @@ internal static class TestMacApp
             List<string> arguments =
             [
                 "swiftc", "-swift-version", "6", "-O", "-warnings-as-errors",
+                "-enable-batch-mode", "-j", Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 "-module-cache-path", Path.Join(output, "module-cache"),
                 "-target", (arch == "arm64" ? "arm64" : "x86_64") + "-apple-macosx" + minimum.Trim(),
                 "-import-objc-header", Path.Join(source, "WeftNative.h"),
                 "-framework", "AppKit", "-Xlinker", "-rpath", "-Xlinker", Path.Join(contents, "Frameworks"),
                 Path.Join(contents, "Frameworks", "libWeft.Client.Native.dylib"), "-o", test
             ];
-            arguments.AddRange(Directory.EnumerateFiles(Path.Join(source, "Tests"), "*.swift").Order(StringComparer.Ordinal));
-            arguments.AddRange(Directory.EnumerateFiles(Path.Join(source, "Sources"), "*.swift").Where(path => Path.GetFileName(path) != "main.swift").Order(StringComparer.Ordinal));
+            string[] swiftSources =
+            [
+                .. Directory.EnumerateFiles(Path.Join(source, "Tests"), "*.swift")
+                    .Concat(Directory.EnumerateFiles(Path.Join(source, "Sources"), "*.swift").Where(path => Path.GetFileName(path) != "main.swift"))
+                    .Order(StringComparer.Ordinal)
+            ];
+            string objects = Path.Join(output, "test-objects");
+            _ = Directory.CreateDirectory(objects);
+            // Explicit object paths keep the batch compiler and linker on the same outputs.
+            var outputMap = new JsonObject();
+            foreach (string path in swiftSources)
+            {
+                outputMap[path] = new JsonObject { ["object"] = Path.Join(objects, Path.GetFileNameWithoutExtension(path) + ".o") };
+            }
+            string outputMapPath = Path.Join(objects, "output-map.json");
+            await File.WriteAllTextAsync(outputMapPath, outputMap.ToJsonString()).ConfigureAwait(false);
+            arguments.AddRange(["-output-file-map", outputMapPath]);
+            arguments.AddRange(swiftSources);
             _ = await RunAsync("xcrun", arguments, environment).ConfigureAwait(false);
             if (accessibility)
             {
