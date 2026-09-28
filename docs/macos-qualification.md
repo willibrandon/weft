@@ -96,6 +96,10 @@ enabled. CI exercises the same workload on both architectures. A graphics
 comparison under unrelated CPU-intensive host load measured Kitty at 22.7 frames/s
 on the previous server and 29.8 on the scheduled server. Both missed the limit;
 graphics acceptance still needs a run without that competing load.
+The subsequent native text optimization batches ASCII glyphs at fixed cell
+positions. Character echo bypasses the scrolling queue. The local workload then
+measured input p95 19.8 ms, drawing p95 0.75 ms, and tab switching p95 6.0 ms;
+partial redraw, Unicode and symbol captures, and all 548 .NET tests pass.
 The external rbirds workload is optional local qualification; CI does not download
 or build that reference repository. Swift CodeQL's first successful GitHub scan
 is recorded in [PR 18](https://github.com/willibrandon/weft/pull/18).

@@ -314,12 +314,16 @@ Tab-switch timing ends at the selected tab's first paint; background command
 completion is checked separately before sampling loaded memory.
 Producer reports separate time spent writing to the PTY from deliberate pacing
 so output completion failures can be distinguished from presentation delays.
-Server output processing admits one batch at a time and yields after at most eight
-line breaks, limiting concurrent screen-change allocations and giving other
-terminals a turn. PTY reads, input, and client transport remain independent. Pending
+Server output processing admits one newline-containing batch at a time and yields
+after at most eight line breaks, limiting concurrent screen-change allocations
+and giving other terminals a turn. Character echo and graphics bytes without line
+breaks bypass that queue. PTY reads, input, and client transport remain independent. Pending
 bytes retain their order; cancellation and terminal failure release the processing
 slot. Each server owns its slot, and process exit waits for already buffered
 output. Producer diagnostics also record formatting and elapsed time.
+AppKit batches ordinary ASCII glyphs by row and style using fixed cell positions.
+Font lookups are retained only for the current font variants. Complex text,
+decorations, and glyphs that need individual clipping retain AppKit text layout.
 The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
 The native client honors the configured shell for new terminals even when attaching

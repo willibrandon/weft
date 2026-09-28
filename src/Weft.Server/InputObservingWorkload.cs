@@ -13,6 +13,7 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     private ReadOnlyMemory<byte> _pendingOutput;
     private CancellationTokenRegistration _processingCancellation;
     private int _pendingBytes;
+    private int _applying;
     private int _processing;
 
     /// <summary>
@@ -38,7 +39,7 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     /// <summary>
     /// Gets whether output has been read but not yet applied to the terminal.
     /// </summary>
-    internal bool HasPendingOutput => Volatile.Read(ref _pendingBytes) != 0 || Volatile.Read(ref _processing) != 0;
+    internal bool HasPendingOutput => Volatile.Read(ref _pendingBytes) != 0 || Volatile.Read(ref _applying) != 0;
 
     /// <inheritdoc />
     public async ValueTask<ReadOnlyMemory<byte>> ReadOutputAsync(CancellationToken ct = default)
@@ -69,9 +70,15 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
             }
         }
 
-        await _outputProcessing.WaitAsync(ct).ConfigureAwait(false);
-        Volatile.Write(ref _processing, 1);
-        _processingCancellation = ct.UnsafeRegister(static state => ((InputObservingWorkload)state!).CompleteOutput(), this);
+        // Ordinary character echo and graphics do not need to wait behind
+        // scrolling terminals. The slot bounds newline-driven screen changes.
+        if (lines != 0)
+        {
+            await _outputProcessing.WaitAsync(ct).ConfigureAwait(false);
+            Volatile.Write(ref _processing, 1);
+            _processingCancellation = ct.UnsafeRegister(static state => ((InputObservingWorkload)state!).CompleteOutput(), this);
+        }
+        Volatile.Write(ref _applying, 1);
         ReadOnlyMemory<byte> batch = _pendingOutput[..length];
         _pendingOutput = _pendingOutput[length..];
         Volatile.Write(ref _pendingBytes, _pendingOutput.Length);
@@ -83,6 +90,7 @@ internal sealed class InputObservingWorkload : IHex1bTerminalWorkloadAdapter
     /// </summary>
     internal void CompleteOutput()
     {
+        Volatile.Write(ref _applying, 0);
         if (Interlocked.Exchange(ref _processing, 0) != 0)
         {
             _ = _outputProcessing.Release();

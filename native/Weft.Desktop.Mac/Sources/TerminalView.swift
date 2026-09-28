@@ -19,6 +19,7 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
     private var selectionScroll: Timer?
     private var pendingSelections: Set<String> = []
     private let images = TerminalImages()
+    private let asciiText = TerminalAsciiText()
     /// Resource accounting for local qualification; this is not process physical footprint.
     var rasterCacheBytes: Int { images.retainedBytes }
     var rasterCacheCount: Int { images.count }
@@ -78,6 +79,7 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
         setAccessibilityValue("")
         setAccessibilitySelectedText("")
         images.removeAll()
+        asciiText.removeAll()
         scrollers.values.forEach { $0.removeFromSuperview() }
         scrollers.removeAll()
         wheelRemainders.removeAll()
@@ -259,6 +261,7 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
         font = TerminalFont.withFallback(value)
         updateFontMetrics()
         styledFonts.removeAll()
+        asciiText.removeAll()
         TerminalFont.save(font)
         needsLayout = true
         needsDisplay = true
@@ -306,13 +309,21 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
                 var fg = color(reverse ? cell.background : cell.foreground, fallback: reverse ? background : foreground)
                 if cell.attributes & 2 != 0 { fg = fg.withAlphaComponent(0.55) }
                 let drawingFont = styledFont(cell.attributes)
+                let point = NSPoint(x: rect.minX + CGFloat(index % block.width) * cellWidth,
+                                    y: rect.minY + CGFloat(index / block.width) * cellHeight + 1)
+                if let context = NSGraphicsContext.current?.cgContext {
+                    if cell.attributes & 136 == 0,
+                       asciiText.append(cell.text, font: drawingFont, color: fg, point: point,
+                                        cellWidth: cellWidth, cellHeight: cellHeight, context: context) {
+                        continue
+                    }
+                    asciiText.flush(in: context)
+                }
                 var attributes: [NSAttributedString.Key: Any] = [
                     .font: drawingFont, .foregroundColor: fg
                 ]
                 if cell.attributes & 8 != 0 { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
                 if cell.attributes & 128 != 0 { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-                let point = NSPoint(x: rect.minX + CGFloat(index % block.width) * cellWidth,
-                                    y: rect.minY + CGFloat(index / block.width) * cellHeight + 1)
                 let wide = index % block.width < block.width - 1 && block.cells[index + 1].text.isEmpty
                 NSGraphicsContext.saveGraphicsState()
                 NSRect(x: point.x, y: point.y - 1, width: cellWidth * (wide ? 2 : 1), height: cellHeight).clip()
@@ -321,6 +332,7 @@ final class TerminalView: NSView, @MainActor NSTextInputClient {
                 }
                 NSGraphicsContext.restoreGraphicsState()
             }
+            if let context = NSGraphicsContext.current?.cgContext { asciiText.flush(in: context) }
             drawImages(block, behindText: false, rect: rect)
             if block.active && block.cursorVisible && block.selection == nil && cursorLit {
                 let cursor = NSRect(x: rect.minX + CGFloat(block.cursorX) * cellWidth,

@@ -187,6 +187,15 @@ measured Kitty at 22.7 frames/s on the previous server and 29.8 on the scheduled
 server. Both missed the 55 frames/s limit; this establishes neither a regression
 nor acceptance under normal load. The background-activity experiment used for
 that comparison was removed.
+The next Intel run completed output but measured loaded input p95 302.1 ms and
+native drawing p95 91.1 ms. AppKit now batches ordinary ASCII glyphs at explicit
+cell positions instead of laying out every character separately. The local native
+suite passes, including partial redraw and Unicode/symbol captures, with loaded
+input p95 48.2 ms and native drawing p95 0.42 ms. Non-scrolling character echo and
+graphics also bypass the server's scrolling queue; pending output remains tracked
+through application and exit.
+With that bypass, the local 16-tab workload measured input p95 19.8 ms, tab switching
+p95 6.0 ms, and drawing p95 0.75 ms. All 548 .NET tests pass again.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.
