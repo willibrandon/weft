@@ -122,7 +122,8 @@ internal static class BuildMacApp
         await RunAsync("/usr/libexec/PlistBuddy", ["-c", "Add :LSMinimumSystemVersion string " + minimum, Path.Join(contents, "Info.plist")]).ConfigureAwait(false);
         List<string> swiftArguments =
         [
-            "swiftc", "-swift-version", "6", "-O", "-warnings-as-errors",
+            // CodeQL reads the type-checked program, so its traced build skips the optimizer it would not use.
+            "swiftc", "-swift-version", "6", prepareAnalysis ? "-Onone" : "-O", "-warnings-as-errors",
             "-enable-batch-mode", "-j", Environment.ProcessorCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "-module-cache-path", Path.Join(output, "module-cache"),
             "-target", (arch == "arm64" ? "arm64" : "x86_64") + "-apple-macosx" + minimum,

@@ -59,6 +59,18 @@ public sealed class SyncInputTests
                         + await ScreensAsync(client, first.Id, second.Id, cancellationToken).ConfigureAwait(false));
                 }
 
+                // The source runs the command as well. A Unix terminal echoes typed-ahead input at once, so keys sent
+                // before the source's next prompt would put their output on that prompt's line.
+                BlockWaitResult source = await client.WaitAsync(
+                    new BlockWaitParams { Target = first.Id, Pattern = "^fan-42$", TimeoutMs = 20_000 },
+                    cancellationToken).ConfigureAwait(false);
+                if (source.Outcome != WaitOutcome.Pattern)
+                {
+                    Assert.Fail("The source did not run its own input. "
+                        + await ScreensAsync(client, first.Id, second.Id, cancellationToken).ConfigureAwait(false));
+                }
+
+                await ServerFixture.WaitForPromptAsync(client, first.Id, cancellationToken).ConfigureAwait(false);
                 _ = await client.SyncBlockAsync(
                     new BlockSyncParams { Target = second.Id, Excluded = true },
                     cancellationToken).ConfigureAwait(false);

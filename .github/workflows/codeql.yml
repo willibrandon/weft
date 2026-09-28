@@ -101,7 +101,7 @@ jobs:
   analyze-swift:
     name: Analyze Swift
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       security-events: write
@@ -138,9 +138,11 @@ jobs:
           queries: security-and-quality
 
       - name: Build macOS app for analysis
-        # The extractor must parse the C bridge itself, not consume Xcode's compiler-specific PCH.
+        # The extractor must parse the C bridge itself, not consume Xcode's compiler-specific PCH. Tracing copies and
+        # re-signs the Xcode compiler before it builds, and every phase scales with the runner's speed: the same
+        # build has taken from 6 to more than 15 minutes, so the limit only guards against a hang.
         run: xcrun swiftc -disable-bridging-pch @artifacts/macos/swift-analysis.rsp
-        timeout-minutes: 15
+        timeout-minutes: 25
 
       - name: Save Swift extraction logs
         if: ${{ !cancelled() }}
