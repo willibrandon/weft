@@ -7,7 +7,7 @@ separate work.
 
 ## Current evidence
 
-The last complete local baseline passed 547 .NET tests and installed-app checks on
+An earlier local baseline passed 547 .NET tests and installed-app checks on
 ARM64 and Intel under Rosetta. The 800-bird workload at 165×43 cells, with 9×20-point
 cells, measured 59.9 observed Kitty frames/s and 52.3 Sixel frames/s. The
 [progress log](progress.md#verification-log) records CPU, memory, and drawing costs.
@@ -84,8 +84,8 @@ separately. Typing measurements begin after the prompt has been painted; the
 window visibility before timing. First-window painting includes attachment and
 initial drawing. Earlier background-only runs did not verify visibility; none of
 these AppKit timings measure compositor presentation latency. The final local
-installed-app suite passes with idle input p95 12.3 ms, loaded input p95 20.0 ms,
-and tab switch p95 15.4 ms. Upgrade, removal, reinstall, and forced client
+installed-app suite passes with idle input p95 12.1 ms, loaded input p95 21.4 ms,
+and tab switch p95 6.4 ms. Upgrade, removal, reinstall, and forced client
 termination preserve the server and shells.
 Reports also include host/target architecture details and the private server log
 when a test fails.
@@ -93,12 +93,14 @@ Paced output reports include formatting, PTY write, sleep, and elapsed timings.
 An active server profile identified allocation contention during concurrent
 scrolling. Newline-containing batches now take turns, with at most eight line
 breaks per batch; ordinary character echo and graphics without newlines bypass
-that queue. Workstation GC remains enabled. AppKit batches ASCII glyphs at fixed
+that queue. The executable uses server GC with the runtime's adaptive heap sizing;
+the native client retains workstation GC. The producer uses absolute frame deadlines
+so blocked writes and delayed timers do not accumulate extra sleep. AppKit batches ASCII glyphs at fixed
 cell positions. Partial redraw, Unicode and symbol captures, and all 548 .NET
 tests pass. CI exercises the workload on both architectures.
-Graphics qualification passes: Kitty measured 60.1 frames/s and Sixel 57.2, with client CPU 134.5% and
-113.4% of one core. Resident memory was 148.5 and 336.8 MiB; sampled footprint
-maxima were 288.9 and 550.5 MiB. These measurements use the same 800-bird workload
+Graphics qualification passes: Kitty measured 59.9 frames/s and Sixel 51.8, with client CPU 133.6% and
+106.5% of one core. Resident memory was 145.0 and 306.3 MiB; sampled footprint
+maxima were 328.6 and 552.2 MiB. These measurements use the same 800-bird workload
 and 165×43 grid. Earlier runs under heavy competing host load missed the limit on
 both the previous and updated server; those results remain in the progress log.
 The external rbirds workload is optional local qualification; CI does not download

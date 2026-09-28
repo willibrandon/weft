@@ -176,7 +176,7 @@ with only 11 ms spent formatting. That run failed loaded input at 297 ms p95.
 Server output now processes one batch at a time, yielding after at most eight
 line breaks. This bounds concurrent screen-change allocation and gives other
 terminals a turn. The local workload completed in 11.8 seconds with loaded input
-p95 57.1 ms and tab switching p95 18.7 ms. Workstation GC remains enabled.
+p95 57.1 ms and tab switching p95 18.7 ms. That measurement used workstation GC.
 Per-frame formatting, write, sleep, and elapsed timings are retained in CI.
 Later CI traces showed the windowless producer's 20 ms sleeps frequently taking
 120–170 ms. An activity assertion did not correct those delays and was removed.
@@ -184,6 +184,15 @@ The producer now uses absolute frame deadlines rather than accumulating a fresh
 sleep after each delayed write. Input and draw measurements are also printed before
 waiting for output completion. The failing ARM64 run passed those limits at
 131.5 ms and 1.6 ms p95 respectively; completion and performance limits are unchanged.
+Intel also passed input and drawing at 61.0 ms and 6.8 ms p95, but remained blocked
+on output writes. With bounded scrolling already in place, a local server-GC comparison
+completed the fixed-deadline producer in 5.6 seconds versus 8.5 seconds with workstation
+GC, with input p95 21.8 ms. The executable now uses server GC and the runtime's adaptive
+heap sizing; the native client keeps workstation GC. All 548 .NET tests and the complete
+installed-DMG suite pass: loaded input p95 21.4 ms, tab switching p95 6.4 ms. Graphics
+limits also pass, with Kitty at 59.9 frames/s and Sixel at 51.8; client CPU measured
+133.6% and 106.5%, resident memory 145.0 and 306.3 MiB. These local measurements do not
+establish native Intel performance; the CI workload remains required.
 A concurrent real-file regression checks that output remains complete and ordered
 as commands exit. Each server owns its processing slot; independent servers do not
 share it. Exit draining also accounts for queued output. All 548 .NET tests pass.

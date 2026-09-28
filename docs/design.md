@@ -319,7 +319,9 @@ Tab-switch timing ends at the selected tab's first paint; background command
 completion is checked separately before sampling loaded memory.
 Producer reports separate time spent writing to the PTY from deliberate pacing
 so output completion failures can be distinguished from presentation delays.
-Server output processing admits one newline-containing batch at a time and yields
+The executable uses server GC with the runtime's adaptive heap sizing for concurrent
+terminal workloads; the native client retains workstation GC. Server output processing
+admits one newline-containing batch at a time and yields
 after at most eight line breaks, limiting concurrent screen-change allocations
 and giving other terminals a turn. Character echo and graphics bytes without line
 breaks bypass that queue. PTY reads, input, and client transport remain independent. Pending
