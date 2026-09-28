@@ -196,6 +196,14 @@ graphics also bypass the server's scrolling queue; pending output remains tracke
 through application and exit.
 With that bypass, the local 16-tab workload measured input p95 19.8 ms, tab switching
 p95 6.0 ms, and drawing p95 0.75 ms. All 548 .NET tests pass again.
+Graphics qualification then passed after competing host work subsided: Kitty
+60.1 frames/s, 134.5% client CPU, 148.5 MiB resident; Sixel 57.2 frames/s, 113.4%
+CPU, 336.8 MiB resident. Sampled footprint maxima were 288.9 and 550.5 MiB.
+The viewport and 800-bird workload were unchanged, and native captures preserve
+the full visible flock. These are local measurements, not universal budgets.
+The final ARM64 installed-app run passes, including upgrade, removal, reinstall,
+and forced client termination with the same server and shells. Idle input p95
+was 12.3 ms, loaded input p95 20.0 ms, and tab switching p95 15.4 ms.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.

@@ -111,6 +111,10 @@ Drawing backend choices for Windows and Linux remain prototype decisions. They
 must meet terminal behavior and measured responsiveness before becoming the
 production path. Keep cell output out of general UI reconciliation: no component
 or native text control per terminal cell.
+Batch glyphs at explicit cell positions, preserving a fallback for complex text
+and individual clipping. The Mac renderer avoids a separate AppKit text layout
+for each ASCII character; Windows and Linux need equivalent batching in their
+chosen drawing backends.
 
 ### Windows
 

@@ -83,23 +83,24 @@ separately. Typing measurements begin after the prompt has been painted; the
 100 ms p95 limit is unchanged. The harness uses accessory activation and verifies
 window visibility before timing. First-window painting includes attachment and
 initial drawing. Earlier background-only runs did not verify visibility; none of
-these AppKit timings measure compositor presentation latency. The current local
-visible-window suite passes with idle input p95 11.1 ms, loaded input p95 46.8 ms,
-and tab switch p95 75.4 ms.
+these AppKit timings measure compositor presentation latency. The final local
+installed-app suite passes with idle input p95 12.3 ms, loaded input p95 20.0 ms,
+and tab switch p95 15.4 ms. Upgrade, removal, reinstall, and forced client
+termination preserve the server and shells.
 Reports also include host/target architecture details and the private server log
 when a test fails.
 Paced output reports include formatting, PTY write, sleep, and elapsed timings.
 An active server profile identified allocation contention during concurrent
-scrolling. Serializing screen application in batches of at most eight line breaks
-passed the local workload at 57.1 ms loaded input p95. Workstation GC remains
-enabled. CI exercises the same workload on both architectures. A graphics
-comparison under unrelated CPU-intensive host load measured Kitty at 22.7 frames/s
-on the previous server and 29.8 on the scheduled server. Both missed the limit;
-graphics acceptance still needs a run without that competing load.
-The subsequent native text optimization batches ASCII glyphs at fixed cell
-positions. Character echo bypasses the scrolling queue. The local workload then
-measured input p95 19.8 ms, drawing p95 0.75 ms, and tab switching p95 6.0 ms;
-partial redraw, Unicode and symbol captures, and all 548 .NET tests pass.
+scrolling. Newline-containing batches now take turns, with at most eight line
+breaks per batch; ordinary character echo and graphics without newlines bypass
+that queue. Workstation GC remains enabled. AppKit batches ASCII glyphs at fixed
+cell positions. Partial redraw, Unicode and symbol captures, and all 548 .NET
+tests pass. CI exercises the workload on both architectures.
+Graphics qualification passes: Kitty measured 60.1 frames/s and Sixel 57.2, with client CPU 134.5% and
+113.4% of one core. Resident memory was 148.5 and 336.8 MiB; sampled footprint
+maxima were 288.9 and 550.5 MiB. These measurements use the same 800-bird workload
+and 165×43 grid. Earlier runs under heavy competing host load missed the limit on
+both the previous and updated server; those results remain in the progress log.
 The external rbirds workload is optional local qualification; CI does not download
 or build that reference repository. Swift CodeQL's first successful GitHub scan
 is recorded in [PR 18](https://github.com/willibrandon/weft/pull/18).
