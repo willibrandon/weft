@@ -36,6 +36,12 @@ dependencies. Dependabot covers NuGet and GitHub Actions. Add its `swift` ecosys
 when a Swift package manifest introduces external dependencies; Xcode and Swift
 remain supplied by the build environment without version pins.
 
+CodeQL scans C# on Linux and builds the Mac app for Swift analysis on macOS. Both
+jobs run the security and quality queries and fail on any finding. The Swift build
+uses `Build-MacApp.cs`; scanning does not open a terminal window. Add native Linux
+C/C++ analysis with that frontend, and validate Windows-specific C# extraction
+on a Windows runner when the Reactor project lands.
+
 Builds explicitly enable all code-style analyzers and treat their findings as errors.
 CI follows the rolling .NET 11 preview channel and records `dotnet --info` so its SDK
 can be compared with a local build. Only the preview SDK notice NETSDK1057 is suppressed.

@@ -39,7 +39,7 @@ internal sealed class DesktopSixel
             return null;
         }
 
-        byte[] canvas = new byte[width * rows * 4];
+        byte[]? canvas = null;
         int[] uncoveredLeft = new int[rows];
         int[] uncoveredRight = new int[rows];
         Array.Fill(uncoveredRight, width);
@@ -88,10 +88,11 @@ internal sealed class DesktopSixel
             endY = Math.Min(rows, originY + (int)Math.Ceiling(sourceHeight * scaleY));
             int startX = Math.Max(0, originX);
             int startY = Math.Max(0, originY);
-            if (right == 0 && scaleX == 1 && scaleY == 1 && endX > startX && endY > startY
+            if (canvas is null && scaleX == 1 && scaleY == 1 && endX > startX && endY > startY
                 && CopyOpaque(pixels, sourceLeft + startX - originX, sourceTop + startY - originY,
-                    endX - startX, endY - startY, canvas, width, startX, startY))
+                    endX - startX, endY - startY, width, rows, startX, startY) is { } front)
             {
+                canvas = front;
                 left = startX;
                 right = endX;
                 first = startY;
@@ -112,6 +113,7 @@ internal sealed class DesktopSixel
                 }
                 continue;
             }
+            canvas ??= new byte[width * rows * 4];
             for (int y = Math.Max(0, originY); y < endY; y++)
             {
                 ReadOnlySpan<Rgba32> source = pixels.GetRow(sourceTop + Math.Min(sourceHeight - 1, (int)((y - originY) / scaleY)))
@@ -170,7 +172,7 @@ internal sealed class DesktopSixel
             }
         }
 
-        if (right <= left || last <= first)
+        if (canvas is null || right <= left || last <= first)
         {
             return null;
         }
@@ -195,8 +197,8 @@ internal sealed class DesktopSixel
             xCells, yCells, widthCells, heightCells, xCells, yCells, widthCells, heightCells, 0);
     }
 
-    private static bool CopyOpaque(SixelPixelBuffer pixels, int sourceX, int sourceY, int width, int height,
-        byte[] canvas, int stride, int x, int y)
+    private static byte[]? CopyOpaque(SixelPixelBuffer pixels, int sourceX, int sourceY, int width, int height,
+        int stride, int rows, int x, int y)
     {
         // An opaque, unscaled front plane needs neither blending nor per-pixel bounds tracking.
         // Validate all rows before writing so transparent images use the general compositor.
@@ -204,15 +206,23 @@ internal sealed class DesktopSixel
         {
             if (!IsOpaque(pixels.GetRow(sourceY + row).Slice(sourceX, width)))
             {
-                return false;
+                return null;
             }
         }
+        // Every opaque pixel is overwritten. Clear only the surrounding transparent
+        // area, avoiding a redundant full-plane fill during opaque animation.
+        byte[] canvas = GC.AllocateUninitializedArray<byte>(stride * rows * 4);
+        canvas.AsSpan(0, y * stride * 4).Clear();
+        canvas.AsSpan((y + height) * stride * 4).Clear();
         for (int row = 0; row < height; row++)
         {
+            int offset = (y + row) * stride * 4;
+            canvas.AsSpan(offset, x * 4).Clear();
+            canvas.AsSpan(offset + ((x + width) * 4), (stride - x - width) * 4).Clear();
             MemoryMarshal.AsBytes(pixels.GetRow(sourceY + row).Slice(sourceX, width))
-                .CopyTo(canvas.AsSpan((((y + row) * stride) + x) * 4, width * 4));
+                .CopyTo(canvas.AsSpan(offset + (x * 4), width * 4));
         }
-        return true;
+        return canvas;
     }
 
     private static bool IsOpaque(ReadOnlySpan<Rgba32> pixels)

@@ -4,6 +4,9 @@ Status: native applications are the primary product direction. macOS is in progr
 Windows and Linux follow later. Installation currently targets local development and
 testing, without store submission or signing credentials. This extends the
 [weft design](design.md). Delivery is tracked in [progress.md](progress.md).
+The [native app parity contract](desktop-parity.md) inventories implemented Mac
+behavior and the corresponding Windows and Linux work, including native adaptations
+and qualification that remains open.
 
 ## First macOS implementation
 
@@ -131,6 +134,8 @@ oldest into one bounded visible plane, so hidden historical frames cannot consum
 the transfer budget before the current frame. Coverage checks skip hidden images
 before their pixel buffers are materialized, and row spans avoid a second crop buffer.
 Opaque, unscaled front images use bulk row copies after vectorized alpha checks.
+The composition buffer is allocated only when needed; opaque copies initialize
+their destination directly and only the surrounding transparent area is cleared.
 Desktop terminal retention is bounded to 64 MiB for each of the main and alternate
 screens and 8,388,608 logical pixels, reserving room for sparse and dense storage;
 the independent 16 MiB projection budget limits a visible block's resources.
@@ -319,10 +324,11 @@ rendering outside general-purpose UI reconciliation and avoid a UI control per c
 The renderer must preserve terminal cell widths while supporting font fallback,
 combining characters, emoji, links, and terminal graphics.
 
-Candidate drawing paths are Metal with platform text shaping on macOS, a hosted
-DirectX/DirectWrite surface on Windows, and GTK's drawing facilities on Linux. Select
-the final backends from working prototypes and measurements. The GUI framework alone
-does not establish renderer performance or terminal compatibility.
+The Mac implementation uses CoreText and CoreGraphics in a retained AppKit surface.
+Candidate paths for Windows and Linux are a hosted DirectX/DirectWrite surface and
+GTK's drawing facilities, respectively. Select those backends from working prototypes
+and measurements. The GUI framework alone does not establish renderer performance
+or terminal compatibility.
 
 Keep PTY and protocol processing independent of painting. Coalesce redraw requests
 without discarding terminal updates, bound queued work, and redraw only affected
@@ -456,10 +462,11 @@ ARM64 support. Record toolchain versions in CI output without exact SDK pins.
 
 ## Delivery and verification
 
-First extract the shared client boundary while keeping the existing TUI tests passing.
-Then build a minimal window on all three platforms that attaches to a real session,
-renders output, accepts input, resizes, closes, and reattaches to the same process.
-Prove the Native AOT bridge and Windows Reactor integration in this stage.
+The shared client boundary and first Mac implementation are in place. Finish Mac
+qualification, then implement Windows and Linux in that order using the
+[parity contract](desktop-parity.md). Begin each port with a minimal window that
+attaches to a real session, renders output, accepts input, resizes, closes, and
+reattaches to the same process. Prove published Native AOT integration at this stage.
 
 Before expanding the interface, validate selection, historical scrollback, Unicode,
 input methods, clipboard, graphics, and accessibility on those terminal surfaces.

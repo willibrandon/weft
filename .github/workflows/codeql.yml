@@ -47,6 +47,54 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@v4
         with:
+          category: /language:csharp
+          output: artifacts/codeql-results
+          wait-for-processing: false
+
+      - name: Enforce zero CodeQL findings
+        run: dotnet run --file scripts/Verify-CodeQl.cs -- artifacts/codeql-results
+
+  analyze-swift:
+    name: Analyze Swift
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Report SDK
+        run: dotnet --info
+
+      - name: Report Swift compiler
+        run: xcrun swiftc --version
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          build-mode: manual
+          config-file: ./.github/codeql-config.yml
+          languages: swift
+          queries: security-and-quality
+
+      - name: Build macOS app for analysis
+        run: dotnet run --file scripts/Build-MacApp.cs
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:swift
           output: artifacts/codeql-results
           wait-for-processing: false
 

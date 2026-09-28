@@ -12,6 +12,8 @@ then Windows and Linux, over a shared client core. Current installation work tar
 local development and testing with ordinary platform packages and no certificate
 setup. Public distribution and stores are outside the current scope.
 Progress lives in [progress.md](progress.md).
+The [native app parity contract](desktop-parity.md) tracks the Mac capabilities,
+Windows and Linux adaptations, and qualification required for equivalent behavior.
 When code and this document disagree, fix one of them in the same change.
 
 ## 1. Positioning

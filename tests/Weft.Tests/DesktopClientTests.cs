@@ -324,6 +324,16 @@ public sealed class DesktopClientTests
                     ReadOnlyMemory<byte> transparentPlane = transparent.Blocks[0].Images[0].Data;
                     Assert.IsTrue(transparentPlane.Span[..4].SequenceEqual(new byte[] { 0, 0, 255, 255 }));
                     Assert.IsTrue(transparentPlane.Span.Slice(80, 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }));
+                    Assert.IsTrue(desktop.TrySend(new DesktopCommand("text", id,
+                        "printf '\\033[?2026h\\033[2J\\033[H\\033Pq#1;2;100;0;0#1!20~\\033\\\\\\033[3;4H\\033Pq#2;2;0;0;100#2!10~\\033\\\\\\033[?2026l'\r")));
+                    DesktopFrame separated = await WaitAsync(desktop, frame => frame.Blocks[0].Images.Any(raster =>
+                        raster.PixelWidth == 40 && raster.PixelHeight == 46), token).ConfigureAwait(false);
+                    ReadOnlyMemory<byte> separatedPlane = separated.Blocks[0].Images[0].Data;
+                    Assert.IsTrue(separatedPlane.Span[..4].SequenceEqual(new byte[] { 255, 0, 0, 255 }));
+                    Assert.IsTrue(separatedPlane.Span.Slice(((40 * 40) + 30) * 4, 4).SequenceEqual(new byte[] { 0, 0, 255, 255 }));
+                    Assert.AreEqual((byte)0, separatedPlane.Span[(20 * 4) + 3]);
+                    Assert.AreEqual((byte)0, separatedPlane.Span[(20 * 40 * 4) + 3]);
+                    Assert.AreEqual((byte)0, separatedPlane.Span[(((40 * 40) + 20) * 4) + 3]);
                 }
             }
         }
