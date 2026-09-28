@@ -16,7 +16,7 @@ Living tracker for the weft build. Check items off as they land; keep the
 - Frame conversion runs off the UI thread. ABI 4 separates raw shared textures from compact JSON metadata, writes directly into owned native storage, and retains texture slices without further pixel copies. Closed windows explicitly release snapshots, image caches, backing layers, and content. Earlier five-client profiling reduced physical footprint from 141.5 MiB to 87.6 MiB. Current qualification also measures 16 tabs, sustained output and typing, scrolling, resize, multiple windows, and forced client termination; portable release budgets remain open.
 - Kitty sprite atlases count once against the decoded budget, with a separate placement limit. Sixel composites the newest visible pixels first instead of spending the frame budget on old rasters. Completed synchronized presentations prevent partial flocks; a one-second wakeup releases an unfinished update even when output stops. Fractional placement preserves native-sized sprites. A read-only rbirds workload checks both protocols and records frame rate, drawing time, CPU, memory, and captures.
 - Sixel allocates its composition buffer only when a visible raster needs it. Opaque rows overwrite uninitialized storage directly; only surrounding transparent regions are cleared. The native client now uses speed-focused AOT optimization like the server. Two local runs measured 53.1–56.2 Sixel frames/s and 117.3–117.6% client CPU, compared with 49.4 frames/s and 130.7% in the preceding balanced build. Steady 60 fps remains unproven.
-- The native image cache drops obsolete frame entries and enforces 256-image and 32 MiB decoded-storage limits. Real capture files exercise reuse, eviction, replacement, and teardown. Graphics workloads and ARM64 installed-app checks pass the initial regression limits; native Intel and CI validation remain open. CPU, resident memory, physical footprint, and remaining hands-on checks are kept separate in the [Mac qualification record](macos-qualification.md).
+- The native image cache drops obsolete frame entries and enforces 256-image and 32 MiB decoded-storage limits. Real capture files exercise reuse, eviction, replacement, and teardown. Graphics workloads and the complete ARM64 and native Intel installed-app CI suites pass the initial regression limits. CPU, resident memory, physical footprint, and remaining hands-on checks are kept separate in the [Mac qualification record](macos-qualification.md).
 - The cursor blinks while focused and visible, honors terminal-requested steady styles, and stays visible during composition. Focus loss, occlusion, and Reduce Motion stop the blink timer. Real shell output and captured caret pixels verify blinking, focus loss, and steady styles.
 - Ordinary Mac clicks leave the process cursor at the prompt, including small pointer jitter. Dragging selects text. AppKit retains terminal pixels in a backing layer, redraws changed rows and cursor cells, and confines the transparent scroll view to its gutter. Real shell echo/erasure tests check that prompt edits preserve other rows and leave no stale cursor pixels. A bounded compositor recording mode supports further redraw investigation.
 
@@ -205,7 +205,12 @@ All 552 tests pass, including real-process replay and file-based hostile-payload
 fragmentation checks. The installed-DMG suite completes the paced producer in 2.4 seconds,
 with loaded input p95 25.1 ms and tab switching p95 8.2 ms. Kitty and Sixel both measured
 60 frames/s in the same 800-bird workload; client resident memory was 154.7 and 331.9 MiB.
-Native Intel CI remains the required cross-architecture check.
+The complete installed-app CI suites then passed on ARM64 and native Intel. Loaded
+input p95 was 101.6 and 98.2 ms; tab switching p95 was 27.5 and 44.4 ms. The workload
+completed in 3.8 and 6.6 seconds respectively, with 136.4 and 88.6 MiB client resident
+memory after output. Both jobs also passed crash recovery and installation lifecycle
+checks. [CI evidence](https://github.com/willibrandon/weft/actions/runs/36413353713)
+records the source revision and architecture-specific artifacts.
 A concurrent real-file regression checks that output remains complete and ordered
 as commands exit. Each server owns its processing slot; independent servers do not
 share it. Exit draining also accounts for queued output. All 548 .NET tests pass.

@@ -26,6 +26,10 @@ limits, native rendering and input, crash recovery, upgrade, removal, and reinst
 Its loaded input-to-paint p95 was 50.8 ms and tab-switch p95 was 81.3 ms. Native
 Intel qualification is covered by the installed-app CI job on native Intel
 hardware; its results and host report are attached to PR 18. Swift CodeQL passes with zero findings.
+The [completed Mac jobs](https://github.com/willibrandon/weft/actions/runs/36413353713)
+passed the full installed-app suite on both architectures. ARM64 and Intel loaded input
+p95 measured 101.6 and 98.2 ms, tab switching p95 27.5 and 44.4 ms, and workload duration
+3.8 and 6.6 seconds. Loaded client resident memory measured 136.4 and 88.6 MiB.
 Interactive checks below
 remain open; only one physical display was connected and VoiceOver was off.
 
