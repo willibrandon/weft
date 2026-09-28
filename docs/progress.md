@@ -130,6 +130,11 @@ passed; the loaded-input test now establishes a short prompt after pane resizing
 instead of using cursor coordinates from before its login prompt reflowed.
 Swift tracing is separated from dependency preparation
 after the combined step stalled before producing .NET build output. Reruns are pending.
+The next ARM64 run reduced input p50 from 75.5 to 32.6 ms, but the largest of its
+16 samples was 424.1 ms. Qualification now paints the initial prompt before typing,
+records cold painting separately, and saves 100 individual input samples. The p95
+limit remains 100 ms; this separates startup work and gives the percentile more
+than one observation in its upper tail.
 
 All 547 .NET tests passed again after execution access was restored. The current
 ARM64 bundle compiles and passes signature verification and installed-DMG checks.

@@ -7,6 +7,7 @@ extension MacSmoke {
         var resident: [UInt64] = []
         var input: [Double] = []
         var idle = 0.0
+        var initialPaint = 0.0
         for iteration in 0..<5 {
             let start = ContinuousClock.now
             let controller = TerminalWindow(executablePath: executable, autosaveName: nil)
@@ -18,7 +19,12 @@ extension MacSmoke {
             times.append(milliseconds(start.duration(to: .now)))
             if iteration == 0 {
                 let block = frame.blocks.first(where: { $0.active }) ?? frame.blocks[0]
-                for _ in 0..<16 {
+                // Typing starts after the prompt is painted, as it does for a person.
+                // Keep cold window drawing separate from the steady input distribution.
+                let painting = ContinuousClock.now
+                controller.window?.displayIfNeeded()
+                initialPaint = milliseconds(painting.duration(to: .now))
+                for _ in 0..<100 {
                     let beginning = ContinuousClock.now
                     controller.terminal.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
                     _ = try await wait(controller, pollEvery: .milliseconds(1)) { $0.blocks.first(where: { $0.id == block.id })?.cursorX == block.cursorX + 1 }
@@ -35,16 +41,26 @@ extension MacSmoke {
             try await Task.sleep(for: .milliseconds(100))
             resident.append(try residentBytes())
         }
+        let report: [String: Any] = [
+            "initialPaintMilliseconds": initialPaint,
+            "inputPaintMilliseconds": input,
+            "warmAttachMilliseconds": times,
+            "idleCpuMilliseconds": idle,
+            "residentAfterCloseBytes": resident
+        ]
+        let reportPath = URL(fileURLWithPath: CommandLine.arguments[2]).deletingLastPathComponent()
+            .appendingPathComponent("qualification-resources.json")
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: reportPath)
         times.sort()
         input.sort()
-        print(String(format: "Client sample: warm attach p50 %.1f ms; input to AppKit paint p50 %.1f ms, p95 %.1f ms; idle CPU %.1f ms / 750 ms; resident after first/fifth close %.1f / %.1f MiB",
-                     times[2], input[8], input[15], idle, Double(resident[0]) / 1_048_576, Double(resident[4]) / 1_048_576))
+        print(String(format: "Client sample: warm attach p50 %.1f ms; initial paint %.1f ms; input to AppKit paint p50 %.1f ms, p95 %.1f ms; idle CPU %.1f ms / 750 ms; resident after first/fifth close %.1f / %.1f MiB",
+                     times[2], initialPaint, input[49], input[94], idle, Double(resident[0]) / 1_048_576, Double(resident[4]) / 1_048_576))
         if CommandLine.arguments.contains("--profile-memory") {
             print("Memory profile ready: pid \(ProcessInfo.processInfo.processIdentifier)")
             fflush(stdout)
             try await Task.sleep(for: .seconds(30))
         }
-        try PerformanceLimits.client(attach: times[2], input: input[15], idle: idle, resident: resident)
+        try PerformanceLimits.client(attach: times[2], input: input[94], idle: idle, resident: resident)
     }
 
     static func cpuMilliseconds() -> Double {

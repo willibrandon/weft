@@ -76,7 +76,11 @@ modifying its checkout. Repeat the workload before and after changes, preserving
 the viewport, font metrics, display scale, workload revision, and host conditions.
 
 CI retains architecture-specific qualification JSON, graphics JSON and captures,
-host/target architecture details, and the private server log when a test fails.
+including all 100 input timing samples and initial window painting measured
+separately. Typing measurements begin after the prompt has been painted; the
+100 ms p95 limit is unchanged.
+Reports also include host/target architecture details and the private server log
+when a test fails.
 The external rbirds workload is optional local qualification; CI does not download
 or build that reference repository. Swift CodeQL still needs its first successful
 GitHub run.

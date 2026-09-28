@@ -300,7 +300,8 @@ Terminal drawing is confined to its view; bundled symbol fallback preserves
 prompt glyphs. Visual acceptance includes real window captures, native scrolling,
 and readable narrow layouts, alongside measured latency and resource use.
 Mac CI selects the newest installed numbered Xcode release for both native tests
-and Swift analysis. Analysis prepares native dependencies before enabling the
+and Swift analysis. CI preserves native timing samples and compiler extraction
+logs, including failed runs. Analysis prepares native dependencies before enabling the
 tracer, then compiles every Swift source with the same arguments as the app build.
 The font release lookup uses the job's read-only GitHub token;
 asset and license downloads do not receive that credential.
